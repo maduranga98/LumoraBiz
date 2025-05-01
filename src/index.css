@@ -1,0 +1,43 @@
+@import "tailwindcss";
+/* This imports everything Tailwind offers */
+
+/* Now layer your custom CSS using @layer */
+@layer base {
+  :root {
+    --color-primary: #4f46e5;
+    --color-accent: #6366f1;
+    --color-bg: #f9fafb;
+    --color-text: #111827;
+    --color-muted: #6b7280;
+    --color-border: #e5e7eb;
+    --color-error: #dc2626;
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-family: 'Inter', sans-serif;
+  }
+}
+
+@layer utilities {
+  .text-primary {
+    color: var(--color-primary);
+  }
+
+  .bg-primary {
+    background-color: var(--color-primary);
+  }
+
+  .text-muted {
+    color: var(--color-muted);
+  }
+
+  .border-primary {
+    border-color: var(--color-primary);
+  }
+
+  .border-muted {
+    border-color: var(--color-border);
+  }
+}
