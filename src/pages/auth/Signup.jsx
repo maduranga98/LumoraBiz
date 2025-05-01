@@ -1,29 +1,33 @@
-// src/pages/auth/login.jsx
+// src/pages/auth/signup.jsx
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { useAuth } from "../../contexts/AuthContext";
 
-const Login = () => {
+const Signup = () => {
   const {
     register,
     handleSubmit,
     formState: { errors },
+    watch,
   } = useForm();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { signup } = useAuth();
+
+  // Watch password for confirmation validation
+  const password = watch("password", "");
 
   async function onSubmit(data) {
     try {
       setError("");
       setLoading(true);
-      await login(data.email, data.password);
+      await signup(data.email, data.password, data.name);
       navigate("/home");
     } catch (err) {
-      console.error("Login error:", err);
-      setError("Failed to sign in. Please check your credentials.");
+      console.error("Signup error:", err);
+      setError("Failed to create an account. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -41,7 +45,7 @@ const Login = () => {
             Smart Tools for Smarter Business.
           </p>
           <h3 className="mt-6 text-xl font-semibold text-text">
-            Sign in to your account
+            Create your account
           </h3>
         </div>
 
@@ -56,6 +60,27 @@ const Login = () => {
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
           <div className="rounded-md">
+            <div className="mb-4">
+              <label
+                htmlFor="name"
+                className="block text-sm font-medium text-text mb-1"
+              >
+                Full Name
+              </label>
+              <input
+                id="name"
+                type="text"
+                {...register("name", { required: "Full name is required" })}
+                className={`appearance-none relative block w-full px-3 py-2 border ${
+                  errors.name ? "border-error" : "border-muted"
+                } placeholder-muted text-text rounded-md focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm`}
+                placeholder="Full name"
+              />
+              {errors.name && (
+                <p className="mt-1 text-sm text-error">{errors.name.message}</p>
+              )}
+            </div>
+
             <div className="mb-4">
               <label
                 htmlFor="email"
@@ -96,8 +121,13 @@ const Login = () => {
               <input
                 id="password"
                 type="password"
-                autoComplete="current-password"
-                {...register("password", { required: "Password is required" })}
+                {...register("password", {
+                  required: "Password is required",
+                  minLength: {
+                    value: 6,
+                    message: "Password must be at least 6 characters long",
+                  },
+                })}
                 className={`appearance-none relative block w-full px-3 py-2 border ${
                   errors.password ? "border-error" : "border-muted"
                 } placeholder-muted text-text rounded-md focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm`}
@@ -109,31 +139,32 @@ const Login = () => {
                 </p>
               )}
             </div>
-          </div>
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <input
-                id="remember-me"
-                name="remember-me"
-                type="checkbox"
-                className="h-4 w-4 text-primary focus:ring-primary border-muted rounded"
-              />
+            <div className="mb-4">
               <label
-                htmlFor="remember-me"
-                className="ml-2 block text-sm text-muted"
+                htmlFor="passwordConfirm"
+                className="block text-sm font-medium text-text mb-1"
               >
-                Remember me
+                Confirm Password
               </label>
-            </div>
-
-            <div className="text-sm">
-              <Link
-                to="/forgot-password"
-                className="font-medium text-primary hover:opacity-80"
-              >
-                Forgot your password?
-              </Link>
+              <input
+                id="passwordConfirm"
+                type="password"
+                {...register("passwordConfirm", {
+                  required: "Please confirm your password",
+                  validate: (value) =>
+                    value === password || "Passwords do not match",
+                })}
+                className={`appearance-none relative block w-full px-3 py-2 border ${
+                  errors.passwordConfirm ? "border-error" : "border-muted"
+                } placeholder-muted text-text rounded-md focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm`}
+                placeholder="Confirm password"
+              />
+              {errors.passwordConfirm && (
+                <p className="mt-1 text-sm text-error">
+                  {errors.passwordConfirm.message}
+                </p>
+              )}
             </div>
           </div>
 
@@ -143,18 +174,18 @@ const Login = () => {
               disabled={loading}
               className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              {loading ? "Signing in..." : "Sign in"}
+              {loading ? "Creating account..." : "Sign up"}
             </button>
           </div>
 
           <div className="text-center">
             <p className="text-sm text-muted">
-              Don't have an account?{" "}
+              Already have an account?{" "}
               <Link
-                to="/signup"
+                to="/login"
                 className="font-medium text-primary hover:opacity-80"
               >
-                Sign up
+                Sign in
               </Link>
             </p>
           </div>
@@ -163,8 +194,7 @@ const Login = () => {
         {/* Footer with company info */}
         <div className="mt-8 pt-4 border-t border-muted">
           <p className="text-center text-xs text-muted">
-            © {new Date().getFullYear()} Lumora Ventures Pvt Ltd. All rights
-            reserved.
+            © {new Date().getFullYear()} Lumora Ventures Pvt Ltd. All rights reserved.
           </p>
         </div>
       </div>
@@ -172,4 +202,4 @@ const Login = () => {
   );
 };
 
-export default Login;
+export default Signup;
