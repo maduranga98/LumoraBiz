@@ -1,9 +1,8 @@
 // src/components/Navbar.jsx
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import Logo from "./Logo";
 
-// You can import icons from a library like Heroicons or use SVGs directly
+// Navigation Icons
 const DashboardIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -15,15 +14,19 @@ const DashboardIcon = () => (
   </svg>
 );
 
-const AnalyticsIcon = () => (
+const InventoryIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     className="h-5 w-5"
     viewBox="0 0 20 20"
     fill="currentColor"
   >
-    <path d="M2 10a8 8 0 018-8v8h8a8 8 0 11-16 0z" />
-    <path d="M12 2.252A8.014 8.014 0 0117.748 8H12V2.252z" />
+    <path d="M4 3a2 2 0 100 4h12a2 2 0 100-4H4z" />
+    <path
+      fillRule="evenodd"
+      d="M3 8h14v7a2 2 0 01-2 2H5a2 2 0 01-2-2V8zm5 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"
+      clipRule="evenodd"
+    />
   </svg>
 );
 
@@ -38,17 +41,16 @@ const CustomersIcon = () => (
   </svg>
 );
 
-const ProductsIcon = () => (
+const ReportsIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     className="h-5 w-5"
     viewBox="0 0 20 20"
     fill="currentColor"
   >
-    <path d="M4 3a2 2 0 100 4h12a2 2 0 100-4H4z" />
     <path
       fillRule="evenodd"
-      d="M3 8h14v7a2 2 0 01-2 2H5a2 2 0 01-2-2V8zm5 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"
+      d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm2 10a1 1 0 10-2 0v3a1 1 0 102 0v-3zm2-3a1 1 0 011 1v5a1 1 0 11-2 0v-5a1 1 0 011-1zm4-1a1 1 0 10-2 0v7a1 1 0 102 0V8z"
       clipRule="evenodd"
     />
   </svg>
@@ -118,16 +120,18 @@ const MenuToggleIcon = ({ isOpen }) => {
   );
 };
 
-const NavItem = ({ icon, label, to, isActive, isExpanded }) => {
+const NavItem = ({ icon, label, to, isActive }) => {
   return (
     <Link
       to={to}
-      className={`flex items-center px-4 py-2 rounded-lg transition-colors ${
-        isActive ? "bg-primary text-white" : "text-muted hover:bg-gray-100"
-      }`}
+      className={`flex items-center px-4 py-3 ${
+        isActive
+          ? "bg-primary bg-opacity-10 text-primary border-r-4 border-primary"
+          : "text-muted hover:bg-primary hover:bg-opacity-5"
+      } transition-colors rounded-l-md`}
     >
       <span className="flex-shrink-0">{icon}</span>
-      {isExpanded && <span className="ml-3">{label}</span>}
+      <span className="ml-3 font-medium">{label}</span>
     </Link>
   );
 };
@@ -135,6 +139,7 @@ const NavItem = ({ icon, label, to, isActive, isExpanded }) => {
 const Navbar = () => {
   const [isExpanded, setIsExpanded] = useState(true);
   const location = useLocation();
+  const path = location.pathname;
 
   const toggleSidebar = () => {
     setIsExpanded(!isExpanded);
@@ -142,16 +147,16 @@ const Navbar = () => {
 
   const navItems = [
     { to: "/home", label: "Dashboard", icon: <DashboardIcon /> },
-    { to: "/analytics", label: "Analytics", icon: <AnalyticsIcon /> },
-    { to: "/customers", label: "Customers", icon: <CustomersIcon /> },
-    { to: "/products", label: "Products", icon: <ProductsIcon /> },
-    { to: "/settings", label: "Settings", icon: <SettingsIcon /> },
-    { to: "/help", label: "Help & Support", icon: <HelpIcon /> },
+    { to: "/home/inventory", label: "Inventory", icon: <InventoryIcon /> },
+    { to: "/home/customers", label: "Customers", icon: <CustomersIcon /> },
+    { to: "/home/reports", label: "Reports", icon: <ReportsIcon /> },
+    { to: "/home/settings", label: "Settings", icon: <SettingsIcon /> },
+    { to: "/home/help", label: "Help & Support", icon: <HelpIcon /> },
   ];
 
   return (
     <div
-      className={`bg-white min-h-screen border-r border-muted transition-all duration-300 ${
+      className={`bg-white h-screen border-r border-muted transition-all duration-300 ${
         isExpanded ? "w-64" : "w-16"
       }`}
     >
@@ -160,46 +165,74 @@ const Navbar = () => {
         <div
           className={`flex items-center px-4 py-5 ${
             isExpanded ? "justify-between" : "justify-center"
-          }`}
+          } border-b border-muted`}
         >
-          {isExpanded && <Logo />}
+          {isExpanded && (
+            <div>
+              <h1 className="text-xl font-bold tracking-tight">
+                <span className="text-primary">Lumora</span>
+                <span className="text-accent font-extrabold">Biz</span>
+              </h1>
+              <p className="text-xs text-muted">
+                Smart Tools for Smarter Business
+              </p>
+            </div>
+          )}
           <button
             onClick={toggleSidebar}
-            className="p-1 rounded-full text-muted hover:bg-gray-100"
+            className="p-1 rounded-full text-muted hover:bg-primary hover:bg-opacity-5"
           >
             <MenuToggleIcon isOpen={isExpanded} />
           </button>
         </div>
 
         {/* Navigation Links */}
-        <div className="flex flex-col space-y-1 px-3 py-4">
-          {navItems.map((item) => (
-            <NavItem
-              key={item.to}
-              to={item.to}
-              label={item.label}
-              icon={item.icon}
-              isActive={location.pathname === item.to}
-              isExpanded={isExpanded}
-            />
-          ))}
+        <div className="flex-1 overflow-y-auto py-4">
+          <div className="space-y-1 px-2">
+            {navItems.map((item) => (
+              <div
+                key={item.to}
+                className={isExpanded ? "" : "flex justify-center"}
+              >
+                {isExpanded ? (
+                  <NavItem
+                    to={item.to}
+                    label={item.label}
+                    icon={item.icon}
+                    isActive={
+                      (item.to === "/home" && path === "/home") ||
+                      (item.to !== "/home" && path.startsWith(item.to))
+                    }
+                  />
+                ) : (
+                  <Link
+                    to={item.to}
+                    className={`p-3 rounded-lg ${
+                      (item.to === "/home" && path === "/home") ||
+                      (item.to !== "/home" && path.startsWith(item.to))
+                        ? "bg-primary bg-opacity-10 text-primary"
+                        : "text-muted hover:bg-primary hover:bg-opacity-5"
+                    }`}
+                    title={item.label}
+                  >
+                    {item.icon}
+                  </Link>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* User Section */}
-        <div className="mt-auto p-4 border-t border-muted">
-          <div
-            className={`flex ${isExpanded ? "items-center" : "justify-center"}`}
-          >
-            <div className="h-8 w-8 rounded-full bg-primary text-white flex items-center justify-center">
-              <span className="text-sm font-medium">U</span>
+        {/* Company Info */}
+        <div className="p-4 text-center border-t border-muted">
+          {isExpanded ? (
+            <div>
+              <p className="text-xs text-muted">Powered by</p>
+              <p className="text-xs font-medium">Lumora Ventures Pvt Ltd</p>
             </div>
-            {isExpanded && (
-              <div className="ml-3">
-                <p className="text-sm font-medium">User Name</p>
-                <p className="text-xs text-muted">user@example.com</p>
-              </div>
-            )}
-          </div>
+          ) : (
+            <p className="text-xs text-muted">LV</p>
+          )}
         </div>
       </div>
     </div>
