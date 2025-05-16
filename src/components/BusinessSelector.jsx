@@ -1,3 +1,4 @@
+// src/components/BusinessSelector.jsx - Updated with better color contrast
 import React, { useState, useEffect, useRef } from "react";
 import { db, auth } from "../services/firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
@@ -124,13 +125,13 @@ const BusinessSelector = ({ isExpanded }) => {
         {isExpanded ? (
           <>
             <div className="truncate text-left">
-              <span className="block font-medium truncate">
+              <span className="block font-medium truncate text-gray-700">
                 {currentBusiness?.businessName}
               </span>
             </div>
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              className={`h-4 w-4 transform transition-transform ${
+              className={`h-4 w-4 text-gray-500 transform transition-transform ${
                 isDropdownOpen ? "rotate-180" : ""
               }`}
               fill="none"
@@ -146,13 +147,13 @@ const BusinessSelector = ({ isExpanded }) => {
             </svg>
           </>
         ) : (
-          <div className="w-6 h-6 flex items-center justify-center bg-primary bg-opacity-10 text-primary rounded-full">
+          <div className="w-6 h-6 flex items-center justify-center bg-indigo-100 text-indigo-700 rounded-full">
             {currentBusiness?.businessName.charAt(0)}
           </div>
         )}
       </button>
 
-      {/* Dropdown menu */}
+      {/* Dropdown menu with improved contrast */}
       {isDropdownOpen && (
         <div
           className={`absolute z-10 mt-1 ${
@@ -166,15 +167,13 @@ const BusinessSelector = ({ isExpanded }) => {
             <button
               key={business.id}
               onClick={() => handleSelectBusiness(business)}
-              className={`block w-full text-left px-3 py-2 text-sm hover:bg-gray-100 ${
+              className={`block w-full text-left px-3 py-2 text-sm ${
                 currentBusiness?.id === business.id
-                  ? "bg-primary bg-opacity-5 text-primary"
-                  : ""
+                  ? "bg-indigo-50 text-indigo-700 font-medium" // Improved contrast
+                  : "text-gray-700 hover:bg-gray-50"
               }`}
             >
-              <span className="block font-medium truncate">
-                {business.businessName}
-              </span>
+              <span className="block truncate">{business.businessName}</span>
             </button>
           ))}
         </div>
