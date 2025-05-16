@@ -1,3 +1,4 @@
+// src/pages/home/pages/Settings.jsx
 import React, { useState, useEffect } from "react";
 import { AddNewBusiness } from "../../settings/AddNewBusiness";
 import { EditBusinessData } from "../../settings/EditBusinessData";
@@ -58,6 +59,11 @@ export const Settings = () => {
     setSelectedBusinessId(businessId);
   };
 
+  // Handle going back to business list from edit form
+  const handleBackToBusinessList = () => {
+    setSelectedBusinessId(null);
+  };
+
   // Render the content based on active tab
   const renderContent = () => {
     switch (activeTab) {
@@ -73,7 +79,10 @@ export const Settings = () => {
                 </p>
               </div>
             ) : selectedBusinessId ? (
-              <EditBusinessData businessId={selectedBusinessId} />
+              <EditBusinessData
+                businessId={selectedBusinessId}
+                onCancel={handleBackToBusinessList}
+              />
             ) : (
               <div className="p-6 bg-white rounded-lg shadow-md">
                 <h3 className="text-lg font-medium text-gray-800 mb-4">
@@ -128,7 +137,13 @@ export const Settings = () => {
             {tabs.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  // Reset selected business when switching tabs
+                  if (tab.id !== "editBusiness") {
+                    setSelectedBusinessId(null);
+                  }
+                }}
                 className={`w-full text-left px-4 py-3 rounded-md transition-colors ${
                   activeTab === tab.id
                     ? "bg-blue-50 text-blue-600 font-medium"

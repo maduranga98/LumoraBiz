@@ -1,3 +1,4 @@
+// src/components/Navbar.jsx - Updated with better color contrast
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import BusinessSelector from "./BusinessSelector";
@@ -41,6 +42,26 @@ const CustomersIcon = () => (
   </svg>
 );
 
+const Vehicle = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    class="lucide lucide-truck-icon lucide-truck"
+  >
+    <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2" />
+    <path d="M15 18H9" />
+    <path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14" />
+    <circle cx="17" cy="18" r="2" />
+    <circle cx="7" cy="18" r="2" />
+  </svg>
+);
 const ReportsIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -120,18 +141,21 @@ const MenuToggleIcon = ({ isOpen }) => {
   );
 };
 
+// Updated NavItem component with better contrast
 const NavItem = ({ icon, label, to, isActive }) => {
   return (
     <Link
       to={to}
       className={`flex items-center px-4 py-3 ${
         isActive
-          ? "bg-primary bg-opacity-10 text-primary border-r-4 border-primary"
-          : "text-muted hover:bg-primary hover:bg-opacity-5"
+          ? "bg-indigo-100 text-indigo-800 font-medium border-r-4 border-indigo-600" // Improved contrast
+          : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
       } transition-colors rounded-l-md`}
     >
-      <span className="flex-shrink-0">{icon}</span>
-      <span className="ml-3 font-medium">{label}</span>
+      <span className={`flex-shrink-0 ${isActive ? "text-indigo-600" : ""}`}>
+        {icon}
+      </span>
+      <span className="ml-3">{label}</span>
     </Link>
   );
 };
@@ -149,6 +173,7 @@ const Navbar = () => {
     { to: "/home", label: "Dashboard", icon: <DashboardIcon /> },
     { to: "/home/inventory", label: "Inventory", icon: <InventoryIcon /> },
     { to: "/home/customers", label: "Customers", icon: <CustomersIcon /> },
+    { to: "/home/logistics", label: "Logistics", icon: <Vehicle /> },
     { to: "/home/reports", label: "Reports", icon: <ReportsIcon /> },
     { to: "/home/settings", label: "Settings", icon: <SettingsIcon /> },
     { to: "/home/help", label: "Help & Support", icon: <HelpIcon /> },
@@ -170,17 +195,17 @@ const Navbar = () => {
           {isExpanded && (
             <div>
               <h1 className="text-xl font-bold tracking-tight">
-                <span className="text-primary">Lumora</span>
-                <span className="text-accent font-extrabold">Biz</span>
+                <span className="text-indigo-600">Lumora</span>
+                <span className="text-cyan-600 font-extrabold">Biz</span>
               </h1>
-              <p className="text-xs text-muted">
+              <p className="text-xs text-gray-500">
                 Smart Tools for Smarter Business
               </p>
             </div>
           )}
           <button
             onClick={toggleSidebar}
-            className="p-1 rounded-full text-muted hover:bg-primary hover:bg-opacity-5"
+            className="p-1 rounded-full text-gray-500 hover:bg-gray-100"
           >
             <MenuToggleIcon isOpen={isExpanded} />
           </button>
@@ -213,8 +238,8 @@ const Navbar = () => {
                     className={`p-3 rounded-lg ${
                       (item.to === "/home" && path === "/home") ||
                       (item.to !== "/home" && path.startsWith(item.to))
-                        ? "bg-primary bg-opacity-10 text-primary"
-                        : "text-muted hover:bg-primary hover:bg-opacity-5"
+                        ? "bg-indigo-100 text-indigo-700" // Improved contrast for collapsed view
+                        : "text-gray-600 hover:bg-gray-100"
                     }`}
                     title={item.label}
                   >
@@ -230,11 +255,11 @@ const Navbar = () => {
         <div className="p-4 text-center border-t border-muted">
           {isExpanded ? (
             <div>
-              <p className="text-xs text-muted">Powered by</p>
+              <p className="text-xs text-gray-500">Powered by</p>
               <p className="text-xs font-medium">Lumora Ventures Pvt Ltd</p>
             </div>
           ) : (
-            <p className="text-xs text-muted">LV</p>
+            <p className="text-xs text-gray-500">LV</p>
           )}
         </div>
       </div>

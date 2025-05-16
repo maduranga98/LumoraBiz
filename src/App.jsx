@@ -15,9 +15,11 @@ import { Stock } from "./pages/home/pages/Stock";
 import { Customers } from "./pages/home/pages/Customers";
 import { ContactUs } from "./pages/home/pages/ContactUs";
 import { Reports } from "./pages/home/pages/Reports";
-import { Dashboard } from "./pages/home/pages/Dashboard";
+// import { Dashboard } from "./pages/home/pages/Dashboard";
 import { AuthProvider } from "./contexts/AuthContext";
 import PrivateRoute from "./components/auth/PrivateRoute";
+import { Dashboard } from "./pages/home/pages/Dashboard";
+import { Logistics } from "./pages/home/pages/Logistics";
 
 const App = () => {
   return (
@@ -41,7 +43,8 @@ const App = () => {
             >
               <Route index element={<Dashboard />} />
               <Route path="inventory" element={<Stock />} />
-              <Route path="customers" element={<Customers />} />
+              <Route path="customers" element={<Customers />} />{" "}
+              <Route path="logistics" element={<Logistics />} />
               <Route path="reports" element={<Reports />} />
               <Route path="settings" element={<Settings />} />
               <Route path="help" element={<ContactUs />} />
@@ -55,6 +58,10 @@ const App = () => {
             <Route
               path="/customers"
               element={<Navigate to="/home/customers" replace />}
+            />
+            <Route
+              path="/logistics"
+              element={<Navigate to="/home/logistics" replace />}
             />
             <Route
               path="/reports"

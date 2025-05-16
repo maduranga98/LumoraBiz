@@ -1,12 +1,9 @@
+// src/pages/settings/EditBusinessData.jsx
 import React, { useState, useEffect } from "react";
 import { db } from "../../services/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { useParams, useNavigate } from "react-router-dom";
 
-export const EditBusinessData = () => {
-  const { businessId } = useParams();
-  const navigate = useNavigate();
-
+export const EditBusinessData = ({ businessId, onCancel }) => {
   // Form state
   const [formData, setFormData] = useState({
     businessName: "",
@@ -114,9 +111,6 @@ export const EditBusinessData = () => {
 
       // Show success message
       showNotification("success", "Business updated successfully");
-
-      // Optional: Navigate back or to details page after successful update
-      // setTimeout(() => navigate('/businesses'), 1500);
     } catch (error) {
       console.error("Error updating business:", error);
       showNotification("error", "Failed to update business. Please try again.");
@@ -127,7 +121,10 @@ export const EditBusinessData = () => {
 
   // Handle cancel button
   const handleCancel = () => {
-    navigate(-1); // Go back to previous page
+    // Go back to business selection
+    if (typeof onCancel === "function") {
+      onCancel();
+    }
   };
 
   // Show loading state
@@ -149,7 +146,7 @@ export const EditBusinessData = () => {
           {fetchError}
         </div>
         <button
-          onClick={() => navigate(-1)}
+          onClick={handleCancel}
           className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md text-gray-700"
         >
           Go Back
