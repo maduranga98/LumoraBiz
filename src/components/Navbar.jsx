@@ -1,6 +1,6 @@
-// src/components/Navbar.jsx
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import BusinessSelector from "./BusinessSelector";
 
 // Navigation Icons
 const DashboardIcon = () => (
@@ -185,6 +185,9 @@ const Navbar = () => {
             <MenuToggleIcon isOpen={isExpanded} />
           </button>
         </div>
+
+        {/* Business Selector */}
+        <BusinessSelector isExpanded={isExpanded} />
 
         {/* Navigation Links */}
         <div className="flex-1 overflow-y-auto py-4">
