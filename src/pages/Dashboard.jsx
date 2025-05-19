@@ -112,7 +112,7 @@ export const Dashboard = () => {
     },
     {
       title: "Cash Flow",
-      value: "₹146,300",
+      value: "Rs.146,300",
       icon: (
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -224,7 +224,7 @@ export const Dashboard = () => {
       title: "Invoice Generated",
       time: "2 days ago",
       description:
-        "Invoice #INV-2023-156 for ₹56,200 generated for Sunshine Foods Ltd.",
+        "Invoice #INV-2023-156 for Rs.56,200 generated for Sunshine Foods Ltd.",
     },
   ];
 
