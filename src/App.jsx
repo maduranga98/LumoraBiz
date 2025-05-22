@@ -20,6 +20,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 import PrivateRoute from "./components/auth/PrivateRoute";
 import { Dashboard } from "./pages/home/pages/Dashboard";
 import { Logistics } from "./pages/home/pages/Logistics";
+import Employees from "./pages/home/pages/Employees";
 
 const App = () => {
   return (
@@ -43,7 +44,8 @@ const App = () => {
             >
               <Route index element={<Dashboard />} />
               <Route path="inventory" element={<Stock />} />
-              <Route path="customers" element={<Customers />} />{" "}
+              <Route path="customers" element={<Customers />} />
+              <Route path="employees" element={<Employees />} />
               <Route path="logistics" element={<Logistics />} />
               <Route path="reports" element={<Reports />} />
               <Route path="settings" element={<Settings />} />
@@ -58,6 +60,10 @@ const App = () => {
             <Route
               path="/customers"
               element={<Navigate to="/home/customers" replace />}
+            />
+            <Route
+              path="/employees"
+              element={<Navigate to="/home/employees" replace />}
             />
             <Route
               path="/logistics"
