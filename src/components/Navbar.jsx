@@ -173,6 +173,7 @@ const Navbar = () => {
     { to: "/home", label: "Dashboard", icon: <DashboardIcon /> },
     { to: "/home/inventory", label: "Inventory", icon: <InventoryIcon /> },
     { to: "/home/customers", label: "Customers", icon: <CustomersIcon /> },
+    { to: "/home/employees", label: "Employees", icon: <CustomersIcon /> },
     { to: "/home/logistics", label: "Logistics", icon: <Vehicle /> },
     { to: "/home/reports", label: "Reports", icon: <ReportsIcon /> },
     { to: "/home/settings", label: "Settings", icon: <SettingsIcon /> },
