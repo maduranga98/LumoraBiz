@@ -8,8 +8,12 @@ import {
   orderBy,
   onSnapshot,
   limit,
+  addDoc,
+  updateDoc,
+  doc,
 } from "firebase/firestore";
 import { toast } from "react-hot-toast";
+import ConvertToOtherModal from "./ConvertToOther";
 
 const ViewPaddyStock = () => {
   // States
@@ -36,6 +40,11 @@ const ViewPaddyStock = () => {
     queryResult: null,
     error: null,
   });
+
+  // Modal states
+  const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
+  const [selectedStock, setSelectedStock] = useState(null);
+  const [processingStock, setProcessingStock] = useState(null);
 
   // Get current business ID from localStorage
   useEffect(() => {
@@ -142,6 +151,7 @@ const ViewPaddyStock = () => {
           // Convert Firestore timestamps to JS Date objects
           createdAt: data.createdAt?.toDate() || new Date(),
           updatedAt: data.updatedAt?.toDate() || new Date(),
+          processedAt: data.processedAt?.toDate() || null,
         });
       });
 
@@ -200,6 +210,85 @@ const ViewPaddyStock = () => {
 
     setTotalQuantity(quantity);
     setTotalValue(value);
+  };
+
+  // Handle process button click
+  const handleProcessStock = (stock) => {
+    setSelectedStock(stock);
+    setIsConvertModalOpen(true);
+  };
+
+  // Handle conversion submission
+  const handleConversionSubmit = async (conversionData) => {
+    if (!selectedStock) return;
+
+    setProcessingStock(selectedStock.id);
+
+    try {
+      // Create a conversion record
+      const conversionRecord = {
+        businessId: currentBusiness,
+        sourceStockId: selectedStock.id,
+        sourcePaddyType: selectedStock.paddyType,
+        sourceQuantity: selectedStock.quantity,
+        sourcePrice: selectedStock.price,
+        conversionDate: new Date(),
+        products: conversionData,
+        totalConvertedQuantity: Object.values(conversionData).reduce(
+          (sum, qty) => sum + qty,
+          0
+        ),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      // Add conversion record to database
+      const conversionRef = await addDoc(
+        collection(db, "conversions"),
+        conversionRecord
+      );
+
+      // Update the original stock to mark it as processed
+      const stockRef = doc(db, "paddyStock", selectedStock.id);
+      await updateDoc(stockRef, {
+        processed: true,
+        conversionId: conversionRef.id,
+        processedAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      // Add individual product records to inventory
+      const productPromises = Object.entries(conversionData).map(
+        async ([productType, quantity]) => {
+          if (quantity > 0) {
+            const productRecord = {
+              businessId: currentBusiness,
+              productType,
+              quantity,
+              sourceStockId: selectedStock.id,
+              conversionId: conversionRef.id,
+              sourceType: "paddy_conversion",
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            };
+
+            return addDoc(collection(db, "processedProducts"), productRecord);
+          }
+        }
+      );
+
+      await Promise.all(productPromises.filter(Boolean));
+
+      toast.success("Paddy stock processed successfully!");
+
+      // Refresh the stocks to show updated status
+      fetchStocks();
+    } catch (error) {
+      console.error("Error processing stock:", error);
+      toast.error(`Failed to process stock: ${error.message}`);
+    } finally {
+      setProcessingStock(null);
+    }
   };
 
   // Handle sort change
@@ -311,12 +400,36 @@ const ViewPaddyStock = () => {
       .replace("LKR", "Rs.");
   };
 
+  // Sort icon component
+  const SortIcon = ({ field }) => {
+    if (sortField !== field) return null;
+
+    return (
+      <svg className="ml-1 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+        {sortDirection === "asc" ? (
+          <path
+            fillRule="evenodd"
+            d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"
+            clipRule="evenodd"
+          />
+        ) : (
+          <path
+            fillRule="evenodd"
+            d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+            clipRule="evenodd"
+          />
+        )}
+      </svg>
+    );
+  };
+
   // Get filtered and sorted stocks
   const filteredStocks = getFilteredStocks();
 
   return (
-    <div>
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">
             Paddy Purchase History
@@ -330,14 +443,13 @@ const ViewPaddyStock = () => {
         <div className="flex space-x-2 mt-4 md:mt-0">
           <button
             onClick={refreshData}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm flex items-center"
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm flex items-center transition-colors"
           >
             <svg
               className="w-4 h-4 mr-1"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
             >
               <path
                 strokeLinecap="round"
@@ -352,19 +464,23 @@ const ViewPaddyStock = () => {
       </div>
 
       {/* Summary Cards */}
-      <div className="flex flex-col sm:flex-row gap-4 mb-6">
-        <div className="bg-white shadow-sm rounded-lg p-4 min-w-40">
-          <p className="text-sm text-gray-500">Total Quantity</p>
-          <p className="text-xl font-bold">{totalQuantity.toFixed(2)} kg</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="bg-white shadow-sm rounded-lg p-6">
+          <p className="text-sm text-gray-500 mb-1">Total Quantity</p>
+          <p className="text-2xl font-bold text-gray-900">
+            {totalQuantity.toFixed(2)} kg
+          </p>
         </div>
-        <div className="bg-white shadow-sm rounded-lg p-4 min-w-40">
-          <p className="text-sm text-gray-500">Total Value</p>
-          <p className="text-xl font-bold">{formatCurrency(totalValue)}</p>
+        <div className="bg-white shadow-sm rounded-lg p-6">
+          <p className="text-sm text-gray-500 mb-1">Total Value</p>
+          <p className="text-2xl font-bold text-gray-900">
+            {formatCurrency(totalValue)}
+          </p>
         </div>
       </div>
 
       {/* Filter Section */}
-      <div className="bg-white shadow-sm rounded-lg p-4 mb-6">
+      <div className="bg-white shadow-sm rounded-lg p-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {/* Search */}
           <div>
@@ -379,7 +495,7 @@ const ViewPaddyStock = () => {
                     fillRule="evenodd"
                     d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"
                     clipRule="evenodd"
-                  ></path>
+                  />
                 </svg>
               </div>
               <input
@@ -464,17 +580,17 @@ const ViewPaddyStock = () => {
         )}
       </div>
 
-      {/* Debug Info */}
+      {/* Error Display */}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
           <h3 className="font-medium">Error loading data</h3>
           <p className="text-sm">{error}</p>
         </div>
       )}
 
-      {/* Stocks List */}
+      {/* Main Content */}
       {loading ? (
-        <div className="flex justify-center my-12">
+        <div className="flex justify-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
         </div>
       ) : !currentBusiness ? (
@@ -484,7 +600,6 @@ const ViewPaddyStock = () => {
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
-            aria-hidden="true"
           >
             <path
               strokeLinecap="round"
@@ -499,10 +614,12 @@ const ViewPaddyStock = () => {
           <p className="mt-1 text-sm text-gray-500">
             Please select a business from the business selector.
           </p>
-          <div className="mt-4 p-3 bg-gray-100 rounded text-left text-xs">
-            <p className="font-bold">Debug Info:</p>
-            <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
-          </div>
+          {process.env.NODE_ENV === "development" && (
+            <div className="mt-4 p-3 bg-gray-100 rounded text-left text-xs">
+              <p className="font-bold">Debug Info:</p>
+              <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
+            </div>
+          )}
         </div>
       ) : stocks.length === 0 ? (
         <div className="bg-white rounded-lg shadow-sm p-8 text-center">
@@ -511,7 +628,6 @@ const ViewPaddyStock = () => {
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
-            aria-hidden="true"
           >
             <path
               strokeLinecap="round"
@@ -532,10 +648,8 @@ const ViewPaddyStock = () => {
           >
             <svg
               className="-ml-1 mr-2 h-5 w-5"
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 20 20"
               fill="currentColor"
-              aria-hidden="true"
+              viewBox="0 0 20 20"
             >
               <path
                 fillRule="evenodd"
@@ -545,10 +659,12 @@ const ViewPaddyStock = () => {
             </svg>
             Add New Paddy Stock
           </button>
-          <div className="mt-4 p-3 bg-gray-100 rounded text-left text-xs">
-            <p className="font-bold">Debug Info:</p>
-            <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
-          </div>
+          {process.env.NODE_ENV === "development" && (
+            <div className="mt-4 p-3 bg-gray-100 rounded text-left text-xs">
+              <p className="font-bold">Debug Info:</p>
+              <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
+            </div>
+          )}
         </div>
       ) : filteredStocks.length === 0 ? (
         <div className="bg-white rounded-lg shadow-sm p-6 text-center">
@@ -563,312 +679,342 @@ const ViewPaddyStock = () => {
           </button>
         </div>
       ) : (
-        <div className="bg-white shadow-sm rounded-lg overflow-hidden overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="w-10 px-4 py-3"></th>{" "}
-                {/* Expand/collapse column */}
-                <th
-                  scope="col"
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                  onClick={() => handleSortChange("createdAt")}
-                >
-                  <div className="flex items-center">
-                    Date
-                    {sortField === "createdAt" && (
-                      <svg
-                        className="ml-1 h-4 w-4"
-                        fill="currentColor"
-                        viewBox="0 0 20 20"
-                      >
-                        {sortDirection === "asc" ? (
-                          <path
-                            fillRule="evenodd"
-                            d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"
-                            clipRule="evenodd"
-                          />
-                        ) : (
-                          <path
-                            fillRule="evenodd"
-                            d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-                            clipRule="evenodd"
-                          />
-                        )}
-                      </svg>
-                    )}
-                  </div>
-                </th>
-                <th
-                  scope="col"
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                  onClick={() => handleSortChange("buyerName")}
-                >
-                  <div className="flex items-center">
-                    Buyer
-                    {sortField === "buyerName" && (
-                      <svg
-                        className="ml-1 h-4 w-4"
-                        fill="currentColor"
-                        viewBox="0 0 20 20"
-                      >
-                        {sortDirection === "asc" ? (
-                          <path
-                            fillRule="evenodd"
-                            d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"
-                            clipRule="evenodd"
-                          />
-                        ) : (
-                          <path
-                            fillRule="evenodd"
-                            d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-                            clipRule="evenodd"
-                          />
-                        )}
-                      </svg>
-                    )}
-                  </div>
-                </th>
-                <th
-                  scope="col"
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                  onClick={() => handleSortChange("paddyType")}
-                >
-                  <div className="flex items-center">
-                    Type
-                    {sortField === "paddyType" && (
-                      <svg
-                        className="ml-1 h-4 w-4"
-                        fill="currentColor"
-                        viewBox="0 0 20 20"
-                      >
-                        {sortDirection === "asc" ? (
-                          <path
-                            fillRule="evenodd"
-                            d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"
-                            clipRule="evenodd"
-                          />
-                        ) : (
-                          <path
-                            fillRule="evenodd"
-                            d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-                            clipRule="evenodd"
-                          />
-                        )}
-                      </svg>
-                    )}
-                  </div>
-                </th>
-                <th
-                  scope="col"
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                  onClick={() => handleSortChange("quantity")}
-                >
-                  <div className="flex items-center">
-                    Quantity (kg)
-                    {sortField === "quantity" && (
-                      <svg
-                        className="ml-1 h-4 w-4"
-                        fill="currentColor"
-                        viewBox="0 0 20 20"
-                      >
-                        {sortDirection === "asc" ? (
-                          <path
-                            fillRule="evenodd"
-                            d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"
-                            clipRule="evenodd"
-                          />
-                        ) : (
-                          <path
-                            fillRule="evenodd"
-                            d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-                            clipRule="evenodd"
-                          />
-                        )}
-                      </svg>
-                    )}
-                  </div>
-                </th>
-                <th
-                  scope="col"
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                  onClick={() => handleSortChange("price")}
-                >
-                  <div className="flex items-center">
-                    Price (Rs/kg)
-                    {sortField === "price" && (
-                      <svg
-                        className="ml-1 h-4 w-4"
-                        fill="currentColor"
-                        viewBox="0 0 20 20"
-                      >
-                        {sortDirection === "asc" ? (
-                          <path
-                            fillRule="evenodd"
-                            d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"
-                            clipRule="evenodd"
-                          />
-                        ) : (
-                          <path
-                            fillRule="evenodd"
-                            d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-                            clipRule="evenodd"
-                          />
-                        )}
-                      </svg>
-                    )}
-                  </div>
-                </th>
-                <th
-                  scope="col"
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  Total Value
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredStocks.map((stock) => (
-                <React.Fragment key={stock.id}>
-                  <tr className="hover:bg-gray-50">
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <button
-                        onClick={() => toggleRowExpand(stock.id)}
-                        className="text-gray-500 hover:text-gray-700 focus:outline-none"
-                      >
-                        {expandedRows[stock.id] ? (
-                          <svg
-                            className="h-5 w-5"
-                            fill="currentColor"
-                            viewBox="0 0 20 20"
-                          >
-                            <path
-                              fillRule="evenodd"
-                              d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-                              clipRule="evenodd"
-                            />
-                          </svg>
-                        ) : (
-                          <svg
-                            className="h-5 w-5"
-                            fill="currentColor"
-                            viewBox="0 0 20 20"
-                          >
-                            <path
-                              fillRule="evenodd"
-                              d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
-                              clipRule="evenodd"
-                            />
-                          </svg>
-                        )}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {formatDate(stock.createdAt)}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {stock.buyerName || "—"}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {stock.paddyType || "—"}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {stock.quantity ? stock.quantity.toFixed(2) : "—"}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {stock.price ? stock.price.toFixed(2) : "—"}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {stock.quantity && stock.price
-                          ? formatCurrency(stock.quantity * stock.price)
-                          : "—"}
-                      </div>
-                    </td>
-                  </tr>
-                  {expandedRows[stock.id] && (
-                    <tr className="bg-gray-50">
-                      <td className="px-4 py-3"></td>
-                      <td colSpan="6" className="px-4 py-3">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-2">
-                          <div>
-                            <h4 className="text-sm font-medium text-gray-700 mb-1">
-                              Transaction Details
-                            </h4>
-                            <div className="bg-white p-3 rounded-md shadow-sm space-y-2">
-                              <div>
-                                <span className="text-xs text-gray-500">
-                                  Transaction ID:
-                                </span>
-                                <p className="text-sm text-gray-800">
-                                  {stock.id}
-                                </p>
-                              </div>
-                              <div>
-                                <span className="text-xs text-gray-500">
-                                  Created:
-                                </span>
-                                <p className="text-sm text-gray-800">
-                                  {stock.createdAt?.toLocaleString("en-US", {
-                                    year: "numeric",
-                                    month: "long",
-                                    day: "numeric",
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  })}
-                                </p>
-                              </div>
-                              <div>
-                                <span className="text-xs text-gray-500">
-                                  Last Updated:
-                                </span>
-                                <p className="text-sm text-gray-800">
-                                  {stock.updatedAt?.toLocaleString("en-US", {
-                                    year: "numeric",
-                                    month: "long",
-                                    day: "numeric",
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  })}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                          <div>
-                            <h4 className="text-sm font-medium text-gray-700 mb-1">
-                              Additional Information
-                            </h4>
-                            <div className="bg-white p-3 rounded-md shadow-sm">
-                              <div>
-                                <span className="text-xs text-gray-500">
-                                  Notes:
-                                </span>
-                                <p className="text-sm text-gray-800 mt-1">
-                                  {stock.notes || "No additional notes"}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
+        <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="w-10 px-4 py-3"></th>
+                  <th
+                    scope="col"
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSortChange("createdAt")}
+                  >
+                    <div className="flex items-center">
+                      Date
+                      <SortIcon field="createdAt" />
+                    </div>
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSortChange("buyerName")}
+                  >
+                    <div className="flex items-center">
+                      Buyer
+                      <SortIcon field="buyerName" />
+                    </div>
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSortChange("paddyType")}
+                  >
+                    <div className="flex items-center">
+                      Type
+                      <SortIcon field="paddyType" />
+                    </div>
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSortChange("quantity")}
+                  >
+                    <div className="flex items-center">
+                      Quantity (kg)
+                      <SortIcon field="quantity" />
+                    </div>
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSortChange("price")}
+                  >
+                    <div className="flex items-center">
+                      Price (Rs/kg)
+                      <SortIcon field="price" />
+                    </div>
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Total Value
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Status
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredStocks.map((stock) => (
+                  <React.Fragment key={stock.id}>
+                    <tr className="hover:bg-gray-50">
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <button
+                          onClick={() => toggleRowExpand(stock.id)}
+                          className="text-gray-500 hover:text-gray-700 focus:outline-none"
+                        >
+                          {expandedRows[stock.id] ? (
+                            <svg
+                              className="h-5 w-5"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path
+                                fillRule="evenodd"
+                                d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                          ) : (
+                            <svg
+                              className="h-5 w-5"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path
+                                fillRule="evenodd"
+                                d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                          )}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          {formatDate(stock.createdAt)}
                         </div>
                       </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">
+                          {stock.buyerName || "—"}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          {stock.paddyType || "—"}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          {stock.quantity ? stock.quantity.toFixed(2) : "—"}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          {stock.price ? stock.price.toFixed(2) : "—"}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">
+                          {stock.quantity && stock.price
+                            ? formatCurrency(stock.quantity * stock.price)
+                            : "—"}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center">
+                          {stock.processed ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              <svg
+                                className="w-3 h-3 mr-1"
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                              >
+                                <path
+                                  fillRule="evenodd"
+                                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                  clipRule="evenodd"
+                                />
+                              </svg>
+                              Processed
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                              <svg
+                                className="w-3 h-3 mr-1"
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                              >
+                                <path
+                                  fillRule="evenodd"
+                                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"
+                                  clipRule="evenodd"
+                                />
+                              </svg>
+                              Pending
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
+                        {!stock.processed ? (
+                          <button
+                            onClick={() => handleProcessStock(stock)}
+                            disabled={processingStock === stock.id}
+                            className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {processingStock === stock.id ? (
+                              <>
+                                <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent mr-1"></div>
+                                Processing...
+                              </>
+                            ) : (
+                              <>
+                                <svg
+                                  className="w-3 h-3 mr-1"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                                  />
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                  />
+                                </svg>
+                                Process
+                              </>
+                            )}
+                          </button>
+                        ) : (
+                          <span className="text-xs text-gray-500">
+                            Processed on {formatDate(stock.processedAt)}
+                          </span>
+                        )}
+                      </td>
                     </tr>
-                  )}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
+                    {expandedRows[stock.id] && (
+                      <tr className="bg-gray-50">
+                        <td className="px-4 py-3"></td>
+                        <td colSpan="8" className="px-4 py-3">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <h4 className="text-sm font-medium text-gray-700 mb-2">
+                                Transaction Details
+                              </h4>
+                              <div className="bg-white p-3 rounded-md shadow-sm space-y-2">
+                                <div>
+                                  <span className="text-xs text-gray-500">
+                                    Transaction ID:
+                                  </span>
+                                  <p className="text-sm text-gray-800 font-mono">
+                                    {stock.id}
+                                  </p>
+                                </div>
+                                <div>
+                                  <span className="text-xs text-gray-500">
+                                    Created:
+                                  </span>
+                                  <p className="text-sm text-gray-800">
+                                    {stock.createdAt?.toLocaleString("en-US", {
+                                      year: "numeric",
+                                      month: "long",
+                                      day: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                                  </p>
+                                </div>
+                                <div>
+                                  <span className="text-xs text-gray-500">
+                                    Last Updated:
+                                  </span>
+                                  <p className="text-sm text-gray-800">
+                                    {stock.updatedAt?.toLocaleString("en-US", {
+                                      year: "numeric",
+                                      month: "long",
+                                      day: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                                  </p>
+                                </div>
+                                {stock.processed && stock.processedAt && (
+                                  <div>
+                                    <span className="text-xs text-gray-500">
+                                      Processed:
+                                    </span>
+                                    <p className="text-sm text-gray-800">
+                                      {stock.processedAt?.toLocaleString(
+                                        "en-US",
+                                        {
+                                          year: "numeric",
+                                          month: "long",
+                                          day: "numeric",
+                                          hour: "2-digit",
+                                          minute: "2-digit",
+                                        }
+                                      )}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div>
+                              <h4 className="text-sm font-medium text-gray-700 mb-2">
+                                Additional Information
+                              </h4>
+                              <div className="bg-white p-3 rounded-md shadow-sm">
+                                <div>
+                                  <span className="text-xs text-gray-500">
+                                    Notes:
+                                  </span>
+                                  <p className="text-sm text-gray-800 mt-1">
+                                    {stock.notes || "No additional notes"}
+                                  </p>
+                                </div>
+                                {stock.conversionId && (
+                                  <div className="mt-2">
+                                    <span className="text-xs text-gray-500">
+                                      Conversion ID:
+                                    </span>
+                                    <p className="text-sm text-gray-800 font-mono">
+                                      {stock.conversionId}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
+
+      {/* Convert to Other Modal */}
+      <ConvertToOtherModal
+        isOpen={isConvertModalOpen}
+        onClose={() => {
+          setIsConvertModalOpen(false);
+          setSelectedStock(null);
+        }}
+        onSubmit={handleConversionSubmit}
+      />
     </div>
   );
 };

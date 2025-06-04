@@ -195,11 +195,11 @@ const AddingEmployees = () => {
   };
 
   // Upload image to Firebase Storage
-  const uploadImage = async (file, path) => {
-    const storageRef = ref(storage, path);
-    const snapshot = await uploadBytes(storageRef, file);
-    return await getDownloadURL(snapshot.ref);
-  };
+  // const uploadImage = async (file, path) => {
+  //   const storageRef = ref(storage, path);
+  //   const snapshot = await uploadBytes(storageRef, file);
+  //   return await getDownloadURL(snapshot.ref);
+  // };
 
   // Handle form submission
   const handleSubmit = async (e) => {
@@ -248,7 +248,7 @@ const AddingEmployees = () => {
       for (const [key, file] of Object.entries(images)) {
         if (file) {
           const path = `employees/${employeeId}/${key}_${timestamp}`;
-          imageUrls[key] = await uploadImage(file, path);
+          // imageUrls[key] = await uploadImage(file, path);
         }
       }
 

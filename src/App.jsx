@@ -21,6 +21,7 @@ import PrivateRoute from "./components/auth/PrivateRoute";
 import { Dashboard } from "./pages/home/pages/Dashboard";
 import { Logistics } from "./pages/home/pages/Logistics";
 import Employees from "./pages/home/pages/Employees";
+import { SubStockPage } from "./pages/home/pages/SubStockPage";
 
 const App = () => {
   return (
@@ -44,6 +45,7 @@ const App = () => {
             >
               <Route index element={<Dashboard />} />
               <Route path="inventory" element={<Stock />} />
+              <Route path="substock" element={<SubStockPage />} />
               <Route path="customers" element={<Customers />} />
               <Route path="employees" element={<Employees />} />
               <Route path="logistics" element={<Logistics />} />
@@ -56,6 +58,10 @@ const App = () => {
             <Route
               path="/inventory"
               element={<Navigate to="/home/inventory" replace />}
+            />
+            <Route
+              path="/substock"
+              element={<Navigate to="/home/substock" replace />}
             />
             <Route
               path="/customers"
