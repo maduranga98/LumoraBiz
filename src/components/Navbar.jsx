@@ -172,6 +172,7 @@ const Navbar = () => {
   const navItems = [
     { to: "/home", label: "Dashboard", icon: <DashboardIcon /> },
     { to: "/home/inventory", label: "Inventory", icon: <InventoryIcon /> },
+    { to: "/home/substock", label: "Sub Stock", icon: <InventoryIcon /> },
     { to: "/home/customers", label: "Customers", icon: <CustomersIcon /> },
     { to: "/home/employees", label: "Employees", icon: <CustomersIcon /> },
     { to: "/home/logistics", label: "Logistics", icon: <Vehicle /> },

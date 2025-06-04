@@ -4,6 +4,7 @@ import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
 import EmployeeList from "../../employees/EmployeeList";
 import AddingEmployees from "../../employees/AddingEmployees";
 import MarkAttendance from "../../employees/MarkAttendence";
+import { ManPower } from "../../../components/employees/ManPower";
 
 const Employees = () => {
   const [activeSection, setActiveSection] = useState("overview");
@@ -172,6 +173,29 @@ const Employees = () => {
     {
       id: "attendance",
       title: "Attendance",
+      description: "Mark attendance and view records",
+      icon: (
+        <svg
+          className="w-8 h-8"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
+          />
+        </svg>
+      ),
+      color: "bg-orange-500",
+      lightColor: "bg-orange-50",
+      textColor: "text-orange-600",
+    },
+    {
+      id: "manpower",
+      title: "Man Power",
       description: "Mark attendance and view records",
       icon: (
         <svg
@@ -422,6 +446,8 @@ const Employees = () => {
         return <EmployeeList />;
       case "attendance":
         return <MarkAttendance />;
+      case "manpower":
+        return <ManPower />;
       default:
         return renderOverview();
     }
