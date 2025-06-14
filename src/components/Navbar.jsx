@@ -1,161 +1,79 @@
-// src/components/Navbar.jsx - Updated with better color contrast
+// src/components/Navbar.jsx
 import React, { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
 import BusinessSelector from "./BusinessSelector";
+import {
+  LayoutDashboard,
+  Package,
+  Warehouse,
+  Users,
+  UserCheck,
+  Truck,
+  CreditCard,
+  TrendingUp,
+  BarChart3,
+  Settings,
+  HelpCircle,
+  LogOut,
+  Menu,
+  ChevronLeft,
+  Building2,
+} from "lucide-react";
 
-// Navigation Icons
-const DashboardIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    className="h-5 w-5"
-    viewBox="0 0 20 20"
-    fill="currentColor"
-  >
-    <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" />
-  </svg>
-);
+// Navigation Item Component
+const NavItem = ({ icon, label, to, isActive, isExpanded, onClick }) => {
+  const baseClasses = `flex items-center p-3 rounded-lg transition-colors duration-200 ${
+    isActive
+      ? "bg-blue-100 text-blue-700 shadow-sm"
+      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+  }`;
 
-const InventoryIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    className="h-5 w-5"
-    viewBox="0 0 20 20"
-    fill="currentColor"
-  >
-    <path d="M4 3a2 2 0 100 4h12a2 2 0 100-4H4z" />
-    <path
-      fillRule="evenodd"
-      d="M3 8h14v7a2 2 0 01-2 2H5a2 2 0 01-2-2V8zm5 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"
-      clipRule="evenodd"
-    />
-  </svg>
-);
+  if (!isExpanded) {
+    if (onClick) {
+      return (
+        <button
+          onClick={onClick}
+          className={`${baseClasses} w-full justify-center`}
+          title={label}
+        >
+          {icon}
+        </button>
+      );
+    }
+    return (
+      <Link to={to} className={`${baseClasses} justify-center`} title={label}>
+        {icon}
+      </Link>
+    );
+  }
 
-const CustomersIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    className="h-5 w-5"
-    viewBox="0 0 20 20"
-    fill="currentColor"
-  >
-    <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
-  </svg>
-);
+  const expandedClasses = `flex items-center px-3 py-2.5 rounded-lg transition-all duration-200 ${
+    isActive
+      ? "bg-blue-50 text-blue-700 border-r-2 border-blue-600 font-medium shadow-sm"
+      : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+  }`;
 
-const Vehicle = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    stroke-width="2"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-    class="lucide lucide-truck-icon lucide-truck"
-  >
-    <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2" />
-    <path d="M15 18H9" />
-    <path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14" />
-    <circle cx="17" cy="18" r="2" />
-    <circle cx="7" cy="18" r="2" />
-  </svg>
-);
-const ReportsIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    className="h-5 w-5"
-    viewBox="0 0 20 20"
-    fill="currentColor"
-  >
-    <path
-      fillRule="evenodd"
-      d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm2 10a1 1 0 10-2 0v3a1 1 0 102 0v-3zm2-3a1 1 0 011 1v5a1 1 0 11-2 0v-5a1 1 0 011-1zm4-1a1 1 0 10-2 0v7a1 1 0 102 0V8z"
-      clipRule="evenodd"
-    />
-  </svg>
-);
+  if (onClick) {
+    return (
+      <button
+        onClick={onClick}
+        className={`${expandedClasses} w-full text-left`}
+      >
+        <span className={`flex-shrink-0 ${isActive ? "text-blue-600" : ""}`}>
+          {icon}
+        </span>
+        <span className="ml-3 text-sm font-medium">{label}</span>
+      </button>
+    );
+  }
 
-const SettingsIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    className="h-5 w-5"
-    viewBox="0 0 20 20"
-    fill="currentColor"
-  >
-    <path
-      fillRule="evenodd"
-      d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z"
-      clipRule="evenodd"
-    />
-  </svg>
-);
-
-const HelpIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    className="h-5 w-5"
-    viewBox="0 0 20 20"
-    fill="currentColor"
-  >
-    <path
-      fillRule="evenodd"
-      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z"
-      clipRule="evenodd"
-    />
-  </svg>
-);
-
-const MenuToggleIcon = ({ isOpen }) => {
-  return isOpen ? (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      className="h-6 w-6"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
-      />
-    </svg>
-  ) : (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      className="h-6 w-6"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M4 6h16M4 12h16M4 18h16"
-      />
-    </svg>
-  );
-};
-
-// Updated NavItem component with better contrast
-const NavItem = ({ icon, label, to, isActive }) => {
   return (
-    <Link
-      to={to}
-      className={`flex items-center px-4 py-3 ${
-        isActive
-          ? "bg-indigo-100 text-indigo-800 font-medium border-r-4 border-indigo-600" // Improved contrast
-          : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-      } transition-colors rounded-l-md`}
-    >
-      <span className={`flex-shrink-0 ${isActive ? "text-indigo-600" : ""}`}>
+    <Link to={to} className={expandedClasses}>
+      <span className={`flex-shrink-0 ${isActive ? "text-blue-600" : ""}`}>
         {icon}
       </span>
-      <span className="ml-3">{label}</span>
+      <span className="ml-3 text-sm font-medium">{label}</span>
     </Link>
   );
 };
@@ -163,107 +81,277 @@ const NavItem = ({ icon, label, to, isActive }) => {
 const Navbar = () => {
   const [isExpanded, setIsExpanded] = useState(true);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { currentUser, logout } = useAuth();
   const path = location.pathname;
 
   const toggleSidebar = () => {
     setIsExpanded(!isExpanded);
   };
 
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate("/login");
+    } catch (error) {
+      console.error("Failed to log out:", error);
+    }
+  };
+
   const navItems = [
-    { to: "/home", label: "Dashboard", icon: <DashboardIcon /> },
-    { to: "/home/inventory", label: "Inventory", icon: <InventoryIcon /> },
-    { to: "/home/substock", label: "Sub Stock", icon: <InventoryIcon /> },
-    { to: "/home/customers", label: "Customers", icon: <CustomersIcon /> },
-    { to: "/home/employees", label: "Employees", icon: <CustomersIcon /> },
-    { to: "/home/logistics", label: "Logistics", icon: <Vehicle /> },
-    { to: "/home/reports", label: "Reports", icon: <ReportsIcon /> },
-    { to: "/home/settings", label: "Settings", icon: <SettingsIcon /> },
-    { to: "/home/help", label: "Help & Support", icon: <HelpIcon /> },
+    {
+      to: "/home",
+      label: "Dashboard",
+      icon: <LayoutDashboard className="h-5 w-5" />,
+    },
+    {
+      to: "/home/inventory",
+      label: "Inventory",
+      icon: <Package className="h-5 w-5" />,
+    },
+    {
+      to: "/home/substock",
+      label: "Sub Stock",
+      icon: <Warehouse className="h-5 w-5" />,
+    },
+    {
+      to: "/home/customers",
+      label: "Customers",
+      icon: <Users className="h-5 w-5" />,
+    },
+    {
+      to: "/home/employees",
+      label: "Employees",
+      icon: <UserCheck className="h-5 w-5" />,
+    },
+    {
+      to: "/home/logistics",
+      label: "Logistics",
+      icon: <Truck className="h-5 w-5" />,
+    },
+    {
+      to: "/home/liabilities",
+      label: "Liabilities",
+      icon: <CreditCard className="h-5 w-5" />,
+    },
+    {
+      to: "/home/cashflows",
+      label: "Cash Flows",
+      icon: <TrendingUp className="h-5 w-5" />,
+    },
+    {
+      to: "/home/reports",
+      label: "Reports",
+      icon: <BarChart3 className="h-5 w-5" />,
+    },
+    {
+      to: "/home/settings",
+      label: "Settings",
+      icon: <Settings className="h-5 w-5" />,
+    },
+    {
+      to: "/home/help",
+      label: "Help & Support",
+      icon: <HelpCircle className="h-5 w-5" />,
+    },
   ];
 
   return (
     <div
-      className={`bg-white h-screen border-r border-muted transition-all duration-300 ${
+      className={`bg-white h-screen border-r border-gray-200 shadow-sm transition-all duration-300 flex flex-col ${
         isExpanded ? "w-64" : "w-16"
       }`}
     >
-      <div className="flex flex-col h-full">
-        {/* Logo and toggle */}
+      {/* Header with Logo and Toggle */}
+      <div className="flex-shrink-0">
         <div
-          className={`flex items-center px-4 py-5 ${
+          className={`flex items-center px-4 py-4 border-b border-gray-200 ${
             isExpanded ? "justify-between" : "justify-center"
-          } border-b border-muted`}
+          }`}
         >
           {isExpanded && (
-            <div>
-              <h1 className="text-xl font-bold tracking-tight">
-                <span className="text-indigo-600">Lumora</span>
-                <span className="text-cyan-600 font-extrabold">Biz</span>
-              </h1>
-              <p className="text-xs text-gray-500">
-                Smart Tools for Smarter Business
-              </p>
+            <div className="flex items-center space-x-2">
+              <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
+                <Building2 className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-lg font-bold tracking-tight">
+                  <span className="bg-gradient-to-r from-blue-600 to-blue-500 bg-clip-text text-transparent">
+                    Lumora
+                  </span>
+                  <span className="bg-gradient-to-r from-purple-600 to-purple-500 bg-clip-text text-transparent font-extrabold">
+                    Biz
+                  </span>
+                </h1>
+                <p className="text-xs text-gray-500 leading-tight">
+                  Smart Business Tools
+                </p>
+              </div>
             </div>
           )}
           <button
             onClick={toggleSidebar}
-            className="p-1 rounded-full text-gray-500 hover:bg-gray-100"
+            className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors duration-200"
+            title={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
           >
-            <MenuToggleIcon isOpen={isExpanded} />
+            {isExpanded ? (
+              <ChevronLeft className="h-5 w-5" />
+            ) : (
+              <Menu className="h-5 w-5" />
+            )}
           </button>
         </div>
 
         {/* Business Selector */}
-        <BusinessSelector isExpanded={isExpanded} />
-
-        {/* Navigation Links */}
-        <div className="flex-1 overflow-y-auto py-4">
-          <div className="space-y-1 px-2">
-            {navItems.map((item) => (
-              <div
-                key={item.to}
-                className={isExpanded ? "" : "flex justify-center"}
-              >
-                {isExpanded ? (
-                  <NavItem
-                    to={item.to}
-                    label={item.label}
-                    icon={item.icon}
-                    isActive={
-                      (item.to === "/home" && path === "/home") ||
-                      (item.to !== "/home" && path.startsWith(item.to))
-                    }
-                  />
-                ) : (
-                  <Link
-                    to={item.to}
-                    className={`p-3 rounded-lg ${
-                      (item.to === "/home" && path === "/home") ||
-                      (item.to !== "/home" && path.startsWith(item.to))
-                        ? "bg-indigo-100 text-indigo-700" // Improved contrast for collapsed view
-                        : "text-gray-600 hover:bg-gray-100"
-                    }`}
-                    title={item.label}
-                  >
-                    {item.icon}
-                  </Link>
-                )}
-              </div>
-            ))}
-          </div>
+        <div className="px-3 py-3 border-b border-gray-200">
+          <BusinessSelector isExpanded={isExpanded} />
         </div>
 
-        {/* Company Info */}
-        <div className="p-4 text-center border-t border-muted">
+        {/* User Info Section */}
+        <div className="px-3 py-3 border-b border-gray-200">
           {isExpanded ? (
-            <div>
-              <p className="text-xs text-gray-500">Powered by</p>
-              <p className="text-xs font-medium">Lumora Ventures Pvt Ltd</p>
+            <div className="flex items-center space-x-3 p-2 bg-gray-50 rounded-lg">
+              <div className="h-10 w-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white font-medium text-sm flex-shrink-0">
+                {currentUser?.displayName?.charAt(0) ||
+                  currentUser?.email?.charAt(0) ||
+                  "U"}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">
+                  {currentUser?.displayName || "User"}
+                </p>
+                <p className="text-xs text-gray-500 truncate">
+                  {currentUser?.email}
+                </p>
+              </div>
             </div>
           ) : (
-            <p className="text-xs text-gray-500">LV</p>
+            <div className="flex justify-center">
+              <div className="h-8 w-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white font-medium text-xs">
+                {currentUser?.displayName?.charAt(0) ||
+                  currentUser?.email?.charAt(0) ||
+                  "U"}
+              </div>
+            </div>
           )}
         </div>
+      </div>
+
+      {/* Navigation Links */}
+      <div className="flex-1 overflow-y-auto py-4">
+        <nav className="px-3">
+          <div className="space-y-1">
+            {/* Main Navigation Items */}
+            <div className="space-y-1">
+              {navItems.slice(0, 3).map((item) => (
+                <NavItem
+                  key={item.to}
+                  to={item.to}
+                  label={item.label}
+                  icon={item.icon}
+                  isExpanded={isExpanded}
+                  isActive={
+                    (item.to === "/home" && path === "/home") ||
+                    (item.to !== "/home" && path.startsWith(item.to))
+                  }
+                />
+              ))}
+            </div>
+
+            {/* Customer & Employee Management */}
+            {isExpanded && (
+              <div className="pt-3">
+                <h3 className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                  People
+                </h3>
+              </div>
+            )}
+            <div className="space-y-1">
+              {navItems.slice(3, 5).map((item) => (
+                <NavItem
+                  key={item.to}
+                  to={item.to}
+                  label={item.label}
+                  icon={item.icon}
+                  isExpanded={isExpanded}
+                  isActive={path.startsWith(item.to)}
+                />
+              ))}
+            </div>
+
+            {/* Operations */}
+            {isExpanded && (
+              <div className="pt-3">
+                <h3 className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                  Operations
+                </h3>
+              </div>
+            )}
+            <div className="space-y-1">
+              {navItems.slice(5, 8).map((item) => (
+                <NavItem
+                  key={item.to}
+                  to={item.to}
+                  label={item.label}
+                  icon={item.icon}
+                  isExpanded={isExpanded}
+                  isActive={path.startsWith(item.to)}
+                />
+              ))}
+            </div>
+
+            {/* Analytics & Settings */}
+            {isExpanded && (
+              <div className="pt-3">
+                <h3 className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                  System
+                </h3>
+              </div>
+            )}
+            <div className="space-y-1">
+              {navItems.slice(8).map((item) => (
+                <NavItem
+                  key={item.to}
+                  to={item.to}
+                  label={item.label}
+                  icon={item.icon}
+                  isExpanded={isExpanded}
+                  isActive={path.startsWith(item.to)}
+                />
+              ))}
+            </div>
+
+            {/* Sign Out Button */}
+            <div className="pt-4 mt-4 border-t border-gray-200">
+              <NavItem
+                label="Sign Out"
+                icon={<LogOut className="h-5 w-5" />}
+                isExpanded={isExpanded}
+                isActive={false}
+                onClick={handleLogout}
+              />
+            </div>
+          </div>
+        </nav>
+      </div>
+
+      {/* Footer */}
+      <div className="flex-shrink-0 p-4 border-t border-gray-200">
+        {isExpanded ? (
+          <div className="text-center">
+            <p className="text-xs text-gray-500 mb-1">Powered by</p>
+            <p className="text-xs font-medium text-gray-700">
+              Lumora Ventures Pvt Ltd
+            </p>
+            <p className="text-xs text-gray-400 mt-1">v2.1.0</p>
+          </div>
+        ) : (
+          <div className="flex justify-center">
+            <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+              <Building2 className="h-4 w-4 text-gray-600" />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

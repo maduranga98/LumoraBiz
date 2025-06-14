@@ -1,0 +1,43 @@
+/owners/{ownerId}
+├── profile (name, email, phone, address) (done)
+├── businesses/{businessId}
+│   ├── name, location, createdAt (done)
+│   ├── employees/{employeeId}
+│   │   ├── name, role, salaryType, payRate, etc. (done)
+│   │   ├── attendance/{date}: { status, inTime, outTime } (done)
+│   │   ├── leaves/{leaveId}: { type, date, reason, approved }
+│   │   └── salaryAdvance/{advanceId}: { amount, date, note }
+│   ├── roles/{roleId}: { name, permissions[] }
+│   ├── temporaryWorks/{workId}: { employeeId, task, wage, date } (done)
+│   ├── paySheets/{month}: { employeeId, totalPay, advances, finalPay, breakdown }
+│   ├── logistics
+│   │   ├── vehicles/{vehicleId}: { number, model, capacity, mileage, status }
+│   │   ├── mileageLogs/{logId}: { vehicleId, startMileage, endMileage, date, distance }
+│   │   └── services/{serviceId}: { vehicleId, type, dueDate, note }
+│   ├── stock
+│   │   ├── rawProcessedStock/{stockId}: { buyerId, item, quantity, type(paddy/rice), paymentDetails[], date }
+│   │   ├── baggedStock/{bagId}: { sizeKg, quantity, riceType, createdFromStockId }
+│   │   └── materialStock/{itemId}: { type(bag/thread/paper), quantity, unit, addedDate }
+│   ├── buyers/{buyerId}: { name, contact, address } (done)
+│   │   └── payments/{paymentId}: { type(cash/cheque/credit/mixed), amount, date, note }
+│   ├── salesReps/{repId}: { name, phone, email, assignedRoutes[] }
+│   ├── customers/{customerId}: {  name, phone, location, routeId, registeredDate }
+│   │   ├── purchases/{purchaseId}: { date, items[], total, paymentStatus, paymentType }
+│   │   └── payments/{paymentId}: { amount, method, date, linkedPurchaseId }
+│   ├── routes/{routeId}: { name, areas[] }
+│   ├── loadings/{loadingId}: { repId, vehicleId, routeId, date, items[], status }
+│   ├── dailyCollections/{docId}: { repId, date, routeId, vehicleId, cashCollected, chequeCollected, creditPending, totalSales, totalItemsSold[] }
+│   ├── visitLogs/{logId}: { date, repId, routeId, customerId, visited, notes }
+│   ├── productCatalog/{productId}: { name, type, unit, price }
+│   ├── cheques
+│   │   ├── incoming/{chequeId}: { from(customerId), amount, bankDate, status }
+│   │   └── outgoing/{chequeId}: { to(buyerId), amount, dueDate, status }
+│   ├── accounts
+│   │   ├── monthlyReports/{month}: {
+│   │   │   totalSales, cashTotal, chequeTotal, creditTotal,
+│   │   │   outstandingCredits[], upcomingBankCheques[], payableCheques[]
+│   │   │ }
+│   │   ├── expenses/{expenseId}: { category, amount, date, notes }
+│   │   ├── incomes/{incomeId}: { source, amount, date, note }
+│   │   └── liabilities/{liabilityId}: { type, description, amount, lender, dueDate }
+└── systemSettings (app-wide preferences, feature flags)
