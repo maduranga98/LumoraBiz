@@ -33,11 +33,11 @@ export const Stock = () => {
   };
 
   return (
-    <div className="container mx-auto px-4 py-6">
+    <div className="container mx-auto py-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Stock Management</h1>
         <p className="text-gray-600 mt-1">
-          Manage your paddy stock inventory and purchase history
+          Manage your paddy & rice stock inventory and purchase history
         </p>
       </div>
 

@@ -1,19 +1,40 @@
 import React, { useState, useEffect, useRef } from "react";
-import { db, auth, storage } from "../../services/firebase";
-import { 
-  collection, 
-  query, 
-  where, 
-  getDocs, 
-  doc, 
-  updateDoc, 
+import { useAuth } from "../../contexts/AuthContext";
+import { useBusiness } from "../../contexts/BusinessContext";
+import {
+  collection,
+  query,
+  getDocs,
+  doc,
+  updateDoc,
   deleteDoc,
-  orderBy 
+  orderBy,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db, storage } from "../../services/firebase";
 import { toast } from "react-hot-toast";
+import {
+  Camera,
+  Upload,
+  X,
+  Eye,
+  Edit,
+  UserCheck,
+  Trash2,
+  Users,
+  Search,
+  Filter,
+  Calendar,
+  Phone,
+  MapPin,
+  IdCard,
+  Loader2,
+} from "lucide-react";
 
 const EmployeeList = () => {
+  const { currentUser } = useAuth();
+  const { currentBusiness } = useBusiness();
+
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -55,25 +76,35 @@ const EmployeeList = () => {
     { value: "employee", label: "Employee" },
     { value: "sales_rep", label: "Sales Representative" },
     { value: "operator", label: "Operator" },
+    { value: "manager", label: "Manager" },
+    { value: "supervisor", label: "Supervisor" },
   ];
 
-  // Fetch employees
+  // Fetch employees when business changes
   useEffect(() => {
-    fetchEmployees();
-  }, []);
+    if (currentBusiness?.id) {
+      fetchEmployees();
+    } else {
+      setEmployees([]);
+      setLoading(false);
+    }
+  }, [currentBusiness?.id]);
 
   const fetchEmployees = async () => {
-    try {
-      const currentUser = auth.currentUser;
-      if (!currentUser) return;
+    if (!currentUser || !currentBusiness?.id) {
+      setLoading(false);
+      return;
+    }
 
-      const businessId = localStorage.getItem("currentBusinessId");
-      if (!businessId) return;
+    setLoading(true);
+    try {
+      // Use subcollection structure: owners/{userId}/businesses/{businessId}/employees
+      const ownerDocRef = doc(db, "owners", currentUser.uid);
+      const businessDocRef = doc(ownerDocRef, "businesses", currentBusiness.id);
+      const employeesCollectionRef = collection(businessDocRef, "employees");
 
       const employeesQuery = query(
-        collection(db, "employees"),
-        where("businessId", "==", businessId),
-        where("ownerId", "==", currentUser.uid),
+        employeesCollectionRef,
         orderBy("createdAt", "desc")
       );
 
@@ -99,8 +130,9 @@ const EmployeeList = () => {
   // Filter employees
   const filteredEmployees = employees.filter((employee) => {
     const matchesSearch =
-      employee.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      employee.nicNumber.toLowerCase().includes(searchTerm.toLowerCase());
+      employee.employeeName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      employee.nicNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      employee.mobile1?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesRole = !filterRole || employee.role === filterRole;
     const matchesStatus = !filterStatus || employee.status === filterStatus;
 
@@ -156,7 +188,11 @@ const EmployeeList = () => {
     }
 
     try {
-      await deleteDoc(doc(db, "employees", employeeId));
+      const ownerDocRef = doc(db, "owners", currentUser.uid);
+      const businessDocRef = doc(ownerDocRef, "businesses", currentBusiness.id);
+      const employeeDocRef = doc(businessDocRef, "employees", employeeId);
+
+      await deleteDoc(employeeDocRef);
       toast.success("Employee deleted successfully");
       fetchEmployees();
     } catch (error) {
@@ -167,7 +203,7 @@ const EmployeeList = () => {
 
   // Update employee status
   const handleStatusUpdate = async () => {
-    if (!selectedEmployee) return;
+    if (!selectedEmployee || !currentBusiness?.id) return;
 
     if (statusData.status === "inactive" && !statusData.leftDate) {
       toast.error("Please select the date employee left");
@@ -187,7 +223,15 @@ const EmployeeList = () => {
         updateData.leftDate = null;
       }
 
-      await updateDoc(doc(db, "employees", selectedEmployee.id), updateData);
+      const ownerDocRef = doc(db, "owners", currentUser.uid);
+      const businessDocRef = doc(ownerDocRef, "businesses", currentBusiness.id);
+      const employeeDocRef = doc(
+        businessDocRef,
+        "employees",
+        selectedEmployee.id
+      );
+
+      await updateDoc(employeeDocRef, updateData);
       toast.success("Employee status updated successfully");
       fetchEmployees();
       closeModal();
@@ -292,7 +336,7 @@ const EmployeeList = () => {
 
   // Save employee changes
   const handleSaveChanges = async () => {
-    if (!selectedEmployee) return;
+    if (!selectedEmployee || !currentBusiness?.id) return;
 
     // Validation
     if (
@@ -314,7 +358,7 @@ const EmployeeList = () => {
       // Upload new images
       for (const [key, file] of Object.entries(editImages)) {
         if (file) {
-          const path = `employees/${selectedEmployee.employeeId}/${key}_${timestamp}`;
+          const path = `employees/${currentBusiness.id}/${selectedEmployee.id}/${key}_${timestamp}`;
           imageUrls[key] = await uploadImage(file, path);
         }
       }
@@ -325,7 +369,15 @@ const EmployeeList = () => {
         updatedAt: new Date(),
       };
 
-      await updateDoc(doc(db, "employees", selectedEmployee.id), updateData);
+      const ownerDocRef = doc(db, "owners", currentUser.uid);
+      const businessDocRef = doc(ownerDocRef, "businesses", currentBusiness.id);
+      const employeeDocRef = doc(
+        businessDocRef,
+        "employees",
+        selectedEmployee.id
+      );
+
+      await updateDoc(employeeDocRef, updateData);
       toast.success("Employee updated successfully");
       fetchEmployees();
       closeModal();
@@ -342,11 +394,33 @@ const EmployeeList = () => {
     const isActive = status === "active";
     return (
       <span
-        className={`px-2 py-1 text-xs font-medium rounded-full ${
+        className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
           isActive ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
         }`}
       >
         {isActive ? "Active" : "Inactive"}
+      </span>
+    );
+  };
+
+  // Role badge component
+  const RoleBadge = ({ role }) => {
+    const roleColors = {
+      driver: "bg-blue-100 text-blue-800",
+      employee: "bg-gray-100 text-gray-800",
+      sales_rep: "bg-purple-100 text-purple-800",
+      operator: "bg-orange-100 text-orange-800",
+      manager: "bg-green-100 text-green-800",
+      supervisor: "bg-yellow-100 text-yellow-800",
+    };
+
+    return (
+      <span
+        className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
+          roleColors[role] || "bg-gray-100 text-gray-800"
+        }`}
+      >
+        {roles.find((r) => r.value === role)?.label || role}
       </span>
     );
   };
@@ -373,19 +447,7 @@ const EmployeeList = () => {
               onClick={() => removeEditImage(imageType)}
               className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
             >
-              <svg
-                className="w-3 h-3"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
+              <X className="w-3 h-3" />
             </button>
           </div>
         ) : (
@@ -394,27 +456,9 @@ const EmployeeList = () => {
               <button
                 type="button"
                 onClick={() => startCamera(imageType)}
-                className="inline-flex items-center px-2 py-1 bg-primary text-white text-xs rounded hover:opacity-90"
+                className="inline-flex items-center px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
               >
-                <svg
-                  className="w-3 h-3 mr-1"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
-                  />
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                </svg>
+                <Camera className="w-3 h-3 mr-1" />
                 Take
               </button>
 
@@ -425,19 +469,7 @@ const EmployeeList = () => {
                 onClick={() => fileInputRefs[imageType].current?.click()}
                 className="inline-flex items-center px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded hover:bg-gray-200"
               >
-                <svg
-                  className="w-3 h-3 mr-1"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                  />
-                </svg>
+                <Upload className="w-3 h-3 mr-1" />
                 Upload
               </button>
             </div>
@@ -455,10 +487,40 @@ const EmployeeList = () => {
     );
   };
 
+  // No business selected state
+  if (!currentBusiness) {
+    return (
+      <div className="p-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+          <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
+            No Business Selected
+          </h3>
+          <p className="text-gray-600">
+            Please select a business to view and manage employees.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      <div className="p-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+          <div className="p-6 border-b border-gray-200">
+            <h1 className="text-2xl font-semibold text-gray-800">
+              Employee Management
+            </h1>
+            <p className="text-gray-600 mt-1">{currentBusiness.businessName}</p>
+          </div>
+          <div className="flex justify-center items-center min-h-64">
+            <div className="text-center">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+              <p className="text-gray-600">Loading employees...</p>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -468,27 +530,42 @@ const EmployeeList = () => {
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
         {/* Header */}
         <div className="p-6 border-b border-gray-200">
-          <h1 className="text-2xl font-semibold text-gray-800 mb-4">
-            Employee Management
-          </h1>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-2xl font-semibold text-gray-800">
+                Employee Management
+              </h1>
+              <p className="text-gray-600 mt-1">
+                {currentBusiness.businessName}
+              </p>
+            </div>
+            <div className="flex items-center space-x-4">
+              <div className="text-sm text-gray-600">
+                <span className="font-medium">{filteredEmployees.length}</span>{" "}
+                employees
+              </div>
+            </div>
+          </div>
 
           {/* Filters */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
               <input
                 type="text"
                 placeholder="Search employees..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
               />
             </div>
 
-            <div>
+            <div className="relative">
+              <Filter className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
               <select
                 value={filterRole}
                 onChange={(e) => setFilterRole(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none appearance-none"
               >
                 <option value="">All Roles</option>
                 {roles.map((role) => (
@@ -499,11 +576,12 @@ const EmployeeList = () => {
               </select>
             </div>
 
-            <div>
+            <div className="relative">
+              <UserCheck className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none appearance-none"
               >
                 <option value="">All Status</option>
                 <option value="active">Active</option>
@@ -511,8 +589,17 @@ const EmployeeList = () => {
               </select>
             </div>
 
-            <div className="text-sm text-gray-600 flex items-center">
-              Total: {filteredEmployees.length} employees
+            <div className="flex items-center justify-end">
+              <button
+                onClick={() => {
+                  setSearchTerm("");
+                  setFilterRole("");
+                  setFilterStatus("");
+                }}
+                className="text-sm text-gray-600 hover:text-gray-800"
+              >
+                Clear filters
+              </button>
             </div>
           </div>
         </div>
@@ -521,26 +608,16 @@ const EmployeeList = () => {
         <div className="p-6">
           {filteredEmployees.length === 0 ? (
             <div className="text-center py-12">
-              <svg
-                className="mx-auto h-12 w-12 text-gray-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-                />
-              </svg>
-              <h3 className="mt-2 text-sm font-medium text-gray-900">
-                No employees found
+              <Users className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                {employees.length === 0
+                  ? "No employees added"
+                  : "No employees found"}
               </h3>
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="text-gray-500 mb-6">
                 {searchTerm || filterRole || filterStatus
-                  ? "Try adjusting your filters"
-                  : "Get started by adding a new employee"}
+                  ? "Try adjusting your filters to see more results"
+                  : "Add employees to start managing your team"}
               </p>
             </div>
           ) : (
@@ -548,88 +625,93 @@ const EmployeeList = () => {
               {filteredEmployees.map((employee) => (
                 <div
                   key={employee.id}
-                  className="bg-gray-50 rounded-lg p-4 hover:shadow-md transition-shadow"
+                  className="bg-gray-50 rounded-lg p-6 hover:shadow-md transition-all duration-200 border border-gray-100"
                 >
-                  <div className="flex items-start justify-between mb-3">
+                  {/* Employee Header */}
+                  <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center space-x-3">
                       {employee.images?.employeePhoto ? (
                         <img
                           src={employee.images.employeePhoto}
                           alt={employee.employeeName}
-                          className="w-12 h-12 rounded-full object-cover"
+                          className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm"
                         />
                       ) : (
-                        <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center">
-                          <span className="text-gray-600 font-medium">
-                            {employee.employeeName?.charAt(0)}
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
+                          <span className="text-white font-semibold text-lg">
+                            {employee.employeeName?.charAt(0)?.toUpperCase() ||
+                              "?"}
                           </span>
                         </div>
                       )}
                       <div>
-                        <h3 className="font-medium text-gray-900">
+                        <h3 className="font-semibold text-gray-900 mb-1">
                           {employee.employeeName}
                         </h3>
-                        <p className="text-sm text-gray-500 capitalize">
-                          {employee.role?.replace("_", " ")}
-                        </p>
+                        <RoleBadge role={employee.role} />
                       </div>
                     </div>
                     <StatusBadge status={employee.status} />
                   </div>
 
-                  <div className="space-y-1 text-sm text-gray-600 mb-4">
-                    <p>
-                      <span className="font-medium">NIC:</span>{" "}
-                      {employee.nicNumber}
-                    </p>
-                    <p>
-                      <span className="font-medium">Mobile:</span>{" "}
-                      {employee.mobile1}
-                    </p>
+                  {/* Employee Details */}
+                  <div className="space-y-2 text-sm text-gray-600 mb-4">
+                    <div className="flex items-center space-x-2">
+                      <IdCard className="w-4 h-4" />
+                      <span className="font-medium">NIC:</span>
+                      <span>{employee.nicNumber}</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Phone className="w-4 h-4" />
+                      <span className="font-medium">Mobile:</span>
+                      <span>{employee.mobile1}</span>
+                    </div>
+                    {employee.address && (
+                      <div className="flex items-start space-x-2">
+                        <MapPin className="w-4 h-4 mt-0.5" />
+                        <span className="font-medium">Address:</span>
+                        <span className="line-clamp-2">{employee.address}</span>
+                      </div>
+                    )}
                     {employee.status === "inactive" && employee.leftDate && (
-                      <p>
-                        <span className="font-medium">Left Date:</span>{" "}
-                        {new Date(employee.leftDate).toLocaleDateString()}
-                      </p>
+                      <div className="flex items-center space-x-2 text-red-600">
+                        <Calendar className="w-4 h-4" />
+                        <span className="font-medium">Left:</span>
+                        <span>
+                          {new Date(employee.leftDate).toLocaleDateString()}
+                        </span>
+                      </div>
                     )}
                   </div>
 
+                  {/* Action Buttons */}
                   <div className="flex space-x-2">
                     <button
                       onClick={() => openModal("view", employee)}
-                      className="flex-1 px-3 py-2 bg-blue-100 text-blue-700 text-sm rounded hover:bg-blue-200 transition-colors"
+                      className="flex-1 inline-flex items-center justify-center px-3 py-2 bg-blue-100 text-blue-700 text-sm rounded-lg hover:bg-blue-200 transition-colors"
                     >
+                      <Eye className="w-4 h-4 mr-1" />
                       View
                     </button>
                     <button
                       onClick={() => openModal("edit", employee)}
-                      className="flex-1 px-3 py-2 bg-green-100 text-green-700 text-sm rounded hover:bg-green-200 transition-colors"
+                      className="flex-1 inline-flex items-center justify-center px-3 py-2 bg-green-100 text-green-700 text-sm rounded-lg hover:bg-green-200 transition-colors"
                     >
+                      <Edit className="w-4 h-4 mr-1" />
                       Edit
                     </button>
                     <button
                       onClick={() => openModal("status", employee)}
-                      className="flex-1 px-3 py-2 bg-yellow-100 text-yellow-700 text-sm rounded hover:bg-yellow-200 transition-colors"
+                      className="flex-1 inline-flex items-center justify-center px-3 py-2 bg-yellow-100 text-yellow-700 text-sm rounded-lg hover:bg-yellow-200 transition-colors"
                     >
+                      <UserCheck className="w-4 h-4 mr-1" />
                       Status
                     </button>
                     <button
                       onClick={() => handleDelete(employee.id)}
-                      className="px-3 py-2 bg-red-100 text-red-700 text-sm rounded hover:bg-red-200 transition-colors"
+                      className="px-3 py-2 bg-red-100 text-red-700 text-sm rounded-lg hover:bg-red-200 transition-colors"
                     >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                        />
-                      </svg>
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -659,7 +741,7 @@ const EmployeeList = () => {
               </button>
               <button
                 onClick={capturePhoto}
-                className="px-4 py-2 bg-primary text-white rounded-md hover:opacity-90"
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
               >
                 Capture
               </button>
@@ -673,30 +755,18 @@ const EmployeeList = () => {
       {/* Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40 p-4">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-90vh overflow-y-auto">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200 flex justify-between items-center">
               <h2 className="text-xl font-semibold">
                 {modalType === "view" && "Employee Details"}
                 {modalType === "edit" && "Edit Employee"}
-                {modalType === "status" && "Update Status"}
+                {modalType === "status" && "Update Employee Status"}
               </h2>
               <button
                 onClick={closeModal}
                 className="text-gray-400 hover:text-gray-600"
               >
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
+                <X className="w-6 h-6" />
               </button>
             </div>
 
@@ -726,9 +796,9 @@ const EmployeeList = () => {
                         <label className="block text-sm font-medium text-gray-700">
                           Role
                         </label>
-                        <p className="mt-1 text-sm text-gray-900 capitalize">
-                          {selectedEmployee.role?.replace("_", " ")}
-                        </p>
+                        <div className="mt-1">
+                          <RoleBadge role={selectedEmployee.role} />
+                        </div>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700">
@@ -790,7 +860,7 @@ const EmployeeList = () => {
                             <img
                               src={selectedEmployee.images.employeePhoto}
                               alt="Employee"
-                              className="w-full h-32 object-cover rounded-lg"
+                              className="w-full h-32 object-cover rounded-lg border"
                             />
                           </div>
                         )}
@@ -802,7 +872,7 @@ const EmployeeList = () => {
                             <img
                               src={selectedEmployee.images.nicFront}
                               alt="NIC Front"
-                              className="w-full h-32 object-cover rounded-lg"
+                              className="w-full h-32 object-cover rounded-lg border"
                             />
                           </div>
                         )}
@@ -814,7 +884,7 @@ const EmployeeList = () => {
                             <img
                               src={selectedEmployee.images.nicBack}
                               alt="NIC Back"
-                              className="w-full h-32 object-cover rounded-lg"
+                              className="w-full h-32 object-cover rounded-lg border"
                             />
                           </div>
                         )}
@@ -826,7 +896,7 @@ const EmployeeList = () => {
                             <img
                               src={selectedEmployee.images.licenseFront}
                               alt="License Front"
-                              className="w-full h-32 object-cover rounded-lg"
+                              className="w-full h-32 object-cover rounded-lg border"
                             />
                           </div>
                         )}
@@ -838,7 +908,7 @@ const EmployeeList = () => {
                             <img
                               src={selectedEmployee.images.licenseBack}
                               alt="License Back"
-                              className="w-full h-32 object-cover rounded-lg"
+                              className="w-full h-32 object-cover rounded-lg border"
                             />
                           </div>
                         )}
@@ -865,7 +935,7 @@ const EmployeeList = () => {
                             employeeName: e.target.value,
                           }))
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                       />
                     </div>
 
@@ -882,7 +952,7 @@ const EmployeeList = () => {
                             nicNumber: e.target.value,
                           }))
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                       />
                     </div>
 
@@ -898,7 +968,7 @@ const EmployeeList = () => {
                             role: e.target.value,
                           }))
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                       >
                         <option value="">Select a role</option>
                         {roles.map((role) => (
@@ -922,7 +992,7 @@ const EmployeeList = () => {
                             mobile1: e.target.value,
                           }))
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                       />
                     </div>
 
@@ -939,7 +1009,7 @@ const EmployeeList = () => {
                             mobile2: e.target.value,
                           }))
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                       />
                     </div>
 
@@ -956,7 +1026,7 @@ const EmployeeList = () => {
                           }))
                         }
                         rows={3}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none resize-none"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
                       />
                     </div>
                   </div>
@@ -1014,15 +1084,15 @@ const EmployeeList = () => {
                     <button
                       onClick={handleSaveChanges}
                       disabled={saveLoading}
-                      className={`px-6 py-2 bg-primary text-white rounded-lg transition-colors ${
+                      className={`px-6 py-2 bg-blue-600 text-white rounded-lg transition-colors ${
                         saveLoading
                           ? "opacity-70 cursor-not-allowed"
-                          : "hover:opacity-90"
+                          : "hover:bg-blue-700"
                       }`}
                     >
                       {saveLoading ? (
                         <div className="flex items-center">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          <Loader2 className="w-4 h-4 animate-spin mr-2" />
                           Saving...
                         </div>
                       ) : (
@@ -1049,7 +1119,7 @@ const EmployeeList = () => {
                             status: e.target.value,
                           }))
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                       >
                         <option value="active">Active</option>
                         <option value="inactive">Inactive</option>
@@ -1070,7 +1140,7 @@ const EmployeeList = () => {
                               leftDate: e.target.value,
                             }))
                           }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                           max={new Date().toISOString().split("T")[0]}
                         />
                       </div>
@@ -1078,35 +1148,103 @@ const EmployeeList = () => {
                   </div>
 
                   <div className="bg-gray-50 rounded-lg p-4">
-                    <h4 className="font-medium text-gray-800 mb-2">
+                    <h4 className="font-medium text-gray-800 mb-3">
                       Current Employee Information
                     </h4>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <span className="font-medium">Name:</span>{" "}
-                        {selectedEmployee.employeeName}
-                      </div>
-                      <div>
-                        <span className="font-medium">Role:</span>{" "}
-                        {selectedEmployee.role?.replace("_", " ")}
-                      </div>
-                      <div>
-                        <span className="font-medium">Current Status:</span>
-                        <StatusBadge status={selectedEmployee.status} />
-                      </div>
-                      {selectedEmployee.status === "inactive" &&
-                        selectedEmployee.leftDate && (
-                          <div>
-                            <span className="font-medium">
-                              Previous Left Date:
-                            </span>{" "}
-                            {new Date(
-                              selectedEmployee.leftDate
-                            ).toLocaleDateString()}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
+                          <span className="text-white font-semibold text-sm">
+                            {selectedEmployee.employeeName
+                              ?.charAt(0)
+                              ?.toUpperCase()}
+                          </span>
+                        </div>
+                        <div>
+                          <div className="font-medium text-gray-900">
+                            {selectedEmployee.employeeName}
                           </div>
-                        )}
+                          <div className="text-gray-600">
+                            <RoleBadge role={selectedEmployee.role} />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <div>
+                          <span className="font-medium text-gray-700">
+                            Current Status:
+                          </span>
+                          <div className="mt-1">
+                            <StatusBadge status={selectedEmployee.status} />
+                          </div>
+                        </div>
+                        {selectedEmployee.status === "inactive" &&
+                          selectedEmployee.leftDate && (
+                            <div>
+                              <span className="font-medium text-gray-700">
+                                Previous Left Date:
+                              </span>{" "}
+                              <span className="text-gray-900">
+                                {new Date(
+                                  selectedEmployee.leftDate
+                                ).toLocaleDateString()}
+                              </span>
+                            </div>
+                          )}
+                      </div>
                     </div>
                   </div>
+
+                  {/* Status Update Warning */}
+                  {statusData.status !== selectedEmployee.status && (
+                    <div
+                      className={`rounded-lg p-4 ${
+                        statusData.status === "active"
+                          ? "bg-green-50 border border-green-200"
+                          : "bg-red-50 border border-red-200"
+                      }`}
+                    >
+                      <div className="flex items-start">
+                        <div
+                          className={`flex-shrink-0 ${
+                            statusData.status === "active"
+                              ? "text-green-600"
+                              : "text-red-600"
+                          }`}
+                        >
+                          {statusData.status === "active" ? (
+                            <UserCheck className="w-5 h-5" />
+                          ) : (
+                            <X className="w-5 h-5" />
+                          )}
+                        </div>
+                        <div className="ml-3">
+                          <h3
+                            className={`text-sm font-medium ${
+                              statusData.status === "active"
+                                ? "text-green-800"
+                                : "text-red-800"
+                            }`}
+                          >
+                            {statusData.status === "active"
+                              ? "Activating Employee"
+                              : "Deactivating Employee"}
+                          </h3>
+                          <p
+                            className={`mt-1 text-sm ${
+                              statusData.status === "active"
+                                ? "text-green-700"
+                                : "text-red-700"
+                            }`}
+                          >
+                            {statusData.status === "active"
+                              ? "This employee will be marked as active and able to work."
+                              : "This employee will be marked as inactive and will not appear in active employee lists."}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Status Actions */}
                   <div className="border-t border-gray-200 pt-6 flex justify-end space-x-3">
@@ -1127,7 +1265,7 @@ const EmployeeList = () => {
                     >
                       {saveLoading ? (
                         <div className="flex items-center">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          <Loader2 className="w-4 h-4 animate-spin mr-2" />
                           Updating...
                         </div>
                       ) : (

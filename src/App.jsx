@@ -9,19 +9,23 @@ import {
 import Login from "./pages/auth/login";
 import Signup from "./pages/auth/signup";
 import Home from "./pages/home/home";
+
 import ErrorBoundary from "./components/ErrorBoundary";
 import { Settings } from "./pages/home/pages/Settings";
 import { Stock } from "./pages/home/pages/Stock";
 import { Customers } from "./pages/home/pages/Customers";
 import { ContactUs } from "./pages/home/pages/ContactUs";
 import { Reports } from "./pages/home/pages/Reports";
-// import { Dashboard } from "./pages/home/pages/Dashboard";
+
 import { AuthProvider } from "./contexts/AuthContext";
+import { BusinessProvider } from "./contexts/BusinessContext";
 import PrivateRoute from "./components/auth/PrivateRoute";
-import { Dashboard } from "./pages/home/pages/Dashboard";
 import { Logistics } from "./pages/home/pages/Logistics";
 import Employees from "./pages/home/pages/Employees";
 import { SubStockPage } from "./pages/home/pages/SubStockPage";
+import BusinessSelector from "./components/BusinessSelector";
+import CashflowPage from "./pages/home/pages/CashflowPage";
+import Liabilities from "./pages/liabilities/Liabilities";
 
 const App = () => {
   return (
@@ -34,16 +38,42 @@ const App = () => {
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
 
-            {/* Protected Routes */}
+            {/* Protected Routes - Home (Business Selection) */}
             <Route
               path="/home"
               element={
                 <PrivateRoute>
-                  <Home />
+                  <BusinessProvider>
+                    <Home />
+                  </BusinessProvider>
                 </PrivateRoute>
               }
             >
-              <Route index element={<Dashboard />} />
+              {/* Legacy routes for backward compatibility */}
+              <Route path="inventory" element={<Stock />} />
+              <Route path="substock" element={<SubStockPage />} />
+              <Route path="customers" element={<Customers />} />
+              <Route path="employees" element={<Employees />} />
+              <Route path="logistics" element={<Logistics />} />
+              <Route path="liabilities" element={<Liabilities />} />
+              <Route path="cashflows" element={<CashflowPage />} />
+              <Route path="reports" element={<Reports />} />
+              <Route path="settings" element={<Settings />} />
+              <Route path="help" element={<ContactUs />} />
+            </Route>
+
+            {/* Protected Routes - Business Operations */}
+            <Route
+              path="/business/:businessId"
+              element={
+                <PrivateRoute>
+                  <BusinessProvider>
+                    <BusinessSelector />
+                  </BusinessProvider>
+                </PrivateRoute>
+              }
+            >
+              {/* Business-specific routes */}
               <Route path="inventory" element={<Stock />} />
               <Route path="substock" element={<SubStockPage />} />
               <Route path="customers" element={<Customers />} />
@@ -54,39 +84,27 @@ const App = () => {
               <Route path="help" element={<ContactUs />} />
             </Route>
 
-            {/* Redirect paths for navbar links */}
+            {/* Redirect legacy paths to home for business selection */}
             <Route
               path="/inventory"
-              element={<Navigate to="/home/inventory" replace />}
+              element={<Navigate to="/home" replace />}
             />
-            <Route
-              path="/substock"
-              element={<Navigate to="/home/substock" replace />}
-            />
+            <Route path="/substock" element={<Navigate to="/home" replace />} />
             <Route
               path="/customers"
-              element={<Navigate to="/home/customers" replace />}
+              element={<Navigate to="/home" replace />}
             />
             <Route
               path="/employees"
-              element={<Navigate to="/home/employees" replace />}
+              element={<Navigate to="/home" replace />}
             />
             <Route
               path="/logistics"
-              element={<Navigate to="/home/logistics" replace />}
+              element={<Navigate to="/home" replace />}
             />
-            <Route
-              path="/reports"
-              element={<Navigate to="/home/reports" replace />}
-            />
-            <Route
-              path="/settings"
-              element={<Navigate to="/home/settings" replace />}
-            />
-            <Route
-              path="/help"
-              element={<Navigate to="/home/help" replace />}
-            />
+            <Route path="/reports" element={<Navigate to="/home" replace />} />
+            <Route path="/settings" element={<Navigate to="/home" replace />} />
+            <Route path="/help" element={<Navigate to="/home" replace />} />
 
             {/* Fallback for unknown routes */}
             <Route path="*" element={<Navigate to="/home" replace />} />

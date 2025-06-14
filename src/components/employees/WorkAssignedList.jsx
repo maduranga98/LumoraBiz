@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { db, auth } from "../../services/firebase";
+import { db } from "../../services/firebase";
 import {
   collection,
   query,
@@ -10,9 +10,29 @@ import {
   doc,
   deleteDoc,
 } from "firebase/firestore";
+import { useAuth } from "../../contexts/AuthContext";
+import { useBusiness } from "../../contexts/BusinessContext";
 import { toast } from "react-hot-toast";
+import {
+  Briefcase,
+  Clock,
+  User,
+  Calendar,
+  FileText,
+  AlertCircle,
+  CheckCircle,
+  Play,
+  Square,
+  Trash2,
+  RefreshCw,
+  Search,
+  Filter,
+} from "lucide-react";
 
 export const WorkAssignmentsList = () => {
+  const { currentUser } = useAuth();
+  const { currentBusiness } = useBusiness();
+
   const [workAssignments, setWorkAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(null);
@@ -23,27 +43,36 @@ export const WorkAssignmentsList = () => {
 
   // Fetch work assignments
   useEffect(() => {
-    fetchWorkAssignments();
-  }, []);
+    if (currentUser && currentBusiness?.id) {
+      fetchWorkAssignments();
+    } else {
+      setLoading(false);
+    }
+  }, [currentUser, currentBusiness]);
 
   const fetchWorkAssignments = async () => {
+    setLoading(true);
     try {
-      const currentUser = auth.currentUser;
-      if (!currentUser) {
+      if (!currentUser?.uid) {
         toast.error("User not authenticated");
         return;
       }
 
-      const currentBusinessId = localStorage.getItem("currentBusinessId");
-      if (!currentBusinessId) {
+      if (!currentBusiness?.id) {
         toast.error("No business selected");
         return;
       }
 
+      // Updated path: /owners/{ownerId}/businesses/{businessId}/temporaryWorks
+      const ownerDocRef = doc(db, "owners", currentUser.uid);
+      const businessDocRef = doc(ownerDocRef, "businesses", currentBusiness.id);
+      const temporaryWorksCollectionRef = collection(
+        businessDocRef,
+        "temporaryWorks"
+      );
+
       const assignmentsQuery = query(
-        collection(db, "workAssignments"),
-        where("ownerId", "==", currentUser.uid),
-        where("businessId", "==", currentBusinessId),
+        temporaryWorksCollectionRef,
         orderBy("createdAt", "desc")
       );
 
@@ -70,24 +99,34 @@ export const WorkAssignmentsList = () => {
   const updateAssignmentStatus = async (assignmentId, newStatus) => {
     setUpdating(assignmentId);
     try {
-      const assignmentRef = doc(db, "workAssignments", assignmentId);
-      await updateDoc(assignmentRef, {
+      const ownerDocRef = doc(db, "owners", currentUser.uid);
+      const businessDocRef = doc(ownerDocRef, "businesses", currentBusiness.id);
+      const assignmentRef = doc(businessDocRef, "temporaryWorks", assignmentId);
+
+      const updateData = {
         status: newStatus,
         updatedAt: new Date(),
-        ...(newStatus === "completed" && { completedAt: new Date() }),
-        ...(newStatus === "in-progress" && { startedAt: new Date() }),
-      });
+      };
+
+      if (newStatus === "completed") {
+        updateData.completedAt = new Date();
+      }
+      if (newStatus === "in_progress") {
+        updateData.startedAt = new Date();
+      }
+
+      await updateDoc(assignmentRef, updateData);
 
       // Update local state
       setWorkAssignments((prev) =>
         prev.map((assignment) =>
           assignment.id === assignmentId
-            ? { ...assignment, status: newStatus, updatedAt: new Date() }
+            ? { ...assignment, ...updateData }
             : assignment
         )
       );
 
-      toast.success(`Work marked as ${newStatus.replace("-", " ")}`);
+      toast.success(`Work marked as ${newStatus.replace("_", " ")}`);
     } catch (error) {
       console.error("Error updating assignment:", error);
       toast.error("Failed to update assignment status");
@@ -99,7 +138,11 @@ export const WorkAssignmentsList = () => {
   // Delete assignment
   const deleteAssignment = async (assignmentId) => {
     try {
-      await deleteDoc(doc(db, "workAssignments", assignmentId));
+      const ownerDocRef = doc(db, "owners", currentUser.uid);
+      const businessDocRef = doc(ownerDocRef, "businesses", currentBusiness.id);
+      const assignmentRef = doc(businessDocRef, "temporaryWorks", assignmentId);
+
+      await deleteDoc(assignmentRef);
 
       setWorkAssignments((prev) =>
         prev.filter((assignment) => assignment.id !== assignmentId)
@@ -120,29 +163,50 @@ export const WorkAssignmentsList = () => {
       filterStatus === "all" || assignment.status === filterStatus;
     const matchesSearch =
       assignment.employeeName
-        .toLowerCase()
+        ?.toLowerCase()
         .includes(searchTerm.toLowerCase()) ||
-      assignment.assignedWork
-        .toLowerCase()
+      assignment.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      assignment.description
+        ?.toLowerCase()
         .includes(searchTerm.toLowerCase()) ||
-      assignment.employeeId.toLowerCase().includes(searchTerm.toLowerCase());
+      assignment.employeeId?.toLowerCase().includes(searchTerm.toLowerCase());
 
     return matchesStatus && matchesSearch;
   });
 
-  // Get status color
-  const getStatusColor = (status) => {
+  // Get status color and icon
+  const getStatusDetails = (status) => {
     switch (status) {
       case "assigned":
-        return "bg-blue-100 text-blue-800 border-blue-200";
-      case "in-progress":
-        return "bg-yellow-100 text-yellow-800 border-yellow-200";
+        return {
+          color: "bg-blue-100 text-blue-800 border-blue-200",
+          icon: Clock,
+          label: "Assigned",
+        };
+      case "in_progress":
+        return {
+          color: "bg-yellow-100 text-yellow-800 border-yellow-200",
+          icon: Play,
+          label: "In Progress",
+        };
       case "completed":
-        return "bg-green-100 text-green-800 border-green-200";
+        return {
+          color: "bg-green-100 text-green-800 border-green-200",
+          icon: CheckCircle,
+          label: "Completed",
+        };
       case "cancelled":
-        return "bg-red-100 text-red-800 border-red-200";
+        return {
+          color: "bg-red-100 text-red-800 border-red-200",
+          icon: Square,
+          label: "Cancelled",
+        };
       default:
-        return "bg-gray-100 text-gray-800 border-gray-200";
+        return {
+          color: "bg-gray-100 text-gray-800 border-gray-200",
+          icon: AlertCircle,
+          label: "Unknown",
+        };
     }
   };
 
@@ -165,15 +229,32 @@ export const WorkAssignmentsList = () => {
     return acc;
   }, {});
 
+  // No business selected
+  if (!currentBusiness) {
+    return (
+      <div className="max-w-6xl mx-auto p-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12">
+          <div className="text-center">
+            <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              No Business Selected
+            </h3>
+            <p className="text-gray-600">
+              Please select a business to view work assignments.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="max-w-6xl mx-auto p-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
           <div className="flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-            <span className="ml-2 text-gray-600">
-              Loading work assignments...
-            </span>
+            <RefreshCw className="animate-spin h-8 w-8 text-blue-500 mr-2" />
+            <span className="text-gray-600">Loading work assignments...</span>
           </div>
         </div>
       </div>
@@ -185,30 +266,25 @@ export const WorkAssignmentsList = () => {
       {/* Header */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              Work Assignments
-            </h1>
-            <p className="text-gray-600 mt-1">Manage and track assigned work</p>
+          <div className="flex items-center">
+            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-4">
+              <Briefcase className="w-6 h-6 text-blue-600" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                Work Assignments
+              </h1>
+              <p className="text-gray-600 mt-1">
+                {currentBusiness.businessName}
+              </p>
+            </div>
           </div>
 
           <button
             onClick={fetchWorkAssignments}
             className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
-            <svg
-              className="w-4 h-4 mr-2"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-              />
-            </svg>
+            <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </button>
         </div>
@@ -221,21 +297,25 @@ export const WorkAssignmentsList = () => {
             label: "Total",
             count: workAssignments.length,
             color: "bg-gray-100 text-gray-800",
+            icon: Briefcase,
           },
           {
             label: "Assigned",
             count: statusCounts.assigned || 0,
             color: "bg-blue-100 text-blue-800",
+            icon: Clock,
           },
           {
             label: "In Progress",
-            count: statusCounts["in-progress"] || 0,
+            count: statusCounts.in_progress || 0,
             color: "bg-yellow-100 text-yellow-800",
+            icon: Play,
           },
           {
             label: "Completed",
             count: statusCounts.completed || 0,
             color: "bg-green-100 text-green-800",
+            icon: CheckCircle,
           },
         ].map((stat) => (
           <div
@@ -247,10 +327,13 @@ export const WorkAssignmentsList = () => {
                 <p className="text-sm text-gray-600">{stat.label}</p>
                 <p className="text-2xl font-bold text-gray-900">{stat.count}</p>
               </div>
-              <div
-                className={`px-3 py-1 rounded-full text-sm font-medium ${stat.color}`}
-              >
-                {stat.count}
+              <div className="flex items-center">
+                <stat.icon className="w-5 h-5 text-gray-400 mr-2" />
+                <div
+                  className={`px-3 py-1 rounded-full text-sm font-medium ${stat.color}`}
+                >
+                  {stat.count}
+                </div>
               </div>
             </div>
           </div>
@@ -263,22 +346,10 @@ export const WorkAssignmentsList = () => {
           {/* Search */}
           <div className="flex-1">
             <div className="relative">
-              <svg
-                className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 type="text"
-                placeholder="Search by employee name, work description, or ID..."
+                placeholder="Search by employee name, work title, or description..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -288,17 +359,20 @@ export const WorkAssignmentsList = () => {
 
           {/* Status Filter */}
           <div className="sm:w-48">
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="all">All Status</option>
-              <option value="assigned">Assigned</option>
-              <option value="in-progress">In Progress</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
+            <div className="relative">
+              <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none"
+              >
+                <option value="all">All Status</option>
+                <option value="assigned">Assigned</option>
+                <option value="in_progress">In Progress</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
           </div>
         </div>
       </div>
@@ -308,19 +382,7 @@ export const WorkAssignmentsList = () => {
         {filteredAssignments.length === 0 ? (
           <div className="p-12 text-center">
             <div className="text-gray-400 mb-4">
-              <svg
-                className="w-16 h-16 mx-auto"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
-                />
-              </svg>
+              <Briefcase className="w-16 h-16 mx-auto" />
             </div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">
               No work assignments found
@@ -333,113 +395,184 @@ export const WorkAssignmentsList = () => {
           </div>
         ) : (
           <div className="divide-y divide-gray-200">
-            {filteredAssignments.map((assignment) => (
-              <div
-                key={assignment.id}
-                className="p-6 hover:bg-gray-50 transition-colors"
-              >
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                  {/* Assignment Info */}
-                  <div className="flex-1">
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900">
-                          {assignment.employeeName}
-                        </h3>
-                        <p className="text-sm text-gray-600">
-                          ID: {assignment.employeeId}
+            {filteredAssignments.map((assignment) => {
+              const statusDetails = getStatusDetails(assignment.status);
+              const StatusIcon = statusDetails.icon;
+
+              return (
+                <div
+                  key={assignment.id}
+                  className="p-6 hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                    {/* Assignment Info */}
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center">
+                          <User className="w-5 h-5 text-gray-400 mr-2" />
+                          <div>
+                            <h3 className="text-lg font-semibold text-gray-900">
+                              {assignment.employeeName || "Unknown Employee"}
+                            </h3>
+                            {assignment.employeeRole && (
+                              <p className="text-sm text-blue-600 capitalize">
+                                {assignment.employeeRole.replace("_", " ")}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <span
+                          className={`flex items-center px-3 py-1 rounded-full text-xs font-medium border ${statusDetails.color}`}
+                        >
+                          <StatusIcon className="w-3 h-3 mr-1" />
+                          {statusDetails.label}
+                        </span>
+                      </div>
+
+                      {/* Work Title */}
+                      <div className="mb-3">
+                        <div className="flex items-center mb-1">
+                          <Briefcase className="w-4 h-4 text-gray-400 mr-2" />
+                          <h4 className="text-sm font-medium text-gray-700">
+                            Work Title:
+                          </h4>
+                        </div>
+                        <p className="text-gray-900 font-medium ml-6">
+                          {assignment.title || "No title provided"}
                         </p>
                       </div>
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(
-                          assignment.status
-                        )}`}
-                      >
-                        {assignment.status.replace("-", " ").toUpperCase()}
-                      </span>
-                    </div>
 
-                    <div className="mb-3">
-                      <h4 className="text-sm font-medium text-gray-700 mb-1">
-                        Assigned Work:
-                      </h4>
-                      <p className="text-gray-900 leading-relaxed">
-                        {assignment.assignedWork}
-                      </p>
-                    </div>
+                      {/* Work Description */}
+                      <div className="mb-3">
+                        <div className="flex items-center mb-1">
+                          <FileText className="w-4 h-4 text-gray-400 mr-2" />
+                          <h4 className="text-sm font-medium text-gray-700">
+                            Description:
+                          </h4>
+                        </div>
+                        <p className="text-gray-900 leading-relaxed ml-6">
+                          {assignment.description || "No description provided"}
+                        </p>
+                      </div>
 
-                    <div className="flex flex-wrap gap-4 text-sm text-gray-500">
-                      <span>Assigned: {formatDate(assignment.assignedAt)}</span>
-                      {assignment.startedAt && (
-                        <span>Started: {formatDate(assignment.startedAt)}</span>
+                      {/* Instructions */}
+                      {assignment.instructions && (
+                        <div className="mb-3">
+                          <div className="flex items-center mb-1">
+                            <AlertCircle className="w-4 h-4 text-gray-400 mr-2" />
+                            <h4 className="text-sm font-medium text-gray-700">
+                              Instructions:
+                            </h4>
+                          </div>
+                          <p className="text-gray-700 leading-relaxed ml-6 italic">
+                            {assignment.instructions}
+                          </p>
+                        </div>
                       )}
-                      {assignment.completedAt && (
-                        <span>
-                          Completed: {formatDate(assignment.completedAt)}
-                        </span>
-                      )}
-                      <span>By: {assignment.assignedByName}</span>
+
+                      {/* Timestamps */}
+                      <div className="flex flex-wrap gap-4 text-sm text-gray-500">
+                        <div className="flex items-center">
+                          <Calendar className="w-4 h-4 mr-1" />
+                          <span>
+                            Assigned: {formatDate(assignment.assignedAt)}
+                          </span>
+                        </div>
+                        {assignment.startedAt && (
+                          <div className="flex items-center">
+                            <Play className="w-4 h-4 mr-1" />
+                            <span>
+                              Started: {formatDate(assignment.startedAt)}
+                            </span>
+                          </div>
+                        )}
+                        {assignment.completedAt && (
+                          <div className="flex items-center">
+                            <CheckCircle className="w-4 h-4 mr-1" />
+                            <span>
+                              Completed: {formatDate(assignment.completedAt)}
+                            </span>
+                          </div>
+                        )}
+                        <span>By: {assignment.assignedByName}</span>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Actions */}
-                  <div className="flex flex-col sm:flex-row gap-2 lg:ml-6">
-                    {assignment.status === "assigned" && (
-                      <button
-                        onClick={() =>
-                          updateAssignmentStatus(assignment.id, "in-progress")
-                        }
-                        disabled={updating === assignment.id}
-                        className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:opacity-50 transition-colors text-sm"
-                      >
-                        {updating === assignment.id
-                          ? "Updating..."
-                          : "Start Work"}
-                      </button>
-                    )}
-
-                    {assignment.status === "in-progress" && (
-                      <button
-                        onClick={() =>
-                          updateAssignmentStatus(assignment.id, "completed")
-                        }
-                        disabled={updating === assignment.id}
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors text-sm"
-                      >
-                        {updating === assignment.id
-                          ? "Updating..."
-                          : "Complete"}
-                      </button>
-                    )}
-
-                    {assignment.status !== "completed" &&
-                      assignment.status !== "cancelled" && (
+                    {/* Actions */}
+                    <div className="flex flex-col sm:flex-row gap-2 lg:ml-6">
+                      {assignment.status === "assigned" && (
                         <button
                           onClick={() =>
-                            updateAssignmentStatus(assignment.id, "cancelled")
+                            updateAssignmentStatus(assignment.id, "in_progress")
                           }
                           disabled={updating === assignment.id}
-                          className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors text-sm"
+                          className="flex items-center justify-center px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:opacity-50 transition-colors text-sm"
                         >
-                          {updating === assignment.id
-                            ? "Updating..."
-                            : "Cancel"}
+                          {updating === assignment.id ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <>
+                              <Play className="w-4 h-4 mr-1" />
+                              Start Work
+                            </>
+                          )}
                         </button>
                       )}
 
-                    <button
-                      onClick={() => {
-                        setSelectedAssignment(assignment);
-                        setShowDeleteModal(true);
-                      }}
-                      className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm"
-                    >
-                      Delete
-                    </button>
+                      {assignment.status === "in_progress" && (
+                        <button
+                          onClick={() =>
+                            updateAssignmentStatus(assignment.id, "completed")
+                          }
+                          disabled={updating === assignment.id}
+                          className="flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors text-sm"
+                        >
+                          {updating === assignment.id ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <>
+                              <CheckCircle className="w-4 h-4 mr-1" />
+                              Complete
+                            </>
+                          )}
+                        </button>
+                      )}
+
+                      {assignment.status !== "completed" &&
+                        assignment.status !== "cancelled" && (
+                          <button
+                            onClick={() =>
+                              updateAssignmentStatus(assignment.id, "cancelled")
+                            }
+                            disabled={updating === assignment.id}
+                            className="flex items-center justify-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors text-sm"
+                          >
+                            {updating === assignment.id ? (
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <>
+                                <Square className="w-4 h-4 mr-1" />
+                                Cancel
+                              </>
+                            )}
+                          </button>
+                        )}
+
+                      <button
+                        onClick={() => {
+                          setSelectedAssignment(assignment);
+                          setShowDeleteModal(true);
+                        }}
+                        className="flex items-center justify-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm"
+                      >
+                        <Trash2 className="w-4 h-4 mr-1" />
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -450,19 +583,7 @@ export const WorkAssignmentsList = () => {
           <div className="bg-white rounded-lg max-w-md w-full p-6">
             <div className="flex items-center mb-4">
               <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                <svg
-                  className="w-6 h-6 text-red-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                  />
-                </svg>
+                <AlertCircle className="w-6 h-6 text-red-600" />
               </div>
               <h3 className="ml-4 text-lg font-medium text-gray-900">
                 Delete Assignment
@@ -470,7 +591,8 @@ export const WorkAssignmentsList = () => {
             </div>
 
             <p className="text-gray-600 mb-6">
-              Are you sure you want to delete the work assignment for{" "}
+              Are you sure you want to delete the work assignment{" "}
+              <strong>"{selectedAssignment.title}"</strong> for{" "}
               <strong>{selectedAssignment.employeeName}</strong>? This action
               cannot be undone.
             </p>

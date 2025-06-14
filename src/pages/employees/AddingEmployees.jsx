@@ -1,10 +1,13 @@
 import React, { useState, useRef } from "react";
 import { db, auth, storage } from "../../services/firebase";
-import { collection, addDoc } from "firebase/firestore";
+import { doc, setDoc, collection } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { toast } from "react-hot-toast";
+import { useBusiness } from "../../contexts/BusinessContext";
 
 const AddingEmployees = () => {
+  const { currentBusiness } = useBusiness();
+
   // Form state
   const [formData, setFormData] = useState({
     employeeName: "",
@@ -13,6 +16,8 @@ const AddingEmployees = () => {
     mobile2: "",
     nicNumber: "",
     role: "",
+    salaryType: "",
+    payRate: "",
   });
 
   // Image states
@@ -60,6 +65,12 @@ const AddingEmployees = () => {
     { value: "operator", label: "Operator" },
   ];
 
+  // Salary type options
+  const salaryTypes = [
+    { value: "daily", label: "Daily" },
+    { value: "monthly", label: "Monthly" },
+  ];
+
   // Handle input changes
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -69,11 +80,22 @@ const AddingEmployees = () => {
     }));
   };
 
-  // Start camera for photo capture
+  // Handle pay rate input with number validation
+  const handlePayRateChange = (e) => {
+    const { value } = e.target;
+    // Allow only numbers and decimal points
+    if (value === "" || /^\d*\.?\d*$/.test(value)) {
+      setFormData((prev) => ({
+        ...prev,
+        payRate: value,
+      }));
+    }
+  };
 
+  // Start camera for photo capture
   const startCamera = async (imageType) => {
     try {
-      setVideoReady(false); // Reset video ready state
+      setVideoReady(false);
 
       // Stop any existing stream first
       if (stream) {
@@ -98,7 +120,7 @@ const AddingEmployees = () => {
           videoRef.current.srcObject = mediaStream;
           videoRef.current.onloadedmetadata = () => {
             videoRef.current.play();
-            setVideoReady(true); // Video is now ready
+            setVideoReady(true);
           };
         }
       }, 100);
@@ -120,14 +142,13 @@ const AddingEmployees = () => {
     setVideoReady(false);
   };
 
-  // Update the capturePhoto function:
+  // Capture photo from camera
   const capturePhoto = () => {
     if (!videoRef.current || !canvasRef.current || !activeCamera) return;
 
     const canvas = canvasRef.current;
     const video = videoRef.current;
 
-    // Check if video is ready
     if (video.readyState !== video.HAVE_ENOUGH_DATA) {
       toast.error("Video not ready. Please wait a moment and try again.");
       return;
@@ -195,11 +216,11 @@ const AddingEmployees = () => {
   };
 
   // Upload image to Firebase Storage
-  // const uploadImage = async (file, path) => {
-  //   const storageRef = ref(storage, path);
-  //   const snapshot = await uploadBytes(storageRef, file);
-  //   return await getDownloadURL(snapshot.ref);
-  // };
+  const uploadImage = async (file, path) => {
+    const storageRef = ref(storage, path);
+    const snapshot = await uploadBytes(storageRef, file);
+    return await getDownloadURL(snapshot.ref);
+  };
 
   // Handle form submission
   const handleSubmit = async (e) => {
@@ -211,9 +232,18 @@ const AddingEmployees = () => {
       !formData.address ||
       !formData.mobile1 ||
       !formData.nicNumber ||
-      !formData.role
+      !formData.role ||
+      !formData.salaryType ||
+      !formData.payRate
     ) {
       toast.error("Please fill in all required fields");
+      return;
+    }
+
+    // Validate pay rate
+    const payRateNum = parseFloat(formData.payRate);
+    if (isNaN(payRateNum) || payRateNum <= 0) {
+      toast.error("Please enter a valid pay rate");
       return;
     }
 
@@ -239,32 +269,60 @@ const AddingEmployees = () => {
         return;
       }
 
+      const businessId = currentBusiness?.id;
+      console.log(businessId);
+      console.log("Selected Business ID:", businessId);
+      console.log("Selected Business Data:", currentBusiness);
+
+      if (!businessId) {
+        toast.error("No business selected");
+        return;
+      }
+
       const timestamp = Date.now();
-      const employeeId = `emp_${timestamp}`;
+
+      // Generate auto-generated document reference to get the employeeId
+      const employeesCollectionRef = collection(
+        db,
+        "owners",
+        uid,
+        "businesses",
+        businessId,
+        "employees"
+      );
+      const employeeDocRef = doc(employeesCollectionRef);
+      const employeeId = employeeDocRef.id; // This is the auto-generated ID
 
       // Upload images
       const imageUrls = {};
 
       for (const [key, file] of Object.entries(images)) {
         if (file) {
-          const path = `employees/${employeeId}/${key}_${timestamp}`;
-          // imageUrls[key] = await uploadImage(file, path);
+          const path = `owners/${uid}/businesses/${businessId}/employees/${employeeId}/${key}_${timestamp}`;
+          imageUrls[key] = await uploadImage(file, path);
         }
       }
 
       // Prepare employee data
       const employeeData = {
-        ...formData,
+        name: formData.employeeName,
+        address: formData.address,
+        mobile1: formData.mobile1,
+        mobile2: formData.mobile2 || null,
+        nicNumber: formData.nicNumber,
+        role: formData.role,
+        salaryType: formData.salaryType,
+        payRate: parseFloat(formData.payRate),
         images: imageUrls,
         employeeId,
-        businessId: localStorage.getItem("currentBusinessId"),
+        businessId,
         ownerId: uid,
         createdAt: new Date(),
+        updatedAt: new Date(),
         status: "active",
       };
 
-      // Add document to 'employees' collection
-      await addDoc(collection(db, "employees"), employeeData);
+      await setDoc(employeeDocRef, employeeData);
 
       toast.success("Employee registered successfully");
 
@@ -276,6 +334,8 @@ const AddingEmployees = () => {
         mobile2: "",
         nicNumber: "",
         role: "",
+        salaryType: "",
+        payRate: "",
       });
       setImages({
         employeePhoto: null,
@@ -443,7 +503,6 @@ const AddingEmployees = () => {
                   muted
                   className="w-full h-64 object-cover rounded-lg mb-4 bg-black"
                 />
-                {/* Loading overlay - only show when video is not ready */}
                 {!videoReady && (
                   <div className="absolute inset-0 flex items-center justify-center bg-gray-200 rounded-lg">
                     <div className="text-center">
@@ -476,6 +535,7 @@ const AddingEmployees = () => {
           </div>
         )}
         <canvas ref={canvasRef} className="hidden" />
+
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* Personal Information */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -553,7 +613,7 @@ const AddingEmployees = () => {
               />
             </div>
 
-            <div className="md:col-span-2">
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Role <span className="text-red-500">*</span>
               </label>
@@ -571,6 +631,64 @@ const AddingEmployees = () => {
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Salary Type <span className="text-red-500">*</span>
+              </label>
+              <select
+                name="salaryType"
+                value={formData.salaryType}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-colors"
+                required
+              >
+                <option value="">Select salary type</option>
+                {salaryTypes.map((type) => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                {formData.salaryType === "daily"
+                  ? "Daily Wage"
+                  : formData.salaryType === "monthly"
+                  ? "Monthly Salary"
+                  : "Pay Rate"}{" "}
+                <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">
+                  Rs.
+                </span>
+                <input
+                  type="text"
+                  name="payRate"
+                  value={formData.payRate}
+                  onChange={handlePayRateChange}
+                  className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-colors"
+                  placeholder={
+                    formData.salaryType === "daily"
+                      ? "Enter daily wage"
+                      : formData.salaryType === "monthly"
+                      ? "Enter monthly salary"
+                      : "Enter pay rate"
+                  }
+                  required
+                />
+              </div>
+              {formData.salaryType && (
+                <p className="text-xs text-gray-500 mt-1">
+                  {formData.salaryType === "daily"
+                    ? "Amount paid per working day"
+                    : "Fixed monthly salary amount"}
+                </p>
+              )}
             </div>
           </div>
 

@@ -9,6 +9,8 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { toast } from "react-hot-toast";
+import Modal from "../../components/Modal";
+import { BuyerPayment } from "./BuyerPayment";
 
 export const AddingPaddyStock = () => {
   // States
@@ -33,6 +35,10 @@ export const AddingPaddyStock = () => {
     notes: "",
   });
   const [customPaddyType, setCustomPaddyType] = useState("");
+
+  // Payment modal states
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [savedStockData, setSavedStockData] = useState(null);
 
   // Get current business ID from localStorage
   useEffect(() => {
@@ -166,6 +172,9 @@ export const AddingPaddyStock = () => {
         return;
       }
 
+      const totalAmount =
+        parseFloat(formData.quantity) * parseFloat(formData.price);
+
       const stockData = {
         buyerId: formData.buyerId,
         buyerName: formData.buyerName,
@@ -173,6 +182,7 @@ export const AddingPaddyStock = () => {
           formData.paddyType === "Other" ? customPaddyType : formData.paddyType,
         quantity: parseFloat(formData.quantity),
         price: parseFloat(formData.price),
+        totalAmount: totalAmount,
         notes: formData.notes || null,
         businessId: currentBusiness,
         createdBy: uid,
@@ -182,11 +192,57 @@ export const AddingPaddyStock = () => {
 
       await addDoc(collection(db, "paddyStock"), stockData);
       toast.success("Paddy stock added successfully");
-      resetForm();
+
+      // Save stock data and open payment modal
+      setSavedStockData({
+        buyerId: formData.buyerId,
+        buyerName: formData.buyerName,
+        totalAmount: totalAmount,
+        stockData: stockData,
+      });
+      setIsPaymentModalOpen(true);
     } catch (error) {
       console.error("Error adding paddy stock:", error);
       toast.error("Failed to add paddy stock. Please try again.");
     }
+  };
+
+  // Handle payment completion
+  const handlePaymentComplete = async (paymentData) => {
+    try {
+      // Save payment data to Firebase
+      await addDoc(collection(db, "payments"), {
+        ...paymentData,
+        type: "stock_purchase",
+        stockReference: savedStockData?.stockData,
+        businessId: currentBusiness,
+        createdBy: auth.currentUser?.uid,
+        createdAt: serverTimestamp(),
+      });
+
+      toast.success("Payment recorded successfully!");
+      setIsPaymentModalOpen(false);
+      resetForm();
+      setSavedStockData(null);
+    } catch (error) {
+      console.error("Error saving payment:", error);
+      toast.error("Failed to record payment. Please try again.");
+    }
+  };
+
+  // Handle payment modal close
+  const handlePaymentModalClose = () => {
+    setIsPaymentModalOpen(false);
+    resetForm();
+    setSavedStockData(null);
+  };
+
+  // Skip payment and just close
+  const handleSkipPayment = () => {
+    setIsPaymentModalOpen(false);
+    resetForm();
+    setSavedStockData(null);
+    toast.success("Stock entry completed. Payment can be recorded later.");
   };
 
   return (
@@ -434,6 +490,44 @@ export const AddingPaddyStock = () => {
           </form>
         </div>
       )}
+
+      {/* Payment Modal */}
+      <Modal
+        isOpen={isPaymentModalOpen}
+        onClose={handlePaymentModalClose}
+        title="Record Payment"
+        size="xl"
+      >
+        <div className="space-y-4">
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <h4 className="font-medium text-blue-900 mb-2">
+              Stock Entry Completed Successfully!
+            </h4>
+            <p className="text-blue-700 text-sm">
+              Would you like to record the payment for this purchase now?
+            </p>
+          </div>
+
+          {savedStockData && (
+            <BuyerPayment
+              buyerId={savedStockData.buyerId}
+              buyerName={savedStockData.buyerName}
+              totalAmount={savedStockData.totalAmount}
+              onPaymentComplete={handlePaymentComplete}
+              onCancel={handleSkipPayment}
+            />
+          )}
+
+          <div className="flex justify-center pt-4">
+            <button
+              onClick={handleSkipPayment}
+              className="text-gray-500 hover:text-gray-700 text-sm underline"
+            >
+              Skip payment for now
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };
