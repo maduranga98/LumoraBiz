@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { collection, query, orderBy, getDocs } from "firebase/firestore";
 import { db } from "../../services/firebase";
+import { useBusiness } from "../../contexts/BusinessContext";
+import { useAuth } from "../../contexts/AuthContext";
+import { toast } from "react-hot-toast";
 import { format } from "date-fns";
 
 const ExpensesList = () => {
+  const { currentBusiness } = useBusiness();
+  const { currentUser } = useAuth();
+  
   const [expenses, setExpenses] = useState([]);
   const [filteredExpenses, setFilteredExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27,6 +33,8 @@ const ExpensesList = () => {
     fuelExpenses: 0,
     serviceExpenses: 0,
     repairExpenses: 0,
+    insuranceExpenses: 0,
+    taxExpenses: 0,
     otherExpenses: 0,
   });
 
@@ -43,33 +51,49 @@ const ExpensesList = () => {
   // Fetch expenses data
   useEffect(() => {
     const fetchExpenses = async () => {
+      if (!currentUser || !currentBusiness?.id) {
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
+      setError(null);
+
       try {
+        // Correct collection path for your structure
+        const expensesCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/vehicleExpenses`;
+        const vehiclesCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/vehicles`;
+        
+        console.log("Fetching expenses from:", expensesCollectionPath);
+        console.log("Fetching vehicles from:", vehiclesCollectionPath);
+
         // Get all expenses, ordered by date
         const expensesQuery = query(
-          collection(db, "vehicleExpenses"),
+          collection(db, expensesCollectionPath),
           orderBy("date", "desc")
         );
         const querySnapshot = await getDocs(expensesQuery);
 
         const expensesData = [];
         querySnapshot.forEach((doc) => {
+          const data = doc.data();
           expensesData.push({
             id: doc.id,
-            ...doc.data(),
+            ...data,
             // Format date if needed
-            formattedDate: doc.data().date
-              ? format(new Date(doc.data().date), "MMM dd, yyyy")
+            formattedDate: data.date
+              ? format(new Date(data.date), "MMM dd, yyyy")
               : "Unknown date",
           });
         });
 
+        console.log("Fetched expenses:", expensesData);
         setExpenses(expensesData);
         setFilteredExpenses(expensesData);
         calculateSummary(expensesData);
 
         // Fetch vehicles for the filter dropdown
-        const vehiclesQuery = query(collection(db, "vehicles"));
+        const vehiclesQuery = query(collection(db, vehiclesCollectionPath));
         const vehiclesSnapshot = await getDocs(vehiclesQuery);
         const vehiclesData = [];
         vehiclesSnapshot.forEach((doc) => {
@@ -78,17 +102,29 @@ const ExpensesList = () => {
             ...doc.data(),
           });
         });
+        
+        console.log("Fetched vehicles:", vehiclesData);
         setVehicles(vehiclesData);
       } catch (err) {
         console.error("Error fetching expenses:", err);
-        setError("Failed to load expenses. Please try again later.");
+        console.error("Error code:", err.code);
+        console.error("Error message:", err.message);
+        
+        if (err.code === 'permission-denied') {
+          setError("Permission denied. Check your Firestore rules.");
+        } else if (err.code === 'not-found') {
+          setError("Expenses collection not found.");
+        } else {
+          setError("Failed to load expenses. Please try again later.");
+        }
+        toast.error("Error loading expenses");
       } finally {
         setLoading(false);
       }
     };
 
     fetchExpenses();
-  }, []);
+  }, [currentUser, currentBusiness]);
 
   // Calculate summary statistics
   const calculateSummary = (expensesData) => {
@@ -97,6 +133,8 @@ const ExpensesList = () => {
       fuelExpenses: 0,
       serviceExpenses: 0,
       repairExpenses: 0,
+      insuranceExpenses: 0,
+      taxExpenses: 0,
       otherExpenses: 0,
     };
 
@@ -113,6 +151,12 @@ const ExpensesList = () => {
           break;
         case "repair":
           summary.repairExpenses += amount;
+          break;
+        case "insurance":
+          summary.insuranceExpenses += amount;
+          break;
+        case "tax":
+          summary.taxExpenses += amount;
           break;
         default:
           summary.otherExpenses += amount;
@@ -179,7 +223,9 @@ const ExpensesList = () => {
           (expense.description &&
             expense.description.toLowerCase().includes(searchLower)) ||
           (expense.serviceProvider &&
-            expense.serviceProvider.toLowerCase().includes(searchLower))
+            expense.serviceProvider.toLowerCase().includes(searchLower)) ||
+          (expense.vehicle_id &&
+            expense.vehicle_id.toLowerCase().includes(searchLower))
       );
     }
 
@@ -316,10 +362,43 @@ const ExpensesList = () => {
     );
   };
 
+  // Check if user is authenticated and has business selected
+  if (!currentUser) {
+    return (
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+          <div className="flex">
+            <div className="ml-3">
+              <p className="text-sm text-yellow-700">
+                Please log in to view expenses.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentBusiness?.id) {
+    return (
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+          <div className="flex">
+            <div className="ml-3">
+              <p className="text-sm text-yellow-700">
+                Please select a business to view expenses.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
       </div>
     );
   }
@@ -351,9 +430,17 @@ const ExpensesList = () => {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <h2 className="text-2xl font-bold text-gray-900">Vehicle Expenses</h2>
+        <p className="text-sm text-gray-600 mt-1">
+          Business: {currentBusiness.name || currentBusiness.id}
+        </p>
+      </div>
+
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <h3 className="text-xs font-medium text-gray-500 uppercase">
             Total Expenses
           </h3>
@@ -361,9 +448,9 @@ const ExpensesList = () => {
             {formatCurrency(summary.totalExpenses)}
           </p>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <h3 className="text-xs font-medium text-gray-500 uppercase">
-            Fuel Expenses
+            Fuel
           </h3>
           <p className="mt-2 text-2xl font-bold text-blue-600">
             {formatCurrency(summary.fuelExpenses)}
@@ -375,9 +462,9 @@ const ExpensesList = () => {
             % of total
           </p>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <h3 className="text-xs font-medium text-gray-500 uppercase">
-            Service Expenses
+            Service
           </h3>
           <p className="mt-2 text-2xl font-bold text-green-600">
             {formatCurrency(summary.serviceExpenses)}
@@ -391,9 +478,9 @@ const ExpensesList = () => {
             % of total
           </p>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <h3 className="text-xs font-medium text-gray-500 uppercase">
-            Repair Expenses
+            Repair
           </h3>
           <p className="mt-2 text-2xl font-bold text-orange-600">
             {formatCurrency(summary.repairExpenses)}
@@ -407,17 +494,33 @@ const ExpensesList = () => {
             % of total
           </p>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <h3 className="text-xs font-medium text-gray-500 uppercase">
-            Other Expenses
+            Insurance
           </h3>
-          <p className="mt-2 text-2xl font-bold text-gray-600">
-            {formatCurrency(summary.otherExpenses)}
+          <p className="mt-2 text-2xl font-bold text-purple-600">
+            {formatCurrency(summary.insuranceExpenses)}
           </p>
           <p className="text-xs text-gray-500 mt-1">
             {summary.totalExpenses
               ? Math.round(
-                  (summary.otherExpenses / summary.totalExpenses) * 100
+                  (summary.insuranceExpenses / summary.totalExpenses) * 100
+                )
+              : 0}
+            % of total
+          </p>
+        </div>
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+          <h3 className="text-xs font-medium text-gray-500 uppercase">
+            Tax & Other
+          </h3>
+          <p className="mt-2 text-2xl font-bold text-gray-600">
+            {formatCurrency(summary.taxExpenses + summary.otherExpenses)}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            {summary.totalExpenses
+              ? Math.round(
+                  ((summary.taxExpenses + summary.otherExpenses) / summary.totalExpenses) * 100
                 )
               : 0}
             % of total
@@ -426,14 +529,14 @@ const ExpensesList = () => {
       </div>
 
       {/* Filter Section */}
-      <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
         <div className="flex flex-col md:flex-row items-center justify-between mb-4">
-          <h3 className="text-lg font-medium text-gray-800 mb-2 md:mb-0">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2 md:mb-0">
             Filter Expenses
           </h3>
           <button
             onClick={resetFilters}
-            className="text-sm text-gray-600 hover:text-gray-800"
+            className="text-sm text-blue-600 hover:text-blue-800 font-medium"
           >
             Reset Filters
           </button>
@@ -454,7 +557,7 @@ const ExpensesList = () => {
               name="searchTerm"
               value={filters.searchTerm}
               onChange={handleFilterChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
               placeholder="Search by vehicle, description, etc."
             />
           </div>
@@ -472,12 +575,12 @@ const ExpensesList = () => {
               name="vehicle"
               value={filters.vehicle}
               onChange={handleFilterChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
             >
               <option value="all">All Vehicles</option>
               {vehicles.map((vehicle) => (
                 <option key={vehicle.id} value={vehicle.id}>
-                  {vehicle.vehicleNumber}{" "}
+                  {vehicle.vehicleNumber || "No Number"}{" "}
                   {vehicle.vehicleName && `(${vehicle.vehicleName})`}
                 </option>
               ))}
@@ -497,7 +600,7 @@ const ExpensesList = () => {
               name="expenseType"
               value={filters.expenseType}
               onChange={handleFilterChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
             >
               <option value="all">All Types</option>
               <option value="fuel">Fuel</option>
@@ -523,7 +626,7 @@ const ExpensesList = () => {
               name="dateFrom"
               value={filters.dateFrom}
               onChange={handleFilterChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
             />
           </div>
 
@@ -541,7 +644,7 @@ const ExpensesList = () => {
               name="dateTo"
               value={filters.dateTo}
               onChange={handleFilterChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
             />
           </div>
 
@@ -560,7 +663,7 @@ const ExpensesList = () => {
                 name="minAmount"
                 value={filters.minAmount}
                 onChange={handleFilterChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm"
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
                 placeholder="Rs. Min"
               />
             </div>
@@ -577,7 +680,7 @@ const ExpensesList = () => {
                 name="maxAmount"
                 value={filters.maxAmount}
                 onChange={handleFilterChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm"
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
                 placeholder="Rs. Max"
               />
             </div>
@@ -586,16 +689,16 @@ const ExpensesList = () => {
       </div>
 
       {/* Expenses Table */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="p-4 border-b border-gray-200">
-          <h3 className="text-lg font-medium text-gray-800">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+        <div className="p-6 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">
             Expenses List{" "}
             {filteredExpenses.length > 0 && `(${filteredExpenses.length})`}
           </h3>
         </div>
 
         {filteredExpenses.length === 0 ? (
-          <div className="p-6 text-center">
+          <div className="p-12 text-center">
             <svg
               className="mx-auto h-12 w-12 text-gray-400"
               fill="none"
@@ -607,22 +710,33 @@ const ExpensesList = () => {
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth="2"
-                d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
+                d="M9 12h6m-3-3v6m5 2H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
               />
             </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">
+            <h3 className="mt-2 text-lg font-medium text-gray-900">
               No expenses found
             </h3>
             <p className="mt-1 text-sm text-gray-500">
-              No expenses match your current filters.
+              {filters.searchTerm || filters.vehicle !== "all" || filters.expenseType !== "all"
+                ? "No expenses match your current filters."
+                : "You haven't added any expenses yet."}
             </p>
-            <div className="mt-6">
+            <div className="mt-6 space-x-3">
+              {(filters.searchTerm || filters.vehicle !== "all" || filters.expenseType !== "all") && (
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none"
+                >
+                  Clear filters
+                </button>
+              )}
               <button
                 type="button"
-                onClick={resetFilters}
-                className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:opacity-90 focus:outline-none"
+                onClick={() => (window.location.href = "/add-expense")}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none"
               >
-                Clear filters
+                Add Expense
               </button>
             </div>
           </div>
@@ -634,29 +748,49 @@ const ExpensesList = () => {
                   <tr>
                     <th
                       scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                       onClick={() => handleSort("date")}
                     >
                       <div className="flex items-center">
                         Date
                         {sortConfig.key === "date" && (
-                          <span className="ml-1">
-                            {sortConfig.direction === "asc" ? "↑" : "↓"}
-                          </span>
+                          <svg
+                            className={`ml-1 w-4 h-4 ${
+                              sortConfig.direction === "desc" ? "transform rotate-180" : ""
+                            }`}
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
                         )}
                       </div>
                     </th>
                     <th
                       scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                       onClick={() => handleSort("vehicleNumber")}
                     >
                       <div className="flex items-center">
                         Vehicle
                         {sortConfig.key === "vehicleNumber" && (
-                          <span className="ml-1">
-                            {sortConfig.direction === "asc" ? "↑" : "↓"}
-                          </span>
+                          <svg
+                            className={`ml-1 w-4 h-4 ${
+                              sortConfig.direction === "desc" ? "transform rotate-180" : ""
+                            }`}
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
                         )}
                       </div>
                     </th>
@@ -668,15 +802,25 @@ const ExpensesList = () => {
                     </th>
                     <th
                       scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                       onClick={() => handleSort("amount")}
                     >
                       <div className="flex items-center">
                         Amount
                         {sortConfig.key === "amount" && (
-                          <span className="ml-1">
-                            {sortConfig.direction === "asc" ? "↑" : "↓"}
-                          </span>
+                          <svg
+                            className={`ml-1 w-4 h-4 ${
+                              sortConfig.direction === "desc" ? "transform rotate-180" : ""
+                            }`}
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
                         )}
                       </div>
                     </th>
@@ -699,11 +843,16 @@ const ExpensesList = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">
-                          {expense.vehicleNumber}
+                          {expense.vehicleNumber || "No Number"}
                         </div>
                         {expense.vehicleName && (
                           <div className="text-xs text-gray-500">
                             {expense.vehicleName}
+                          </div>
+                        )}
+                        {expense.vehicle_id && (
+                          <div className="text-xs text-gray-400">
+                            ID: {expense.vehicle_id}
                           </div>
                         )}
                       </td>
@@ -714,26 +863,51 @@ const ExpensesList = () => {
                         {formatCurrency(expense.amount)}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
-                        <div className="max-w-xs truncate">
+                        <div className="max-w-xs">
                           {expense.expenseType === "fuel" &&
                             expense.quantity && (
-                              <span>
-                                {expense.quantity} liters
+                              <div>
+                                <span className="font-medium">
+                                  {expense.quantity} liters
+                                </span>
                                 {expense.odometer &&
                                   ` • ${expense.odometer} km`}
-                              </span>
+                              </div>
                             )}
                           {(expense.expenseType === "service" ||
                             expense.expenseType === "repair") &&
                             expense.serviceType && (
-                              <span>
-                                {expense.serviceType.replace("_", " ")}
+                              <div>
+                                <span className="font-medium">
+                                  {expense.serviceType.replace("_", " ")}
+                                </span>
                                 {expense.serviceProvider &&
                                   ` • ${expense.serviceProvider}`}
-                              </span>
+                              </div>
                             )}
+                          {expense.expenseType === "insurance" &&
+                            expense.serviceProvider && (
+                              <div>
+                                <span className="font-medium">
+                                  {expense.serviceProvider}
+                                </span>
+                              </div>
+                            )}
+                          {expense.expenseType === "tax" &&
+                            expense.serviceType && (
+                              <div>
+                                <span className="font-medium">
+                                  {expense.serviceType.replace("_", " ")}
+                                </span>
+                              </div>
+                            )}
+                          {expense.billNumber && (
+                            <div className="text-xs text-gray-400">
+                              Bill: {expense.billNumber}
+                            </div>
+                          )}
                           {expense.description && (
-                            <div className="mt-1 text-xs italic">
+                            <div className="mt-1 text-xs italic truncate">
                               {expense.description}
                             </div>
                           )}
@@ -841,7 +1015,7 @@ const ExpensesList = () => {
                           onClick={() => paginate(number + 1)}
                           className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
                             currentPage === number + 1
-                              ? "bg-primary text-white border-primary"
+                              ? "bg-blue-600 text-white border-blue-600"
                               : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
                           }`}
                         >
@@ -887,12 +1061,16 @@ const ExpensesList = () => {
       </div>
 
       {/* Export Options */}
-      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex justify-end">
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center">
+        <div className="text-sm text-gray-600">
+          Total {filteredExpenses.length} expense{filteredExpenses.length !== 1 ? 's' : ''} 
+          {filteredExpenses.length > 0 && ` • ${formatCurrency(summary.totalExpenses)} total`}
+        </div>
         <div className="space-x-3">
-          <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors text-sm font-medium">
+          <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium">
             Export as CSV
           </button>
-          <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors text-sm font-medium">
+          <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium">
             Export as PDF
           </button>
         </div>
