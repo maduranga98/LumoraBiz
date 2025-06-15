@@ -9,6 +9,8 @@ import {
   orderBy,
 } from "firebase/firestore";
 import { db } from "../../services/firebase";
+import { useBusiness } from "../../contexts/BusinessContext";
+import { useAuth } from "../../contexts/AuthContext";
 import { toast } from "react-hot-toast";
 import {
   format,
@@ -23,9 +25,13 @@ import {
   getDay,
   isSameMonth,
   isSameDay,
+  addDays,
 } from "date-fns";
 
 const MaintenanceSchedule = () => {
+  const { currentBusiness } = useBusiness();
+  const { currentUser } = useAuth();
+  
   const [view, setView] = useState("list"); // "list" or "calendar"
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -39,29 +45,43 @@ const MaintenanceSchedule = () => {
   const [filters, setFilters] = useState({
     status: "upcoming", // "all", "upcoming", "overdue", "completed", "canceled"
     vehicle: "all",
-    maintenanceType: "all",
+    serviceType: "all",
     dateRange: "next30days", // "all", "next30days", "next3months", "past"
   });
 
   // New task form state
   const [newTask, setNewTask] = useState({
     vehicleId: "",
-    maintenanceType: "oil_change",
+    serviceType: "oil_change",
     description: "",
-    dueDate: format(addMonths(new Date(), 1), "yyyy-MM-dd"), // Default to one month from now
+    scheduledDate: format(addDays(new Date(), 7), "yyyy-MM-dd"), // Default to one week from now
     priority: "medium",
     estimatedCost: "",
     notes: "",
-    remindBefore: "7", // days
+    remindBefore: "3", // days
   });
 
   // Fetch data
   useEffect(() => {
     const fetchData = async () => {
+      if (!currentUser || !currentBusiness?.id) {
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
+      setError(null);
+
       try {
+        // Correct collection paths for your structure
+        const vehiclesCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/vehicles`;
+        const servicesCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/vehicleServices`;
+        
+        console.log("Fetching vehicles from:", vehiclesCollectionPath);
+        console.log("Fetching services from:", servicesCollectionPath);
+
         // Fetch vehicles
-        const vehiclesQuery = query(collection(db, "vehicles"));
+        const vehiclesQuery = query(collection(db, vehiclesCollectionPath));
         const vehiclesSnapshot = await getDocs(vehiclesQuery);
         const vehiclesData = [];
         vehiclesSnapshot.forEach((doc) => {
@@ -70,53 +90,66 @@ const MaintenanceSchedule = () => {
             ...doc.data(),
           });
         });
+        console.log("Fetched vehicles:", vehiclesData);
         setVehicles(vehiclesData);
 
-        // Fetch maintenance tasks
-        const maintenanceQuery = query(
-          collection(db, "maintenance"),
-          orderBy("dueDate", "asc")
+        // Fetch maintenance/service tasks
+        const servicesQuery = query(
+          collection(db, servicesCollectionPath),
+          orderBy("scheduledDate", "asc")
         );
-        const maintenanceSnapshot = await getDocs(maintenanceQuery);
-        const maintenanceData = [];
-        maintenanceSnapshot.forEach((doc) => {
+        const servicesSnapshot = await getDocs(servicesQuery);
+        const servicesData = [];
+        servicesSnapshot.forEach((doc) => {
           // Enhance with additional data like status
           const data = doc.data();
           let status = "upcoming";
-          const dueDate = parseISO(data.dueDate);
+          const scheduledDate = parseISO(data.scheduledDate);
 
           if (data.completed) {
             status = "completed";
           } else if (data.canceled) {
             status = "canceled";
-          } else if (isBefore(dueDate, new Date()) && !isToday(dueDate)) {
+          } else if (isBefore(scheduledDate, new Date()) && !isToday(scheduledDate)) {
             status = "overdue";
           }
 
           // Find vehicle details
           const vehicle = vehiclesData.find((v) => v.id === data.vehicleId);
 
-          maintenanceData.push({
+          servicesData.push({
             id: doc.id,
             ...data,
             status,
-            dueDateObj: dueDate,
-            formattedDueDate: format(dueDate, "MMM dd, yyyy"),
+            scheduledDateObj: scheduledDate,
+            formattedScheduledDate: format(scheduledDate, "MMM dd, yyyy"),
             vehicleNumber: vehicle?.vehicleNumber || "Unknown",
             vehicleName: vehicle?.vehicleName || "",
           });
         });
-        setMaintenanceTasks(maintenanceData);
+        
+        console.log("Fetched services:", servicesData);
+        setMaintenanceTasks(servicesData);
       } catch (err) {
         console.error("Error fetching data:", err);
-        setError("Failed to load maintenance schedule. Please try again.");
+        console.error("Error code:", err.code);
+        console.error("Error message:", err.message);
+        
+        if (err.code === 'permission-denied') {
+          setError("Permission denied. Check your Firestore rules.");
+        } else if (err.code === 'not-found') {
+          setError("Services collection not found.");
+        } else {
+          setError("Failed to load maintenance schedule. Please try again.");
+        }
+        toast.error("Error loading maintenance schedule");
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, []);
+  }, [currentUser, currentBusiness]);
 
   // Filter tasks based on selected filters
   const filteredTasks = maintenanceTasks.filter((task) => {
@@ -130,10 +163,10 @@ const MaintenanceSchedule = () => {
       return false;
     }
 
-    // Filter by maintenance type
+    // Filter by service type
     if (
-      filters.maintenanceType !== "all" &&
-      task.maintenanceType !== filters.maintenanceType
+      filters.serviceType !== "all" &&
+      task.serviceType !== filters.serviceType
     ) {
       return false;
     }
@@ -145,17 +178,17 @@ const MaintenanceSchedule = () => {
       if (filters.dateRange === "next30days") {
         const thirtyDaysLater = addMonths(today, 1);
         return (
-          isAfter(task.dueDateObj, today) &&
-          isBefore(task.dueDateObj, thirtyDaysLater)
+          isAfter(task.scheduledDateObj, today) &&
+          isBefore(task.scheduledDateObj, thirtyDaysLater)
         );
       } else if (filters.dateRange === "next3months") {
         const threeMonthsLater = addMonths(today, 3);
         return (
-          isAfter(task.dueDateObj, today) &&
-          isBefore(task.dueDateObj, threeMonthsLater)
+          isAfter(task.scheduledDateObj, today) &&
+          isBefore(task.scheduledDateObj, threeMonthsLater)
         );
       } else if (filters.dateRange === "past") {
-        return isBefore(task.dueDateObj, today) && !isToday(task.dueDateObj);
+        return isBefore(task.scheduledDateObj, today) && !isToday(task.scheduledDateObj);
       }
     }
 
@@ -184,13 +217,18 @@ const MaintenanceSchedule = () => {
   const handleAddTask = async (e) => {
     e.preventDefault();
 
+    if (!currentUser || !currentBusiness?.id) {
+      toast.error("Please ensure you're logged in and have a business selected");
+      return;
+    }
+
     // Validate form
     if (!newTask.vehicleId) {
       toast.error("Please select a vehicle");
       return;
     }
-    if (!newTask.dueDate) {
-      toast.error("Please select a due date");
+    if (!newTask.scheduledDate) {
+      toast.error("Please select a scheduled date");
       return;
     }
 
@@ -200,36 +238,61 @@ const MaintenanceSchedule = () => {
       // Find vehicle details to store in the task
       const selectedVehicle = vehicles.find((v) => v.id === newTask.vehicleId);
 
-      // Prepare maintenance task data
+      // Prepare service task data
       const taskData = {
         vehicleId: newTask.vehicleId,
+        vehicle_id: selectedVehicle?.vehicle_id || newTask.vehicleId,
         vehicleNumber: selectedVehicle?.vehicleNumber || "Unknown",
-        maintenanceType: newTask.maintenanceType,
-        description:
-          newTask.description ||
-          getMaintenanceTypeLabel(newTask.maintenanceType),
-        dueDate: newTask.dueDate,
+        vehicleName: selectedVehicle?.vehicleName || "",
+        businessId: currentBusiness.id,
+        ownerId: currentUser.uid,
+        serviceType: newTask.serviceType,
+        description: newTask.description || getServiceTypeLabel(newTask.serviceType),
+        scheduledDate: newTask.scheduledDate,
         priority: newTask.priority,
-        estimatedCost: newTask.estimatedCost
-          ? parseFloat(newTask.estimatedCost)
-          : null,
+        estimatedCost: newTask.estimatedCost ? parseFloat(newTask.estimatedCost) : null,
         notes: newTask.notes || "",
         remindBefore: parseInt(newTask.remindBefore, 10),
         completed: false,
         canceled: false,
-        createdAt: new Date().toISOString(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
       };
 
-      // Add to database
-      await addDoc(collection(db, "maintenance"), taskData);
+      // Use the correct collection path for services
+      const servicesCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/vehicleServices`;
+      console.log("Adding service to:", servicesCollectionPath);
 
-      toast.success("Maintenance task scheduled successfully");
+      // Add to database
+      const docRef = await addDoc(collection(db, servicesCollectionPath), taskData);
+      console.log("Service added with ID:", docRef.id);
+
+      toast.success("Maintenance service scheduled successfully");
+
+      // Reset form
+      setNewTask({
+        vehicleId: "",
+        serviceType: "oil_change",
+        description: "",
+        scheduledDate: format(addDays(new Date(), 7), "yyyy-MM-dd"),
+        priority: "medium",
+        estimatedCost: "",
+        notes: "",
+        remindBefore: "3",
+      });
 
       // Refresh data (in a real app, you might want to append instead of refetching)
       window.location.reload();
     } catch (err) {
       console.error("Error adding maintenance task:", err);
-      toast.error("Failed to schedule maintenance. Please try again.");
+      console.error("Error code:", err.code);
+      console.error("Error message:", err.message);
+      
+      if (err.code === 'permission-denied') {
+        toast.error("Permission denied. Check your Firestore rules.");
+      } else {
+        toast.error("Failed to schedule maintenance. Please try again.");
+      }
     } finally {
       setAddingTask(false);
       setShowAddModal(false);
@@ -238,20 +301,29 @@ const MaintenanceSchedule = () => {
 
   // Handle complete/cancel task
   const handleUpdateTaskStatus = async (taskId, status) => {
+    if (!currentUser || !currentBusiness?.id) {
+      toast.error("Authentication error");
+      return;
+    }
+
     try {
-      const taskRef = doc(db, "maintenance", taskId);
+      const servicesCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/vehicleServices`;
+      const taskRef = doc(db, servicesCollectionPath, taskId);
+      
       if (status === "completed") {
         await updateDoc(taskRef, {
           completed: true,
-          completedAt: new Date().toISOString(),
+          completedAt: new Date(),
+          updatedAt: new Date(),
         });
-        toast.success("Task marked as completed");
+        toast.success("Service marked as completed");
       } else if (status === "canceled") {
         await updateDoc(taskRef, {
           canceled: true,
-          canceledAt: new Date().toISOString(),
+          canceledAt: new Date(),
+          updatedAt: new Date(),
         });
-        toast.success("Task canceled");
+        toast.success("Service canceled");
       }
 
       // Update local state
@@ -269,12 +341,12 @@ const MaintenanceSchedule = () => {
       );
     } catch (err) {
       console.error(`Error updating task status:`, err);
-      toast.error("Failed to update task status");
+      toast.error("Failed to update service status");
     }
   };
 
-  // Helper function to get readable maintenance type label
-  const getMaintenanceTypeLabel = (type) => {
+  // Helper function to get readable service type label
+  const getServiceTypeLabel = (type) => {
     const labels = {
       oil_change: "Oil Change",
       tire_rotation: "Tire Rotation",
@@ -286,9 +358,13 @@ const MaintenanceSchedule = () => {
       battery_check: "Battery Check",
       regular_service: "Regular Service",
       major_service: "Major Service",
-      other: "Other Maintenance",
+      inspection: "Vehicle Inspection",
+      tire_replacement: "Tire Replacement",
+      engine_service: "Engine Service",
+      electrical_service: "Electrical Service",
+      other: "Other Service",
     };
-    return labels[type] || "Maintenance";
+    return labels[type] || "Service";
   };
 
   // Helper to get status badge style
@@ -387,13 +463,13 @@ const MaintenanceSchedule = () => {
 
     // Get tasks for the current month
     const tasksThisMonth = maintenanceTasks.filter((task) =>
-      isSameMonth(task.dueDateObj, currentDate)
+      isSameMonth(task.scheduledDateObj, currentDate)
     );
 
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-medium text-gray-800">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-xl font-semibold text-gray-900">
             {format(currentDate, dateFormat)}
           </h3>
           <div className="flex space-x-2">
@@ -416,7 +492,7 @@ const MaintenanceSchedule = () => {
             </button>
             <button
               onClick={today}
-              className="px-3 py-1 text-sm bg-primary text-white rounded-md hover:opacity-90"
+              className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
             >
               Today
             </button>
@@ -460,7 +536,7 @@ const MaintenanceSchedule = () => {
           {/* Actual days of the month */}
           {days.map((day) => {
             const dayTasks = tasksThisMonth.filter((task) =>
-              isSameDay(task.dueDateObj, day)
+              isSameDay(task.scheduledDateObj, day)
             );
 
             const isCurrentDay = isSameDay(day, new Date());
@@ -475,7 +551,7 @@ const MaintenanceSchedule = () => {
                 <div className="h-full flex flex-col">
                   <div
                     className={`text-right p-1 ${
-                      isCurrentDay ? "font-bold text-primary" : "text-gray-700"
+                      isCurrentDay ? "font-bold text-blue-600" : "text-gray-700"
                     }`}
                   >
                     {format(day, "d")}
@@ -496,7 +572,7 @@ const MaintenanceSchedule = () => {
                         }`}
                       >
                         <div className="font-medium truncate">
-                          {task.vehicleNumber}
+                          {task.vehicleNumber || "No Number"}
                         </div>
                         <div className="truncate">{task.description}</div>
                       </div>
@@ -511,11 +587,50 @@ const MaintenanceSchedule = () => {
     );
   };
 
+  // Check if user is authenticated and has business selected
+  if (!currentUser) {
+    return (
+      <div className="container mx-auto px-4 py-6">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+            <div className="flex">
+              <div className="ml-3">
+                <p className="text-sm text-yellow-700">
+                  Please log in to view maintenance schedule.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentBusiness?.id) {
+    return (
+      <div className="container mx-auto px-4 py-6">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+            <div className="flex">
+              <div className="ml-3">
+                <p className="text-sm text-yellow-700">
+                  Please select a business to view maintenance schedule.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Loading indicator
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      <div className="container mx-auto px-4 py-6">
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
+        </div>
       </div>
     );
   }
@@ -523,23 +638,25 @@ const MaintenanceSchedule = () => {
   // Error message
   if (error) {
     return (
-      <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded">
-        <div className="flex">
-          <div className="flex-shrink-0">
-            <svg
-              className="h-5 w-5 text-red-500"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-            >
-              <path
-                fillRule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                clipRule="evenodd"
-              />
-            </svg>
-          </div>
-          <div className="ml-3">
-            <p className="text-sm text-red-700">{error}</p>
+      <div className="container mx-auto px-4 py-6">
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg
+                className="h-5 w-5 text-red-500"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
           </div>
         </div>
       </div>
@@ -549,16 +666,22 @@ const MaintenanceSchedule = () => {
   // Main component return
   return (
     <div className="container mx-auto px-4 py-6">
+      {/* Header */}
       <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-2 sm:space-y-0">
-        <h1 className="text-2xl font-bold text-gray-800">
-          Maintenance Schedule
-        </h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Maintenance Schedule
+          </h1>
+          <p className="text-sm text-gray-600 mt-1">
+            Business: {currentBusiness.name || currentBusiness.id}
+          </p>
+        </div>
         <div className="flex space-x-2">
           <button
             onClick={() => setView("list")}
-            className={`px-4 py-2 text-sm font-medium rounded-md ${
+            className={`px-4 py-2 text-sm font-medium rounded-lg ${
               view === "list"
-                ? "bg-primary text-white"
+                ? "bg-blue-600 text-white"
                 : "bg-gray-200 text-gray-700 hover:bg-gray-300"
             }`}
           >
@@ -566,9 +689,9 @@ const MaintenanceSchedule = () => {
           </button>
           <button
             onClick={() => setView("calendar")}
-            className={`px-4 py-2 text-sm font-medium rounded-md ${
+            className={`px-4 py-2 text-sm font-medium rounded-lg ${
               view === "calendar"
-                ? "bg-primary text-white"
+                ? "bg-blue-600 text-white"
                 : "bg-gray-200 text-gray-700 hover:bg-gray-300"
             }`}
           >
@@ -576,16 +699,16 @@ const MaintenanceSchedule = () => {
           </button>
           <button
             onClick={() => setShowAddModal(true)}
-            className="px-4 py-2 text-sm font-medium rounded-md bg-primary text-white hover:opacity-90"
+            className="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700"
           >
-            Schedule Maintenance
+            Schedule Service
           </button>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6">
-        <h2 className="text-lg font-medium text-gray-800 mb-3">Filters</h2>
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Filters</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -595,7 +718,7 @@ const MaintenanceSchedule = () => {
               name="status"
               value={filters.status}
               onChange={handleFilterChange}
-              className="w-full border border-gray-300 rounded-md py-2 px-3"
+              className="w-full border border-gray-300 rounded-lg py-2.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="all">All Statuses</option>
               <option value="upcoming">Upcoming</option>
@@ -612,12 +735,12 @@ const MaintenanceSchedule = () => {
               name="vehicle"
               value={filters.vehicle}
               onChange={handleFilterChange}
-              className="w-full border border-gray-300 rounded-md py-2 px-3"
+              className="w-full border border-gray-300 rounded-lg py-2.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="all">All Vehicles</option>
               {vehicles.map((vehicle) => (
                 <option key={vehicle.id} value={vehicle.id}>
-                  {vehicle.vehicleNumber}{" "}
+                  {vehicle.vehicleNumber || "No Number"}{" "}
                   {vehicle.vehicleName && `- ${vehicle.vehicleName}`}
                 </option>
               ))}
@@ -625,13 +748,13 @@ const MaintenanceSchedule = () => {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Maintenance Type
+              Service Type
             </label>
             <select
-              name="maintenanceType"
-              value={filters.maintenanceType}
+              name="serviceType"
+              value={filters.serviceType}
               onChange={handleFilterChange}
-              className="w-full border border-gray-300 rounded-md py-2 px-3"
+              className="w-full border border-gray-300 rounded-lg py-2.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="all">All Types</option>
               <option value="oil_change">Oil Change</option>
@@ -644,6 +767,10 @@ const MaintenanceSchedule = () => {
               <option value="battery_check">Battery Check</option>
               <option value="regular_service">Regular Service</option>
               <option value="major_service">Major Service</option>
+              <option value="inspection">Vehicle Inspection</option>
+              <option value="tire_replacement">Tire Replacement</option>
+              <option value="engine_service">Engine Service</option>
+              <option value="electrical_service">Electrical Service</option>
               <option value="other">Other</option>
             </select>
           </div>
@@ -655,7 +782,7 @@ const MaintenanceSchedule = () => {
               name="dateRange"
               value={filters.dateRange}
               onChange={handleFilterChange}
-              className="w-full border border-gray-300 rounded-md py-2 px-3"
+              className="w-full border border-gray-300 rounded-lg py-2.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="all">All Dates</option>
               <option value="next30days">Next 30 Days</option>
@@ -668,12 +795,38 @@ const MaintenanceSchedule = () => {
 
       {/* Main Content - List or Calendar View */}
       {view === "list" ? (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
           {filteredTasks.length === 0 ? (
-            <div className="p-6 text-center">
-              <p className="text-gray-500">
-                No maintenance tasks found with the selected filters.
+            <div className="p-12 text-center">
+              <svg
+                className="mx-auto h-12 w-12 text-gray-400 mb-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 7V3a2 2 0 012-2h4a2 2 0 012 2v4m-6 6v6m-2-6h8m-4-6h4"
+                />
+              </svg>
+              <p className="text-lg font-medium text-gray-900 mb-2">
+                No scheduled services found
               </p>
+              <p className="text-gray-500">
+                {filters.status !== "all" || filters.vehicle !== "all" || filters.serviceType !== "all"
+                  ? "No services match your current filters."
+                  : "You haven't scheduled any services yet."}
+              </p>
+              <div className="mt-6">
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none"
+                >
+                  Schedule Your First Service
+                </button>
+              </div>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -690,13 +843,13 @@ const MaintenanceSchedule = () => {
                       scope="col"
                       className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                     >
-                      Maintenance
+                      Service
                     </th>
                     <th
                       scope="col"
                       className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                     >
-                      Due Date
+                      Scheduled Date
                     </th>
                     <th
                       scope="col"
@@ -712,6 +865,12 @@ const MaintenanceSchedule = () => {
                     </th>
                     <th
                       scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Estimated Cost
+                    </th>
+                    <th
+                      scope="col"
                       className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
                     >
                       Actions
@@ -720,27 +879,39 @@ const MaintenanceSchedule = () => {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {filteredTasks.map((task) => (
-                    <tr key={task.id} className="hover:bg-gray-50">
+                    <tr key={task.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="font-medium text-gray-900">
-                          {task.vehicleNumber}
+                          {task.vehicleNumber || "No Number"}
                         </div>
                         {task.vehicleName && (
                           <div className="text-xs text-gray-500">
                             {task.vehicleName}
                           </div>
                         )}
+                        {task.vehicle_id && (
+                          <div className="text-xs text-gray-400">
+                            ID: {task.vehicle_id}
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <div className="font-medium text-gray-900">
-                          {getMaintenanceTypeLabel(task.maintenanceType)}
+                          {getServiceTypeLabel(task.serviceType)}
                         </div>
                         <div className="text-sm text-gray-500">
                           {task.description}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {task.formattedDueDate}
+                        <div className="text-sm text-gray-900">
+                          {task.formattedScheduledDate}
+                        </div>
+                        {task.remindBefore && (
+                          <div className="text-xs text-gray-500">
+                            Remind {task.remindBefore} days before
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {getStatusBadge(task.status)}
@@ -748,28 +919,34 @@ const MaintenanceSchedule = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         {getPriorityBadge(task.priority)}
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {task.estimatedCost 
+                          ? `Rs. ${task.estimatedCost.toLocaleString()}`
+                          : "Not specified"
+                        }
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                        {task.status !== "completed" &&
-                          task.status !== "canceled" && (
-                            <div className="flex justify-end space-x-2">
-                              <button
-                                onClick={() =>
-                                  handleUpdateTaskStatus(task.id, "completed")
-                                }
-                                className="text-green-600 hover:text-green-900"
-                              >
-                                Complete
-                              </button>
-                              <button
-                                onClick={() =>
-                                  handleUpdateTaskStatus(task.id, "canceled")
-                                }
-                                className="text-red-600 hover:text-red-900"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          )}
+                        {task.status !== "completed" && task.status !== "canceled" && (
+                          <div className="flex justify-end space-x-2">
+                            <button
+                              onClick={() => handleUpdateTaskStatus(task.id, "completed")}
+                              className="text-green-600 hover:text-green-900 px-2 py-1 rounded hover:bg-green-50"
+                            >
+                              Complete
+                            </button>
+                            <button
+                              onClick={() => handleUpdateTaskStatus(task.id, "canceled")}
+                              className="text-red-600 hover:text-red-900 px-2 py-1 rounded hover:bg-red-50"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )}
+                        {task.notes && (
+                          <div className="mt-1 text-xs text-gray-400 italic truncate max-w-xs">
+                            {task.notes}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -782,15 +959,29 @@ const MaintenanceSchedule = () => {
         renderCalendar()
       )}
 
-      {/* Add Maintenance Task Modal */}
+      {/* Add Maintenance Service Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-10 overflow-y-auto">
+        <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex items-center justify-center min-h-screen px-4">
-            <div className="fixed inset-0 bg-black opacity-50"></div>
-            <div className="relative bg-white rounded-lg w-full max-w-md mx-auto p-6 shadow-xl">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
-                Schedule Maintenance
-              </h3>
+            <div 
+              className="fixed inset-0 bg-black opacity-50"
+              onClick={() => setShowAddModal(false)}
+            ></div>
+            <div className="relative bg-white rounded-xl w-full max-w-lg mx-auto p-6 shadow-xl">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-semibold text-gray-900">
+                  Schedule Service
+                </h3>
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="text-gray-400 hover:text-gray-500 p-1 rounded-full hover:bg-gray-100"
+                >
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
               <form onSubmit={handleAddTask}>
                 <div className="space-y-4">
                   <div>
@@ -802,13 +993,17 @@ const MaintenanceSchedule = () => {
                       value={newTask.vehicleId}
                       onChange={handleNewTaskChange}
                       required
-                      className="w-full border border-gray-300 rounded-md py-2 px-3"
+                      className="w-full border border-gray-300 rounded-lg py-2.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value="">Select a vehicle</option>
                       {vehicles.map((vehicle) => (
                         <option key={vehicle.id} value={vehicle.id}>
-                          {vehicle.vehicleNumber}{" "}
+                          {vehicle.vehicleNumber || "No Number"}{" "}
                           {vehicle.vehicleName && `- ${vehicle.vehicleName}`}
+                          {vehicle.manufacturer && vehicle.model 
+                            ? ` (${vehicle.manufacturer} ${vehicle.model})`
+                            : ""
+                          }
                         </option>
                       ))}
                     </select>
@@ -816,29 +1011,29 @@ const MaintenanceSchedule = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Maintenance Type <span className="text-red-500">*</span>
+                      Service Type <span className="text-red-500">*</span>
                     </label>
                     <select
-                      name="maintenanceType"
-                      value={newTask.maintenanceType}
+                      name="serviceType"
+                      value={newTask.serviceType}
                       onChange={handleNewTaskChange}
                       required
-                      className="w-full border border-gray-300 rounded-md py-2 px-3"
+                      className="w-full border border-gray-300 rounded-lg py-2.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value="oil_change">Oil Change</option>
                       <option value="tire_rotation">Tire Rotation</option>
-                      <option value="filter_replacement">
-                        Filter Replacement
-                      </option>
+                      <option value="filter_replacement">Filter Replacement</option>
                       <option value="brake_service">Brake Service</option>
-                      <option value="transmission_service">
-                        Transmission Service
-                      </option>
+                      <option value="transmission_service">Transmission Service</option>
                       <option value="air_conditioning">Air Conditioning</option>
                       <option value="fluid_check">Fluid Check</option>
                       <option value="battery_check">Battery Check</option>
                       <option value="regular_service">Regular Service</option>
                       <option value="major_service">Major Service</option>
+                      <option value="inspection">Vehicle Inspection</option>
+                      <option value="tire_replacement">Tire Replacement</option>
+                      <option value="engine_service">Engine Service</option>
+                      <option value="electrical_service">Electrical Service</option>
                       <option value="other">Other</option>
                     </select>
                   </div>
@@ -852,22 +1047,23 @@ const MaintenanceSchedule = () => {
                       name="description"
                       value={newTask.description}
                       onChange={handleNewTaskChange}
-                      className="w-full border border-gray-300 rounded-md py-2 px-3"
-                      placeholder="Brief description of maintenance"
+                      className="w-full border border-gray-300 rounded-lg py-2.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Brief description of service needed"
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Due Date <span className="text-red-500">*</span>
+                      Scheduled Date <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="date"
-                      name="dueDate"
-                      value={newTask.dueDate}
+                      name="scheduledDate"
+                      value={newTask.scheduledDate}
                       onChange={handleNewTaskChange}
                       required
-                      className="w-full border border-gray-300 rounded-md py-2 px-3"
+                      min={format(new Date(), "yyyy-MM-dd")}
+                      className="w-full border border-gray-300 rounded-lg py-2.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
 
@@ -880,7 +1076,7 @@ const MaintenanceSchedule = () => {
                         name="priority"
                         value={newTask.priority}
                         onChange={handleNewTaskChange}
-                        className="w-full border border-gray-300 rounded-md py-2 px-3"
+                        className="w-full border border-gray-300 rounded-lg py-2.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       >
                         <option value="low">Low</option>
                         <option value="medium">Medium</option>
@@ -889,15 +1085,15 @@ const MaintenanceSchedule = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Estimated Cost
+                        Estimated Cost (Rs.)
                       </label>
                       <input
                         type="number"
                         name="estimatedCost"
                         value={newTask.estimatedCost}
                         onChange={handleNewTaskChange}
-                        className="w-full border border-gray-300 rounded-md py-2 px-3"
-                        placeholder="0.00"
+                        className="w-full border border-gray-300 rounded-lg py-2.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="0"
                         min="0"
                         step="0.01"
                       />
@@ -906,33 +1102,33 @@ const MaintenanceSchedule = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Remind Before (days)
+                      Remind Before
                     </label>
                     <select
                       name="remindBefore"
                       value={newTask.remindBefore}
                       onChange={handleNewTaskChange}
-                      className="w-full border border-gray-300 rounded-md py-2 px-3"
+                      className="w-full border border-gray-300 rounded-lg py-2.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
-                      <option value="1">1 day</option>
-                      <option value="3">3 days</option>
-                      <option value="7">1 week</option>
-                      <option value="14">2 weeks</option>
-                      <option value="30">1 month</option>
+                      <option value="1">1 day before</option>
+                      <option value="3">3 days before</option>
+                      <option value="7">1 week before</option>
+                      <option value="14">2 weeks before</option>
+                      <option value="30">1 month before</option>
                     </select>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Notes
+                      Additional Notes
                     </label>
                     <textarea
                       name="notes"
                       value={newTask.notes}
                       onChange={handleNewTaskChange}
-                      className="w-full border border-gray-300 rounded-md py-2 px-3"
+                      className="w-full border border-gray-300 rounded-lg py-2.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       rows="3"
-                      placeholder="Additional notes or instructions"
+                      placeholder="Any special instructions or additional details..."
                     ></textarea>
                   </div>
                 </div>
@@ -941,16 +1137,16 @@ const MaintenanceSchedule = () => {
                   <button
                     type="button"
                     onClick={() => setShowAddModal(false)}
-                    className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
+                    className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-medium"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={addingTask}
-                    className="px-4 py-2 bg-primary text-white rounded-md hover:opacity-90 disabled:opacity-70"
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-70 font-medium"
                   >
-                    {addingTask ? "Scheduling..." : "Schedule"}
+                    {addingTask ? "Scheduling..." : "Schedule Service"}
                   </button>
                 </div>
               </form>

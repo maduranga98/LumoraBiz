@@ -1,9 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { collection, addDoc, getDocs, query, where } from "firebase/firestore";
 import { db } from "../../services/firebase";
+import { useBusiness } from "../../contexts/BusinessContext";
+import { useAuth } from "../../contexts/AuthContext";
 import { toast } from "react-hot-toast";
 
 const AddVehicleExpenses = () => {
+  const { currentBusiness } = useBusiness();
+  const { currentUser } = useAuth();
+  
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,9 +30,18 @@ const AddVehicleExpenses = () => {
   // Fetch vehicles for dropdown
   useEffect(() => {
     const fetchVehicles = async () => {
+      if (!currentUser || !currentBusiness?.id) {
+        setLoading(false);
+        return;
+      }
+
       try {
+        // Correct collection path for your structure
+        const vehiclesCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/vehicles`;
+        console.log("Fetching vehicles from:", vehiclesCollectionPath);
+
         const vehiclesQuery = query(
-          collection(db, "vehicles"),
+          collection(db, vehiclesCollectionPath),
           where("status", "==", "active")
         );
         const querySnapshot = await getDocs(vehiclesQuery);
@@ -40,6 +54,7 @@ const AddVehicleExpenses = () => {
           });
         });
 
+        console.log("Fetched vehicles:", vehiclesData);
         setVehicles(vehiclesData);
       } catch (error) {
         console.error("Error fetching vehicles:", error);
@@ -50,7 +65,7 @@ const AddVehicleExpenses = () => {
     };
 
     fetchVehicles();
-  }, []);
+  }, [currentUser, currentBusiness]);
 
   // Handle input changes
   const handleChange = (e) => {
@@ -64,6 +79,11 @@ const AddVehicleExpenses = () => {
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!currentUser || !currentBusiness?.id) {
+      toast.error("Please ensure you're logged in and have a business selected");
+      return;
+    }
 
     // Basic validation
     if (!formData.vehicleId) {
@@ -84,9 +104,17 @@ const AddVehicleExpenses = () => {
     setIsSubmitting(true);
 
     try {
+      // Find the selected vehicle to get its details
+      const selectedVehicle = vehicles.find((v) => v.id === formData.vehicleId);
+      
       // Prepare data for saving
       const expenseData = {
         vehicleId: formData.vehicleId,
+        vehicle_id: selectedVehicle?.vehicle_id || formData.vehicleId, // Include vehicle_id field
+        vehicleNumber: selectedVehicle?.vehicleNumber || "",
+        vehicleName: selectedVehicle?.vehicleName || null,
+        businessId: currentBusiness.id,
+        ownerId: currentUser.uid,
         expenseType: formData.expenseType,
         date: formData.date,
         amount: parseFloat(formData.amount),
@@ -102,17 +130,16 @@ const AddVehicleExpenses = () => {
         billNumber: formData.billNumber || null,
         paymentMethod: formData.paymentMethod,
         createdAt: new Date(),
+        updatedAt: new Date(),
       };
 
-      // Add the vehicle details to the expense data
-      const selectedVehicle = vehicles.find((v) => v.id === formData.vehicleId);
-      if (selectedVehicle) {
-        expenseData.vehicleNumber = selectedVehicle.vehicleNumber;
-        expenseData.vehicleName = selectedVehicle.vehicleName || null;
-      }
+      // Use the correct collection path for expenses
+      const expensesCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/vehicleExpenses`;
+      console.log("Adding expense to:", expensesCollectionPath);
 
-      // Add document to 'vehicleExpenses' collection
-      await addDoc(collection(db, "vehicleExpenses"), expenseData);
+      // Add document to vehicleExpenses collection
+      const docRef = await addDoc(collection(db, expensesCollectionPath), expenseData);
+      console.log("Expense added with ID:", docRef.id);
 
       // Show success message
       toast.success("Expense added successfully");
@@ -134,7 +161,14 @@ const AddVehicleExpenses = () => {
       });
     } catch (error) {
       console.error("Error adding expense:", error);
-      toast.error("Failed to add expense. Please try again.");
+      console.error("Error code:", error.code);
+      console.error("Error message:", error.message);
+      
+      if (error.code === 'permission-denied') {
+        toast.error("Permission denied. Check your Firestore rules.");
+      } else {
+        toast.error("Failed to add expense. Please try again.");
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -160,7 +194,7 @@ const AddVehicleExpenses = () => {
                 value={formData.quantity}
                 onChange={handleChange}
                 step="0.01"
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 placeholder="e.g., 40"
               />
             </div>
@@ -177,7 +211,7 @@ const AddVehicleExpenses = () => {
                 name="odometer"
                 value={formData.odometer}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 placeholder="e.g., 45000"
               />
             </div>
@@ -199,7 +233,7 @@ const AddVehicleExpenses = () => {
                 name="serviceType"
                 value={formData.serviceType}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
               >
                 <option value="">Select service type</option>
                 <option value="regular">Regular Service</option>
@@ -223,7 +257,7 @@ const AddVehicleExpenses = () => {
                 name="odometer"
                 value={formData.odometer}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 placeholder="e.g., 45000"
               />
             </div>
@@ -240,7 +274,7 @@ const AddVehicleExpenses = () => {
                 name="serviceProvider"
                 value={formData.serviceProvider}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 placeholder="e.g., City Service Center"
               />
             </div>
@@ -262,7 +296,7 @@ const AddVehicleExpenses = () => {
                 name="serviceType"
                 value={formData.serviceType}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
               >
                 <option value="">Select repair type</option>
                 <option value="engine">Engine Repair</option>
@@ -286,7 +320,7 @@ const AddVehicleExpenses = () => {
                 name="serviceProvider"
                 value={formData.serviceProvider}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 placeholder="e.g., Sharma Auto Works"
               />
             </div>
@@ -308,7 +342,7 @@ const AddVehicleExpenses = () => {
               name="serviceProvider"
               value={formData.serviceProvider}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
               placeholder="e.g., HDFC ERGO"
             />
           </div>
@@ -328,7 +362,7 @@ const AddVehicleExpenses = () => {
               name="serviceType"
               value={formData.serviceType}
               onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
             >
               <option value="">Select tax type</option>
               <option value="road_tax">Road Tax</option>
@@ -344,22 +378,58 @@ const AddVehicleExpenses = () => {
     }
   };
 
+  // Check if user is authenticated and has business selected
+  if (!currentUser) {
+    return (
+      <div className="max-w-3xl mx-auto p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+          <div className="flex">
+            <div className="ml-3">
+              <p className="text-sm text-yellow-700">
+                Please log in to add vehicle expenses.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentBusiness?.id) {
+    return (
+      <div className="max-w-3xl mx-auto p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+          <div className="flex">
+            <div className="ml-3">
+              <p className="text-sm text-yellow-700">
+                Please select a business to add vehicle expenses.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
-      <div className="max-w-3xl mx-auto p-6 bg-white rounded-lg shadow-md flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      <div className="max-w-3xl mx-auto p-6 bg-white rounded-xl shadow-sm border border-gray-100 flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-3xl mx-auto p-6 bg-white rounded-lg shadow-md">
-      <h2 className="text-2xl font-semibold text-gray-800 mb-6">
-        Add Vehicle Expense
-      </h2>
+    <div className="max-w-3xl mx-auto p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-gray-900">Add Vehicle Expense</h2>
+        <p className="text-sm text-gray-600 mt-1">
+          Business: {currentBusiness.name || currentBusiness.id}
+        </p>
+      </div>
 
       {vehicles.length === 0 ? (
-        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg">
           <div className="flex">
             <div className="flex-shrink-0">
               <svg
@@ -376,17 +446,24 @@ const AddVehicleExpenses = () => {
             </div>
             <div className="ml-3">
               <p className="text-sm text-yellow-700">
-                No vehicles found. Please add a vehicle first before recording
-                expenses.
+                No active vehicles found. Please add a vehicle first before recording expenses.
               </p>
+              <div className="mt-3">
+                <button
+                  onClick={() => (window.location.href = "/add-vehicle")}
+                  className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 transition-colors text-sm font-medium"
+                >
+                  Add Vehicle
+                </button>
+              </div>
             </div>
           </div>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Basic Information Section */}
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h3 className="text-lg font-medium text-gray-700 mb-4">
+          <div className="bg-gray-50 p-6 rounded-lg">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
               Expense Details
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -403,14 +480,18 @@ const AddVehicleExpenses = () => {
                   name="vehicleId"
                   value={formData.vehicleId}
                   onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   required
                 >
                   <option value="">Select a vehicle</option>
                   {vehicles.map((vehicle) => (
                     <option key={vehicle.id} value={vehicle.id}>
-                      {vehicle.vehicleNumber}{" "}
+                      {vehicle.vehicleNumber || "No Number"}{" "}
                       {vehicle.vehicleName ? `(${vehicle.vehicleName})` : ""}
+                      {vehicle.manufacturer && vehicle.model 
+                        ? ` - ${vehicle.manufacturer} ${vehicle.model}`
+                        : ""
+                      }
                     </option>
                   ))}
                 </select>
@@ -429,7 +510,7 @@ const AddVehicleExpenses = () => {
                   name="expenseType"
                   value={formData.expenseType}
                   onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   required
                 >
                   <option value="fuel">Fuel</option>
@@ -455,7 +536,7 @@ const AddVehicleExpenses = () => {
                   name="date"
                   value={formData.date}
                   onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   required
                 />
               </div>
@@ -475,7 +556,7 @@ const AddVehicleExpenses = () => {
                   value={formData.amount}
                   onChange={handleChange}
                   step="0.01"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   placeholder="e.g., 2500"
                   required
                 />
@@ -498,7 +579,7 @@ const AddVehicleExpenses = () => {
                   name="billNumber"
                   value={formData.billNumber}
                   onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   placeholder="e.g., INV-12345"
                 />
               </div>
@@ -516,7 +597,7 @@ const AddVehicleExpenses = () => {
                   name="paymentMethod"
                   value={formData.paymentMethod}
                   onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 >
                   <option value="cash">Cash</option>
                   <option value="card">Card</option>
@@ -541,7 +622,7 @@ const AddVehicleExpenses = () => {
                   value={formData.description}
                   onChange={handleChange}
                   rows="3"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   placeholder="Additional details about this expense..."
                 ></textarea>
               </div>
@@ -553,10 +634,10 @@ const AddVehicleExpenses = () => {
             <button
               type="submit"
               disabled={isSubmitting}
-              className={`py-2.5 px-6 bg-primary text-white font-medium rounded-lg transition-all ${
+              className={`py-2.5 px-6 bg-blue-600 text-white font-medium rounded-lg transition-all ${
                 isSubmitting
                   ? "opacity-70 cursor-not-allowed"
-                  : "hover:opacity-90"
+                  : "hover:bg-blue-700"
               }`}
             >
               {isSubmitting ? "Adding Expense..." : "Add Expense"}
