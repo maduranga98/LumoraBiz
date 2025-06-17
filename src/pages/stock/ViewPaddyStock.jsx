@@ -12,19 +12,24 @@ import {
   updateDoc,
   doc,
 } from "firebase/firestore";
+import { useBusiness } from "../../contexts/BusinessContext";
+import { useAuth } from "../../contexts/AuthContext";
 import { toast } from "react-hot-toast";
 import ConvertToOtherModal from "./ConvertToOther";
 
 const ViewPaddyStock = () => {
+  const { currentBusiness } = useBusiness();
+  const { currentUser } = useAuth();
+
   // States
   const [stocks, setStocks] = useState([]);
   const [buyers, setBuyers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [currentBusiness, setCurrentBusiness] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("");
   const [filterBuyer, setFilterBuyer] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
   const [filterDateRange, setFilterDateRange] = useState({
     start: "",
     end: "",
@@ -36,6 +41,7 @@ const ViewPaddyStock = () => {
   const [expandedRows, setExpandedRows] = useState({});
   const [debugInfo, setDebugInfo] = useState({
     businessId: null,
+    ownerId: null,
     queryAttempted: false,
     queryResult: null,
     error: null,
@@ -46,50 +52,42 @@ const ViewPaddyStock = () => {
   const [selectedStock, setSelectedStock] = useState(null);
   const [processingStock, setProcessingStock] = useState(null);
 
-  // Get current business ID from localStorage
+  // Initialize component and check authentication
   useEffect(() => {
-    try {
-      const businessId = localStorage.getItem("currentBusinessId");
-      console.log("Business ID from localStorage:", businessId);
-      setDebugInfo((prev) => ({ ...prev, businessId }));
-
-      if (businessId) {
-        setCurrentBusiness(businessId);
-      } else {
-        // Handle case when no business is selected
-        toast.error("Please select a business first");
-        setLoading(false);
-      }
-    } catch (error) {
-      console.error("Error accessing localStorage:", error);
+    if (currentUser && currentBusiness?.id) {
       setDebugInfo((prev) => ({
         ...prev,
-        error: "localStorage error: " + error.message,
+        businessId: currentBusiness.id,
+        ownerId: currentUser.uid,
       }));
-      toast.error("Failed to load business information");
-      setLoading(false);
-    }
-  }, []);
-
-  // Fetch stocks and buyers when current business changes
-  useEffect(() => {
-    if (currentBusiness) {
-      console.log("Fetching data for business:", currentBusiness);
+      
+      console.log("User and business loaded:", {
+        userId: currentUser.uid,
+        businessId: currentBusiness.id,
+        businessName: currentBusiness.name,
+      });
+      
       fetchStocks();
       fetchBuyers();
+    } else {
+      setLoading(false);
+      console.log("Missing user or business:", {
+        hasUser: !!currentUser,
+        hasBusiness: !!currentBusiness?.id,
+      });
     }
-  }, [currentBusiness, sortField, sortDirection]);
+  }, [currentUser, currentBusiness, sortField, sortDirection]);
 
   // Calculate totals when stocks change
   useEffect(() => {
     if (stocks.length > 0) {
       calculateTotals();
     }
-  }, [stocks, filterType, filterBuyer, searchTerm, filterDateRange]);
+  }, [stocks, filterType, filterBuyer, filterStatus, searchTerm, filterDateRange]);
 
-  // Fetch paddy stocks from Firestore
+  // Fetch paddy stocks from Firestore using the correct path
   const fetchStocks = async () => {
-    if (!currentBusiness) {
+    if (!currentUser || !currentBusiness?.id) {
       setLoading(false);
       return;
     }
@@ -98,31 +96,32 @@ const ViewPaddyStock = () => {
     setError(null);
 
     try {
-      console.log("Constructing query with business ID:", currentBusiness);
-      console.log("Sort field:", sortField, "Sort direction:", sortDirection);
+      // Correct collection path for your structure
+      const stockCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/rawProcessedStock/stock`;
+      console.log("Fetching stocks from:", stockCollectionPath);
 
       setDebugInfo((prev) => ({
         ...prev,
         queryAttempted: true,
         queryParams: {
-          collection: "paddyStock",
-          businessId: currentBusiness,
+          collection: stockCollectionPath,
+          businessId: currentBusiness.id,
+          ownerId: currentUser.uid,
           sortField,
           sortDirection,
         },
       }));
 
-      // First try a simpler query to test connection
-      const testQuery = query(collection(db, "paddyStock"), limit(1));
-
-      console.log("Testing basic query first...");
+      // First test basic query access
+      const testQuery = query(collection(db, stockCollectionPath), limit(1));
+      console.log("Testing basic query access...");
+      
       const testSnapshot = await getDocs(testQuery);
       console.log("Basic query test result count:", testSnapshot.size);
 
-      // Now try the actual query
+      // Build the main query
       let stocksQuery = query(
-        collection(db, "paddyStock"),
-        where("businessId", "==", currentBusiness),
+        collection(db, stockCollectionPath),
         orderBy(sortField, sortDirection)
       );
 
@@ -159,24 +158,33 @@ const ViewPaddyStock = () => {
       setStocks(stocksList);
     } catch (error) {
       console.error("Error fetching paddy stocks:", error);
-      setError(`Failed to load purchase history: ${error.message}`);
+      console.error("Error code:", error.code);
+      console.error("Error message:", error.message);
+      
+      const errorMessage = error.code === 'permission-denied' 
+        ? "Permission denied. Check your Firestore rules."
+        : error.code === 'not-found'
+        ? "Stock collection not found."
+        : `Failed to load purchase history: ${error.message}`;
+      
+      setError(errorMessage);
       setDebugInfo((prev) => ({ ...prev, error: error.message }));
-      toast.error(`Failed to load purchase history: ${error.message}`);
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch buyers from Firestore
+  // Fetch buyers from Firestore using the correct path
   const fetchBuyers = async () => {
-    if (!currentBusiness) return;
+    if (!currentUser || !currentBusiness?.id) return;
 
     try {
-      const buyersQuery = query(
-        collection(db, "buyers"),
-        where("businessId", "==", currentBusiness)
-      );
+      // Correct collection path for buyers
+      const buyersCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/buyers`;
+      console.log("Fetching buyers from:", buyersCollectionPath);
 
+      const buyersQuery = query(collection(db, buyersCollectionPath));
       const querySnapshot = await getDocs(buyersQuery);
       console.log("Buyers query returned:", querySnapshot.size);
 
@@ -221,76 +229,107 @@ const ViewPaddyStock = () => {
   // Handle conversion submission
   const handleConversionSubmit = async (conversionData) => {
     if (!selectedStock) return;
-
+  
     setProcessingStock(selectedStock.id);
-
+  
     try {
-      // Create a conversion record
+      console.log('💾 Parent: Saving conversion data to database...');
+      
+      // Create a conversion record using the correct path
+      const conversionsPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/conversions`;
+      
       const conversionRecord = {
-        businessId: currentBusiness,
+        businessId: currentBusiness.id,
+        ownerId: currentUser.uid,
         sourceStockId: selectedStock.id,
         sourcePaddyType: selectedStock.paddyType,
         sourceQuantity: selectedStock.quantity,
         sourcePrice: selectedStock.price,
         conversionDate: new Date(),
         products: conversionData,
-        totalConvertedQuantity: Object.values(conversionData).reduce(
-          (sum, qty) => sum + qty,
-          0
-        ),
+        totalConvertedQuantity: Object.entries(conversionData)
+          .filter(([key]) => !key.includes('Electric'))
+          .reduce((sum, [_, qty]) => sum + (parseFloat(qty) || 0), 0),
         createdAt: new Date(),
         updatedAt: new Date(),
       };
-
+  
       // Add conversion record to database
       const conversionRef = await addDoc(
-        collection(db, "conversions"),
+        collection(db, conversionsPath),
         conversionRecord
       );
-
+  
       // Update the original stock to mark it as processed
-      const stockRef = doc(db, "paddyStock", selectedStock.id);
+      const stockPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/rawProcessedStock/stock`;
+      const stockRef = doc(db, stockPath, selectedStock.id);
+      
       await updateDoc(stockRef, {
+        status: "processed",
         processed: true,
         conversionId: conversionRef.id,
         processedAt: new Date(),
         updatedAt: new Date(),
       });
-
-      // Add individual product records to inventory
-      const productPromises = Object.entries(conversionData).map(
-        async ([productType, quantity]) => {
-          if (quantity > 0) {
+  
+      // Add individual product records to processed products inventory
+      const processedProductsPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/processedProducts`;
+      
+      const productPromises = Object.entries(conversionData)
+        .filter(([key]) => !key.includes('Electric'))
+        .map(async ([productType, quantity]) => {
+          const qty = parseFloat(quantity) || 0;
+          if (qty > 0) {
             const productRecord = {
-              businessId: currentBusiness,
+              businessId: currentBusiness.id,
+              ownerId: currentUser.uid,
               productType,
-              quantity,
+              quantity: qty,
               sourceStockId: selectedStock.id,
               conversionId: conversionRef.id,
               sourceType: "paddy_conversion",
+              status: "available",
               createdAt: new Date(),
               updatedAt: new Date(),
             };
-
-            return addDoc(collection(db, "processedProducts"), productRecord);
+  
+            return addDoc(collection(db, processedProductsPath), productRecord);
           }
-        }
-      );
-
+        });
+  
       await Promise.all(productPromises.filter(Boolean));
-
+  
+      console.log('✅ Parent: Data saved successfully!');
       toast.success("Paddy stock processed successfully!");
-
+  
       // Refresh the stocks to show updated status
       fetchStocks();
+      
+      // 🎯 KEY CHANGE: DON'T close the modal here!
+      // Let the child component (ConvertToOtherModal) handle the modal flow
+      // The child will now show PriceCalculation component
+      
+      console.log('🧮 Parent: Allowing child to show PriceCalculation...');
+      
     } catch (error) {
       console.error("Error processing stock:", error);
-      toast.error(`Failed to process stock: ${error.message}`);
+      console.error("Error code:", error.code);
+      
+      const errorMessage = error.code === 'permission-denied'
+        ? "Permission denied. Check your Firestore rules."
+        : `Failed to process stock: ${error.message}`;
+      
+      toast.error(errorMessage);
     } finally {
       setProcessingStock(null);
     }
   };
-
+  const handleModalClose = () => {
+    console.log('🚪 Parent: Modal closing...');
+    setIsConvertModalOpen(false);
+    setSelectedStock(null);
+  };
+  
   // Handle sort change
   const handleSortChange = (field) => {
     if (field === sortField) {
@@ -308,6 +347,7 @@ const ViewPaddyStock = () => {
     setSearchTerm("");
     setFilterType("");
     setFilterBuyer("");
+    setFilterStatus("");
     setFilterDateRange({ start: "", end: "" });
   };
 
@@ -362,6 +402,11 @@ const ViewPaddyStock = () => {
       // Buyer filter
       const matchesBuyer = filterBuyer === "" || stock.buyerId === filterBuyer;
 
+      // Status filter
+      const matchesStatus = filterStatus === "" || 
+        (filterStatus === "processed" && (stock.processed || stock.status === "processed")) ||
+        (filterStatus === "available" && (!stock.processed && stock.status !== "processed"));
+
       // Date range filter
       let matchesDateRange = true;
       if (filterDateRange.start) {
@@ -375,7 +420,7 @@ const ViewPaddyStock = () => {
         matchesDateRange = matchesDateRange && stock.createdAt <= endDate;
       }
 
-      return matchesSearch && matchesType && matchesBuyer && matchesDateRange;
+      return matchesSearch && matchesType && matchesBuyer && matchesStatus && matchesDateRange;
     });
   };
 
@@ -423,6 +468,39 @@ const ViewPaddyStock = () => {
     );
   };
 
+  // Check authentication
+  if (!currentUser) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+          <div className="flex">
+            <div className="ml-3">
+              <p className="text-sm text-yellow-700">
+                Please log in to view paddy stock.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentBusiness?.id) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+          <div className="flex">
+            <div className="ml-3">
+              <p className="text-sm text-yellow-700">
+                Please select a business to view paddy stock.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Get filtered and sorted stocks
   const filteredStocks = getFilteredStocks();
 
@@ -431,9 +509,10 @@ const ViewPaddyStock = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">
+          <h1 className="text-2xl font-bold text-gray-900">
             Paddy Purchase History
           </h1>
+         
           <p className="text-gray-600 mt-1">
             Track and manage all your paddy stock purchases
           </p>
@@ -443,7 +522,7 @@ const ViewPaddyStock = () => {
         <div className="flex space-x-2 mt-4 md:mt-0">
           <button
             onClick={refreshData}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm flex items-center transition-colors"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm flex items-center transition-colors"
           >
             <svg
               className="w-4 h-4 mr-1"
@@ -465,13 +544,13 @@ const ViewPaddyStock = () => {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-white shadow-sm rounded-lg p-6">
+        <div className="bg-white shadow-sm rounded-xl border border-gray-100 p-6">
           <p className="text-sm text-gray-500 mb-1">Total Quantity</p>
           <p className="text-2xl font-bold text-gray-900">
             {totalQuantity.toFixed(2)} kg
           </p>
         </div>
-        <div className="bg-white shadow-sm rounded-lg p-6">
+        <div className="bg-white shadow-sm rounded-xl border border-gray-100 p-6">
           <p className="text-sm text-gray-500 mb-1">Total Value</p>
           <p className="text-2xl font-bold text-gray-900">
             {formatCurrency(totalValue)}
@@ -480,8 +559,8 @@ const ViewPaddyStock = () => {
       </div>
 
       {/* Filter Section */}
-      <div className="bg-white shadow-sm rounded-lg p-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="bg-white shadow-sm rounded-xl border border-gray-100 p-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           {/* Search */}
           <div>
             <div className="relative">
@@ -501,7 +580,7 @@ const ViewPaddyStock = () => {
               <input
                 type="text"
                 placeholder="Search..."
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-md w-full focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                className="pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -513,7 +592,7 @@ const ViewPaddyStock = () => {
             <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
-              className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              className="block w-full border border-gray-300 rounded-lg shadow-sm py-2.5 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
             >
               <option value="">All Paddy Types</option>
               {getPaddyTypes().map((type) => (
@@ -529,7 +608,7 @@ const ViewPaddyStock = () => {
             <select
               value={filterBuyer}
               onChange={(e) => setFilterBuyer(e.target.value)}
-              className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              className="block w-full border border-gray-300 rounded-lg shadow-sm py-2.5 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
             >
               <option value="">All Buyers</option>
               {buyers.map((buyer) => (
@@ -537,6 +616,19 @@ const ViewPaddyStock = () => {
                   {buyer.name}
                 </option>
               ))}
+            </select>
+          </div>
+
+          {/* Status Filter */}
+          <div>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="block w-full border border-gray-300 rounded-lg shadow-sm py-2.5 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            >
+              <option value="">All Status</option>
+              <option value="available">Available</option>
+              <option value="processed">Processed</option>
             </select>
           </div>
 
@@ -549,7 +641,7 @@ const ViewPaddyStock = () => {
                 placeholder="Start Date"
                 value={filterDateRange.start}
                 onChange={handleDateFilterChange}
-                className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                className="block w-full border border-gray-300 rounded-lg shadow-sm py-2.5 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
               />
               <input
                 type="date"
@@ -557,7 +649,7 @@ const ViewPaddyStock = () => {
                 placeholder="End Date"
                 value={filterDateRange.end}
                 onChange={handleDateFilterChange}
-                className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                className="block w-full border border-gray-300 rounded-lg shadow-sm py-2.5 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
               />
             </div>
           </div>
@@ -567,12 +659,13 @@ const ViewPaddyStock = () => {
         {(searchTerm ||
           filterType ||
           filterBuyer ||
+          filterStatus ||
           filterDateRange.start ||
           filterDateRange.end) && (
           <div className="mt-4 flex justify-end">
             <button
               onClick={resetFilters}
-              className="text-sm text-indigo-600 hover:text-indigo-800"
+              className="text-sm text-blue-600 hover:text-blue-800"
             >
               Reset Filters
             </button>
@@ -582,7 +675,7 @@ const ViewPaddyStock = () => {
 
       {/* Error Display */}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
           <h3 className="font-medium">Error loading data</h3>
           <p className="text-sm">{error}</p>
         </div>
@@ -591,38 +684,10 @@ const ViewPaddyStock = () => {
       {/* Main Content */}
       {loading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
-        </div>
-      ) : !currentBusiness ? (
-        <div className="bg-white rounded-lg shadow-sm p-8 text-center">
-          <svg
-            className="mx-auto h-12 w-12 text-gray-400"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          <h3 className="mt-2 text-lg font-medium text-gray-900">
-            No business selected
-          </h3>
-          <p className="mt-1 text-sm text-gray-500">
-            Please select a business from the business selector.
-          </p>
-          {process.env.NODE_ENV === "development" && (
-            <div className="mt-4 p-3 bg-gray-100 rounded text-left text-xs">
-              <p className="font-bold">Debug Info:</p>
-              <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
-            </div>
-          )}
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
         </div>
       ) : stocks.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-sm p-8 text-center">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center">
           <svg
             className="mx-auto h-12 w-12 text-gray-400"
             fill="none"
@@ -644,7 +709,7 @@ const ViewPaddyStock = () => {
           </p>
           <button
             onClick={() => (window.location.href = "/add-paddy-stock")}
-            className="mt-4 inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            className="mt-4 inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
             <svg
               className="-ml-1 mr-2 h-5 w-5"
@@ -659,27 +724,22 @@ const ViewPaddyStock = () => {
             </svg>
             Add New Paddy Stock
           </button>
-          {process.env.NODE_ENV === "development" && (
-            <div className="mt-4 p-3 bg-gray-100 rounded text-left text-xs">
-              <p className="font-bold">Debug Info:</p>
-              <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
-            </div>
-          )}
+          
         </div>
       ) : filteredStocks.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-sm p-6 text-center">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 text-center">
           <p className="text-gray-500">
             No purchases match your search criteria.
           </p>
           <button
-            className="mt-4 text-indigo-600 hover:text-indigo-900 text-sm font-medium"
+            className="mt-4 text-blue-600 hover:text-blue-900 text-sm font-medium"
             onClick={resetFilters}
           >
             Clear Filters
           </button>
         </div>
       ) : (
-        <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+        <div className="bg-white shadow-sm rounded-xl border border-gray-100 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -825,7 +885,7 @@ const ViewPaddyStock = () => {
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center">
-                          {stock.processed ? (
+                          {stock.processed || stock.status === "processed" ? (
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                               <svg
                                 className="w-3 h-3 mr-1"
@@ -853,17 +913,17 @@ const ViewPaddyStock = () => {
                                   clipRule="evenodd"
                                 />
                               </svg>
-                              Pending
+                              Available
                             </span>
                           )}
                         </div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
-                        {!stock.processed ? (
+                        {!(stock.processed || stock.status === "processed") ? (
                           <button
                             onClick={() => handleProcessStock(stock)}
                             disabled={processingStock === stock.id}
-                            className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-lg text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           >
                             {processingStock === stock.id ? (
                               <>
@@ -911,10 +971,10 @@ const ViewPaddyStock = () => {
                               <h4 className="text-sm font-medium text-gray-700 mb-2">
                                 Transaction Details
                               </h4>
-                              <div className="bg-white p-3 rounded-md shadow-sm space-y-2">
+                              <div className="bg-white p-3 rounded-lg shadow-sm space-y-2">
                                 <div>
                                   <span className="text-xs text-gray-500">
-                                    Transaction ID:
+                                    Stock ID:
                                   </span>
                                   <p className="text-sm text-gray-800 font-mono">
                                     {stock.id}
@@ -948,7 +1008,7 @@ const ViewPaddyStock = () => {
                                     })}
                                   </p>
                                 </div>
-                                {stock.processed && stock.processedAt && (
+                                {(stock.processed || stock.status === "processed") && stock.processedAt && (
                                   <div>
                                     <span className="text-xs text-gray-500">
                                       Processed:
@@ -967,13 +1027,23 @@ const ViewPaddyStock = () => {
                                     </p>
                                   </div>
                                 )}
+                                {stock.stockType && (
+                                  <div>
+                                    <span className="text-xs text-gray-500">
+                                      Stock Type:
+                                    </span>
+                                    <p className="text-sm text-gray-800 capitalize">
+                                      {stock.stockType}
+                                    </p>
+                                  </div>
+                                )}
                               </div>
                             </div>
                             <div>
                               <h4 className="text-sm font-medium text-gray-700 mb-2">
                                 Additional Information
                               </h4>
-                              <div className="bg-white p-3 rounded-md shadow-sm">
+                              <div className="bg-white p-3 rounded-lg shadow-sm space-y-2">
                                 <div>
                                   <span className="text-xs text-gray-500">
                                     Notes:
@@ -983,12 +1053,32 @@ const ViewPaddyStock = () => {
                                   </p>
                                 </div>
                                 {stock.conversionId && (
-                                  <div className="mt-2">
+                                  <div>
                                     <span className="text-xs text-gray-500">
                                       Conversion ID:
                                     </span>
                                     <p className="text-sm text-gray-800 font-mono">
                                       {stock.conversionId}
+                                    </p>
+                                  </div>
+                                )}
+                                {stock.buyerId && (
+                                  <div>
+                                    <span className="text-xs text-gray-500">
+                                      Buyer ID:
+                                    </span>
+                                    <p className="text-sm text-gray-800 font-mono">
+                                      {stock.buyerId}
+                                    </p>
+                                  </div>
+                                )}
+                                {stock.createdBy && (
+                                  <div>
+                                    <span className="text-xs text-gray-500">
+                                      Created By:
+                                    </span>
+                                    <p className="text-sm text-gray-800 font-mono">
+                                      {stock.createdBy}
                                     </p>
                                   </div>
                                 )}
@@ -1008,13 +1098,11 @@ const ViewPaddyStock = () => {
 
       {/* Convert to Other Modal */}
       <ConvertToOtherModal
-        isOpen={isConvertModalOpen}
-        onClose={() => {
-          setIsConvertModalOpen(false);
-          setSelectedStock(null);
-        }}
-        onSubmit={handleConversionSubmit}
-      />
+      isOpen={isConvertModalOpen}
+      onClose={handleModalClose}  // 🔧 Use the new close handler
+      stock={selectedStock}
+      onSubmit={handleConversionSubmit}  // This will save data but NOT close modal
+    />
     </div>
   );
 };

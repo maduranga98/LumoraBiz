@@ -18,6 +18,7 @@ const AddingEmployees = () => {
     role: "",
     salaryType: "",
     payRate: "",
+    email: "", // Added email field for sales reps
   });
 
   // Image states
@@ -240,6 +241,12 @@ const AddingEmployees = () => {
       return;
     }
 
+    // Additional validation for sales reps
+    if (formData.role === "sales_rep" && !formData.email) {
+      toast.error("Email is required for Sales Representatives");
+      return;
+    }
+
     // Validate pay rate
     const payRateNum = parseFloat(formData.payRate);
     if (isNaN(payRateNum) || payRateNum <= 0) {
@@ -313,6 +320,7 @@ const AddingEmployees = () => {
         role: formData.role,
         salaryType: formData.salaryType,
         payRate: parseFloat(formData.payRate),
+        email: formData.email || null,
         images: imageUrls,
         employeeId,
         businessId,
@@ -322,7 +330,39 @@ const AddingEmployees = () => {
         status: "active",
       };
 
+      // Save to employees collection
       await setDoc(employeeDocRef, employeeData);
+
+      // If role is Sales Representative, also save to salesReps collection
+      if (formData.role === "sales_rep") {
+        const salesRepsCollectionRef = collection(
+          db,
+          "owners",
+          uid,
+          "businesses",
+          businessId,
+          "salesReps"
+        );
+        const salesRepDocRef = doc(salesRepsCollectionRef);
+        const repId = salesRepDocRef.id;
+
+        const salesRepData = {
+          repId,
+          name: formData.employeeName,
+          phone: formData.mobile1,
+          email: formData.email,
+          imageUrl: imageUrls.employeePhoto || null,
+          employeeId, // Reference to the employee record
+          businessId,
+          ownerId: uid,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          status: "active",
+        };
+
+        await setDoc(salesRepDocRef, salesRepData);
+        console.log("Sales rep saved with ID:", repId);
+      }
 
       toast.success("Employee registered successfully");
 
@@ -336,6 +376,7 @@ const AddingEmployees = () => {
         role: "",
         salaryType: "",
         payRate: "",
+        email: "",
       });
       setImages({
         employeePhoto: null,
@@ -632,6 +673,24 @@ const AddingEmployees = () => {
                 ))}
               </select>
             </div>
+
+            {/* Conditional Email Field for Sales Reps */}
+            {formData.role === "sales_rep" && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Email Address <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-colors"
+                  placeholder="Enter email address"
+                  required
+                />
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">

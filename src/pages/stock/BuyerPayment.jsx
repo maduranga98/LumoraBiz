@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Trash2, CreditCard, Banknote, FileText } from "lucide-react";
+import { db } from "../../services/firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { useBusiness } from "../../contexts/BusinessContext";
+import { useAuth } from "../../contexts/AuthContext";
+import { toast } from "react-hot-toast";
 import Input from "../../components/Input";
 
 const Select = ({
@@ -12,14 +17,14 @@ const Select = ({
 }) => (
   <div className="flex flex-col">
     {label && (
-      <label className="text-muted font-medium mb-1">
+      <label className="text-gray-700 font-medium mb-1">
         {label} {required && <span className="text-red-500">*</span>}
       </label>
     )}
     <select
       value={value}
       onChange={onChange}
-      className={`border-2 border-muted focus:ring-primary focus:border-primary p-2 rounded-lg outline-none ${
+      className={`border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 p-2.5 rounded-lg outline-none ${
         error ? "border-red-500" : ""
       }`}
     >
@@ -38,17 +43,23 @@ export const BuyerPayment = ({
   buyerId,
   buyerName,
   totalAmount,
+  stockId,
+  category = "paddy_purchase",
   onPaymentComplete,
   onCancel,
 }) => {
+  const { currentBusiness } = useBusiness();
+  const { currentUser } = useAuth();
+
   const [payments, setPayments] = useState([
     { id: 1, type: "", amount: "", chequeDetails: {} },
   ]);
   const [totalPaid, setTotalPaid] = useState(0);
   const [remainingAmount, setRemainingAmount] = useState(totalAmount || 0);
   const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
 
-  // Default values for demo purposes
+  // Buyer data with fallbacks
   const buyerData = {
     id: buyerId || "B001",
     name: buyerName || "John Doe",
@@ -59,6 +70,7 @@ export const BuyerPayment = ({
     { value: "cash", label: "Cash", icon: Banknote },
     { value: "cheque", label: "Cheque", icon: FileText },
     { value: "credit", label: "Credit", icon: CreditCard },
+    { value: "bank_transfer", label: "Bank Transfer", icon: CreditCard },
   ];
 
   useEffect(() => {
@@ -141,40 +153,120 @@ export const BuyerPayment = ({
       newErrors.totalAmount = "Total payment cannot exceed the due amount";
     }
 
+    if (totalPaid === 0) {
+      newErrors.totalAmount = "At least one payment method must have an amount";
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = () => {
-    if (validateForm()) {
+  const handleSubmit = async () => {
+    if (!validateForm()) {
+      return;
+    }
+
+    if (!currentUser || !currentBusiness?.id) {
+      toast.error("Authentication error. Please sign in again.");
+      return;
+    }
+
+    if (!buyerId) {
+      toast.error("Buyer ID is required");
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      // Prepare payment methods data
+      const paymentMethods = payments
+        .filter((p) => p.type && p.amount)
+        .map((payment) => {
+          const method = {
+            type: payment.type,
+            amount: parseFloat(payment.amount),
+          };
+
+          // Add cheque details if payment type is cheque
+          if (payment.type === "cheque" && payment.chequeDetails) {
+            method.chequeDetails = {
+              number: payment.chequeDetails.number,
+              bank: payment.chequeDetails.bank,
+              branch: payment.chequeDetails.branch,
+              date: payment.chequeDetails.date,
+            };
+          }
+
+          return method;
+        });
+
+      // Prepare the payment document data
       const paymentData = {
         buyerId: buyerData.id,
         buyerName: buyerData.name,
+        amount: totalPaid,
+        methods: paymentMethods,
+        date: new Date().toISOString().split("T")[0], // YYYY-MM-DD format
+        category: category,
+        relatedStockId: stockId,
         totalAmount: buyerData.totalAmount,
-        payments: payments.filter((p) => p.type && p.amount),
-        totalPaid,
-        remainingAmount,
-        paymentDate: new Date().toISOString(),
+        remainingAmount: remainingAmount,
+        businessId: currentBusiness.id,
+        ownerId: currentUser.uid,
+        createdBy: currentUser.uid,
+        timestamp: serverTimestamp(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       };
 
-      console.log("Payment Data:", paymentData);
+      console.log("Saving payment data:", paymentData);
 
-      // Call the parent component's callback if provided
+      // Save to buyer-specific payments collection
+      const buyerPaymentsPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/buyers/${buyerData.id}/payments`;
+      console.log("Saving to buyer payments:", buyerPaymentsPath);
+      
+      const buyerPaymentRef = await addDoc(
+        collection(db, buyerPaymentsPath),
+        paymentData
+      );
+
+      // Save to all payments collection with reference to buyer payment
+      const allPaymentsPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/allPayments`;
+      console.log("Saving to all payments:", allPaymentsPath);
+      
+      await addDoc(collection(db, allPaymentsPath), {
+        ...paymentData,
+        buyerPaymentId: buyerPaymentRef.id, // Reference to the payment in buyer's collection
+      });
+
+      toast.success("Payment recorded successfully!");
+
+      // Call the parent component's callback
       if (onPaymentComplete) {
-        onPaymentComplete(paymentData);
-      } else {
-        // Fallback for demo purposes
-        alert("Payment recorded successfully!");
+        onPaymentComplete({
+          ...paymentData,
+          paymentId: buyerPaymentRef.id,
+        });
       }
+    } catch (error) {
+      console.error("Error saving payment:", error);
+      console.error("Error code:", error.code);
+      console.error("Error message:", error.message);
+      
+      if (error.code === 'permission-denied') {
+        toast.error("Permission denied. Check your Firestore rules.");
+      } else {
+        toast.error("Failed to record payment. Please try again.");
+      }
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleCancel = () => {
     if (onCancel) {
       onCancel();
-    } else {
-      // Fallback for demo purposes
-      window.history.back();
     }
   };
 
@@ -183,12 +275,32 @@ export const BuyerPayment = ({
     return paymentType ? paymentType.icon : Banknote;
   };
 
+  // Check if user is authenticated and has business selected
+  if (!currentUser || !currentBusiness?.id) {
+    return (
+      <div className="max-w-4xl mx-auto p-6 bg-white">
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+          <div className="flex">
+            <div className="ml-3">
+              <p className="text-sm text-yellow-700">
+                Please ensure you are logged in and have selected a business.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto p-6 bg-white">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Buyer Payment</h1>
         <div className="h-1 w-20 bg-blue-500 rounded"></div>
+        <p className="text-sm text-gray-600 mt-2">
+          Business: {currentBusiness.name || currentBusiness.id}
+        </p>
       </div>
 
       {/* Buyer Information */}
@@ -218,10 +330,20 @@ export const BuyerPayment = ({
               Total Amount Due
             </label>
             <div className="bg-white px-4 py-2 rounded-lg border font-semibold text-blue-600">
-              Rs. {buyerData.totalAmount.toLocaleString()}
+              Rs. {buyerData.totalAmount.toLocaleString('en-IN')}
             </div>
           </div>
         </div>
+        {category && (
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-gray-600 mb-1">
+              Payment Category
+            </label>
+            <div className="bg-white px-4 py-2 rounded-lg border">
+              {category.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Payment Methods */}
@@ -232,7 +354,8 @@ export const BuyerPayment = ({
           </h2>
           <button
             onClick={addPaymentMethod}
-            className="flex items-center space-x-2 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
+            disabled={submitting}
+            className="flex items-center space-x-2 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
           >
             <Plus className="h-4 w-4" />
             <span>Add Payment</span>
@@ -260,7 +383,8 @@ export const BuyerPayment = ({
                   {payments.length > 1 && (
                     <button
                       onClick={() => removePaymentMethod(payment.id)}
-                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                      disabled={submitting}
+                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -282,13 +406,15 @@ export const BuyerPayment = ({
                   </div>
                   <div className="flex flex-col">
                     <Input
-                      label="Amount"
+                      label="Amount (Rs.)"
                       type="number"
                       value={payment.amount}
                       onChange={(e) =>
                         updatePayment(payment.id, "amount", e.target.value)
                       }
                       placeholder="Enter amount"
+                      step="0.01"
+                      min="0"
                     />
                     {errors[`payment_${payment.id}_amount`] && (
                       <p className="text-red-500 text-xs mt-1">
@@ -304,7 +430,7 @@ export const BuyerPayment = ({
                     <h4 className="text-md font-medium text-gray-700 mb-3">
                       Cheque Details
                     </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       <div className="flex flex-col">
                         <Input
                           label="Cheque Number"
@@ -398,7 +524,7 @@ export const BuyerPayment = ({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white rounded-lg p-4 text-center">
             <div className="text-2xl font-bold text-blue-600">
-              Rs. {totalPaid.toLocaleString()}
+              Rs. {totalPaid.toLocaleString('en-IN')}
             </div>
             <div className="text-sm text-gray-600">Total Paid</div>
           </div>
@@ -408,7 +534,7 @@ export const BuyerPayment = ({
                 remainingAmount < 0 ? "text-red-600" : "text-green-600"
               }`}
             >
-              Rs. {Math.abs(remainingAmount).toLocaleString()}
+              Rs. {Math.abs(remainingAmount).toLocaleString('en-IN')}
             </div>
             <div className="text-sm text-gray-600">
               {remainingAmount < 0 ? "Overpaid" : "Remaining"}
@@ -416,7 +542,7 @@ export const BuyerPayment = ({
           </div>
           <div className="bg-white rounded-lg p-4 text-center">
             <div className="text-2xl font-bold text-gray-800">
-              Rs. {buyerData.totalAmount.toLocaleString()}
+              Rs. {buyerData.totalAmount.toLocaleString('en-IN')}
             </div>
             <div className="text-sm text-gray-600">Total Due</div>
           </div>
@@ -432,13 +558,22 @@ export const BuyerPayment = ({
       <div className="flex space-x-4">
         <button
           onClick={handleSubmit}
-          className="flex-1 bg-blue-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-600 transition-colors"
+          disabled={submitting}
+          className="flex-1 bg-blue-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
         >
-          Record Payment
+          {submitting ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+              Recording Payment...
+            </>
+          ) : (
+            "Record Payment"
+          )}
         </button>
         <button
           onClick={handleCancel}
-          className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+          disabled={submitting}
+          className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
         >
           Cancel
         </button>
