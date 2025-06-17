@@ -17,16 +17,16 @@
 │   │   └── vehicleExpenses/{vehicleExpensesId}: { vehicleId, type} (done)
 │   ├── stock
 │   │   ├── paddy, rice, hunu sahal, kadunu sahal, rice polish, dahaiya, flour - total stock
-│   │   ├── rawProcessedStock/{stockId}: { buyerId, item, quantity, type(paddy/rice), paymentDetails[], date }
+│   │   ├── rawProcessedStock/{stockId}: { buyerId, item, quantity, type(paddy/rice), paymentDetails[], date } (done)
 │   │   ├── baggedStock/{bagId}: { sizeKg, quantity, riceType, createdFromStockId }
 │   │   └── materialStock/{itemId}: { type(bag/thread/paper), quantity, unit, addedDate }
 │   ├── buyers/{buyerId}: { name, contact, address } (done)
-│   │   └── payments/{paymentId}: { type(cash/cheque/credit/mixed), amount, date, note }
-│   ├── salesReps/{repId}: { name, phone, email, assignedRoutes[] }
+│   │   └── payments/{paymentId}: { type(cash/cheque/credit/mixed), amount, date, note }(done)
+│   ├── salesReps/{repId}: { name, phone, email, assignedRoutes[] }(done)
 │   ├── customers/{customerId}: {  name, phone, location, routeId, registeredDate } (done)
 │   │   ├── purchases/{purchaseId}: { date, items[], total, paymentStatus, paymentType }
 │   │   └── payments/{paymentId}: { amount, method, date, linkedPurchaseId }
-│   ├── routes/{routeId}: { name, areas[] }
+│   ├── routes/{routeId}: { name, areas[] }(done)
 │   ├── loadings/{loadingId}: { repId, vehicleId, routeId, date, items[], status }
 │   ├── dailyCollections/{docId}: { repId, date, routeId, vehicleId, cashCollected, chequeCollected, creditPending, totalSales, totalItemsSold[] }
 │   ├── visitLogs/{logId}: { date, repId, routeId, customerId, visited, notes }

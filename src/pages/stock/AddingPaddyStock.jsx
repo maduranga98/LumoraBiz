@@ -1,18 +1,24 @@
 import React, { useState, useEffect } from "react";
-import { db, auth } from "../../services/firebase";
+import { db } from "../../services/firebase";
 import {
   collection,
   query,
-  where,
   getDocs,
   addDoc,
   serverTimestamp,
+  doc,
+  updateDoc,
 } from "firebase/firestore";
+import { useBusiness } from "../../contexts/BusinessContext";
+import { useAuth } from "../../contexts/AuthContext";
 import { toast } from "react-hot-toast";
 import Modal from "../../components/Modal";
 import { BuyerPayment } from "./BuyerPayment";
 
 export const AddingPaddyStock = () => {
+  const { currentBusiness } = useBusiness();
+  const { currentUser } = useAuth();
+
   // States
   const [buyers, setBuyers] = useState([]);
   const [paddyTypes, setPaddyTypes] = useState([
@@ -25,7 +31,7 @@ export const AddingPaddyStock = () => {
     "Other",
   ]);
   const [loading, setLoading] = useState(true);
-  const [currentBusiness, setCurrentBusiness] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     buyerId: "",
     buyerName: "",
@@ -40,39 +46,29 @@ export const AddingPaddyStock = () => {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [savedStockData, setSavedStockData] = useState(null);
 
-  // Get current business ID from localStorage
+  // Fetch buyers when component mounts
   useEffect(() => {
-    const businessId = localStorage.getItem("currentBusinessId");
-    if (businessId) {
-      setCurrentBusiness(businessId);
+    if (currentUser && currentBusiness?.id) {
+      fetchBuyers();
     } else {
-      // Handle case when no business is selected
-      toast.error("Please select a business first");
       setLoading(false);
     }
-  }, []);
-
-  // Fetch buyers when current business changes
-  useEffect(() => {
-    if (currentBusiness) {
-      fetchBuyers();
-    }
-  }, [currentBusiness]);
+  }, [currentUser, currentBusiness]);
 
   // Fetch buyers from Firestore
   const fetchBuyers = async () => {
-    if (!currentBusiness) {
+    if (!currentUser || !currentBusiness?.id) {
       setLoading(false);
       return;
     }
 
     setLoading(true);
     try {
-      const buyersQuery = query(
-        collection(db, "buyers"),
-        where("businessId", "==", currentBusiness)
-      );
+      // Correct collection path for your structure
+      const buyersCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/buyers`;
+      console.log("Fetching buyers from:", buyersCollectionPath);
 
+      const buyersQuery = query(collection(db, buyersCollectionPath));
       const querySnapshot = await getDocs(buyersQuery);
       const buyersList = [];
 
@@ -83,10 +79,20 @@ export const AddingPaddyStock = () => {
         });
       });
 
+      console.log("Fetched buyers:", buyersList);
       setBuyers(buyersList);
     } catch (error) {
       console.error("Error fetching buyers:", error);
-      toast.error("Failed to load buyers data");
+      console.error("Error code:", error.code);
+      console.error("Error message:", error.message);
+      
+      if (error.code === 'permission-denied') {
+        toast.error("Permission denied. Check your Firestore rules.");
+      } else if (error.code === 'not-found') {
+        toast.error("Buyers collection not found.");
+      } else {
+        toast.error("Failed to load buyers data");
+      }
     } finally {
       setLoading(false);
     }
@@ -160,38 +166,84 @@ export const AddingPaddyStock = () => {
       return;
     }
 
-    if (!currentBusiness) {
+    if (!currentUser) {
+      toast.error("Authentication error. Please sign in again.");
+      return;
+    }
+
+    if (!currentBusiness?.id) {
       toast.error("No business selected");
       return;
     }
 
+    setSubmitting(true);
+
     try {
-      const uid = auth.currentUser?.uid;
-      if (!uid) {
-        toast.error("Authentication error. Please sign in again.");
-        return;
-      }
+      const totalAmount = parseFloat(formData.quantity) * parseFloat(formData.price);
+      const finalPaddyType = formData.paddyType === "Other" ? customPaddyType : formData.paddyType;
 
-      const totalAmount =
-        parseFloat(formData.quantity) * parseFloat(formData.price);
-
-      const stockData = {
+      // First, create purchase record in buyer's subcollection
+      const purchaseData = {
         buyerId: formData.buyerId,
         buyerName: formData.buyerName,
-        paddyType:
-          formData.paddyType === "Other" ? customPaddyType : formData.paddyType,
+        paddyType: finalPaddyType,
         quantity: parseFloat(formData.quantity),
         price: parseFloat(formData.price),
         totalAmount: totalAmount,
         notes: formData.notes || null,
-        businessId: currentBusiness,
-        createdBy: uid,
+        businessId: currentBusiness.id,
+        ownerId: currentUser.uid,
+        purchaseType: "paddy_stock",
+        status: "completed",
+        paymentId: null, // Will be updated when payment is recorded
+        stockId: null, // Will be updated after stock creation
+        createdBy: currentUser.uid,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
 
-      await addDoc(collection(db, "paddyStock"), stockData);
-      toast.success("Paddy stock added successfully");
+      // Add purchase to buyer's purchases subcollection
+      const purchaseCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/buyers/${formData.buyerId}/purchases`;
+      console.log("Adding purchase to:", purchaseCollectionPath);
+      
+      const purchaseDocRef = await addDoc(collection(db, purchaseCollectionPath), purchaseData);
+      const purchaseId = purchaseDocRef.id;
+
+      // Then, create stock record with purchaseId reference
+      const stockData = {
+        buyerId: formData.buyerId,
+        buyerName: formData.buyerName,
+        paddyType: finalPaddyType,
+        quantity: parseFloat(formData.quantity),
+        price: parseFloat(formData.price),
+        totalAmount: totalAmount,
+        notes: formData.notes || null,
+        businessId: currentBusiness.id,
+        ownerId: currentUser.uid,
+        stockType: "raw", // Indicates this is raw paddy stock
+        status: "available", // Available, processed, sold
+        purchaseId: purchaseId, // Reference to purchase record
+        paymentId: null, // Will be updated when payment is recorded
+        createdBy: currentUser.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      // Use the correct collection path for stock
+      const stockCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/rawProcessedStock/stock`;
+      console.log("Adding stock to:", stockCollectionPath);
+
+      const stockDocRef = await addDoc(collection(db, stockCollectionPath), stockData);
+      const stockId = stockDocRef.id;
+
+      // Update purchase record with stockId
+      const purchaseDocPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/buyers/${formData.buyerId}/purchases/${purchaseId}`;
+      await updateDoc(doc(db, purchaseDocPath), {
+        stockId: stockId,
+        updatedAt: serverTimestamp(),
+      });
+
+      toast.success("Paddy stock and purchase record added successfully");
 
       // Save stock data and open payment modal
       setSavedStockData({
@@ -199,28 +251,61 @@ export const AddingPaddyStock = () => {
         buyerName: formData.buyerName,
         totalAmount: totalAmount,
         stockData: stockData,
+        stockId: stockId,
+        purchaseId: purchaseId,
       });
       setIsPaymentModalOpen(true);
     } catch (error) {
       console.error("Error adding paddy stock:", error);
-      toast.error("Failed to add paddy stock. Please try again.");
+      console.error("Error code:", error.code);
+      console.error("Error message:", error.message);
+      
+      if (error.code === 'permission-denied') {
+        toast.error("Permission denied. Check your Firestore rules.");
+      } else {
+        toast.error("Failed to add paddy stock. Please try again.");
+      }
+    } finally {
+      setSubmitting(false);
     }
   };
 
   // Handle payment completion
   const handlePaymentComplete = async (paymentData) => {
     try {
-      // Save payment data to Firebase
-      await addDoc(collection(db, "payments"), {
+      // Save payment data to Firebase using correct path
+      const paymentsCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/payments`;
+      
+      const paymentRecord = {
         ...paymentData,
         type: "stock_purchase",
         stockReference: savedStockData?.stockData,
-        businessId: currentBusiness,
-        createdBy: auth.currentUser?.uid,
+        stockId: savedStockData?.stockId,
+        purchaseId: savedStockData?.purchaseId,
+        businessId: currentBusiness.id,
+        ownerId: currentUser.uid,
+        createdBy: currentUser.uid,
         createdAt: serverTimestamp(),
+      };
+
+      const paymentDocRef = await addDoc(collection(db, paymentsCollectionPath), paymentRecord);
+      const paymentId = paymentDocRef.id;
+
+      // Update stock record with paymentId
+      const stockDocPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/rawProcessedStock/stock/${savedStockData.stockId}`;
+      await updateDoc(doc(db, stockDocPath), {
+        paymentId: paymentId,
+        updatedAt: serverTimestamp(),
       });
 
-      toast.success("Payment recorded successfully!");
+      // Update purchase record with paymentId
+      const purchaseDocPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/buyers/${savedStockData.buyerId}/purchases/${savedStockData.purchaseId}`;
+      await updateDoc(doc(db, purchaseDocPath), {
+        paymentId: paymentId,
+        updatedAt: serverTimestamp(),
+      });
+
+      toast.success("Payment recorded and linked successfully!");
       setIsPaymentModalOpen(false);
       resetForm();
       setSavedStockData(null);
@@ -245,10 +330,51 @@ export const AddingPaddyStock = () => {
     toast.success("Stock entry completed. Payment can be recorded later.");
   };
 
+  // Check if user is authenticated and has business selected
+  if (!currentUser) {
+    return (
+      <div className="container mx-auto px-4 py-6">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+            <div className="flex">
+              <div className="ml-3">
+                <p className="text-sm text-yellow-700">
+                  Please log in to add paddy stock.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentBusiness?.id) {
+    return (
+      <div className="container mx-auto px-4 py-6">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+            <div className="flex">
+              <div className="ml-3">
+                <p className="text-sm text-yellow-700">
+                  Please select a business to add paddy stock.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto px-4 py-6">
+      {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Add Paddy Stock</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Add Paddy Stock</h1>
+        <p className="text-sm text-gray-600 mt-1">
+          Business: {currentBusiness.name || currentBusiness.id}
+        </p>
         <p className="text-gray-600 mt-1">
           Record new paddy stock purchases from buyers
         </p>
@@ -256,33 +382,10 @@ export const AddingPaddyStock = () => {
 
       {loading ? (
         <div className="flex justify-center my-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
-        </div>
-      ) : !currentBusiness ? (
-        <div className="bg-white rounded-lg shadow-sm p-8 text-center">
-          <svg
-            className="mx-auto h-12 w-12 text-gray-400"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            aria-hidden="true"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          <h3 className="mt-2 text-lg font-medium text-gray-900">
-            No business selected
-          </h3>
-          <p className="mt-1 text-sm text-gray-500">
-            Please select a business from the business selector.
-          </p>
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
         </div>
       ) : buyers.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-sm p-8 text-center">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center">
           <svg
             className="mx-auto h-12 w-12 text-gray-400"
             fill="none"
@@ -306,7 +409,7 @@ export const AddingPaddyStock = () => {
           <div className="mt-6">
             <button
               onClick={() => (window.location.href = "/buyers")}
-              className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               <svg
                 className="-ml-1 mr-2 h-5 w-5"
@@ -326,7 +429,7 @@ export const AddingPaddyStock = () => {
           </div>
         </div>
       ) : (
-        <div className="bg-white shadow-sm rounded-lg p-6">
+        <div className="bg-white shadow-sm rounded-xl border border-gray-100 p-6">
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Buyer Selection */}
             <div>
@@ -341,13 +444,15 @@ export const AddingPaddyStock = () => {
                 name="buyerId"
                 value={formData.buyerId}
                 onChange={handleChange}
-                className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                className="block w-full border border-gray-300 rounded-lg shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 required
               >
                 <option value="">-- Select a Buyer --</option>
                 {buyers.map((buyer) => (
                   <option key={buyer.id} value={buyer.id}>
                     {buyer.name}
+                    {buyer.contactNumber && ` - ${buyer.contactNumber}`}
+                    {buyer.location && ` (${buyer.location})`}
                   </option>
                 ))}
               </select>
@@ -366,7 +471,7 @@ export const AddingPaddyStock = () => {
                 name="paddyType"
                 value={formData.paddyType}
                 onChange={handleChange}
-                className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                className="block w-full border border-gray-300 rounded-lg shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 required
               >
                 <option value="">-- Select Paddy Type --</option>
@@ -392,50 +497,54 @@ export const AddingPaddyStock = () => {
                   id="customPaddyType"
                   value={customPaddyType}
                   onChange={(e) => setCustomPaddyType(e.target.value)}
-                  className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                  className="block w-full border border-gray-300 rounded-lg shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  placeholder="Enter custom paddy type"
                   required
                 />
               </div>
             )}
 
-            {/* Quantity */}
-            <div>
-              <label
-                htmlFor="quantity"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Quantity (kg) <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                id="quantity"
-                name="quantity"
-                value={formData.quantity}
-                onChange={handleChange}
-                className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                placeholder="0.00"
-                required
-              />
-            </div>
+            {/* Quantity and Price in Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Quantity */}
+              <div>
+                <label
+                  htmlFor="quantity"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Quantity (kg) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  id="quantity"
+                  name="quantity"
+                  value={formData.quantity}
+                  onChange={handleChange}
+                  className="block w-full border border-gray-300 rounded-lg shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  placeholder="0.00"
+                  required
+                />
+              </div>
 
-            {/* Price */}
-            <div>
-              <label
-                htmlFor="price"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Price per kg (Rs.) <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                id="price"
-                name="price"
-                value={formData.price}
-                onChange={handleChange}
-                className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                placeholder="0.00"
-                required
-              />
+              {/* Price */}
+              <div>
+                <label
+                  htmlFor="price"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Price per kg (Rs.) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  id="price"
+                  name="price"
+                  value={formData.price}
+                  onChange={handleChange}
+                  className="block w-full border border-gray-300 rounded-lg shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  placeholder="0.00"
+                  required
+                />
+              </div>
             </div>
 
             {/* Total Amount (Calculated) */}
@@ -443,11 +552,9 @@ export const AddingPaddyStock = () => {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Total Amount (Rs.)
               </label>
-              <div className="py-2 px-3 bg-gray-100 border border-gray-200 rounded-md text-gray-800 font-medium">
-                {formData.quantity && formData.price
-                  ? (
-                      parseFloat(formData.quantity) * parseFloat(formData.price)
-                    ).toFixed(2)
+              <div className="py-2.5 px-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-800 font-semibold text-lg">
+                Rs. {formData.quantity && formData.price
+                  ? (parseFloat(formData.quantity) * parseFloat(formData.price)).toLocaleString('en-IN', { maximumFractionDigits: 2 })
                   : "0.00"}
               </div>
             </div>
@@ -466,7 +573,7 @@ export const AddingPaddyStock = () => {
                 rows="3"
                 value={formData.notes}
                 onChange={handleChange}
-                className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                className="block w-full border border-gray-300 rounded-lg shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 placeholder="Additional information about this purchase..."
               ></textarea>
             </div>
@@ -476,15 +583,24 @@ export const AddingPaddyStock = () => {
               <button
                 type="button"
                 onClick={resetForm}
-                className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                disabled={submitting}
+                className="bg-white py-2.5 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
               >
                 Reset
               </button>
               <button
                 type="submit"
-                className="bg-indigo-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                disabled={submitting}
+                className="bg-blue-600 py-2.5 px-6 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
               >
-                Save Stock Entry
+                {submitting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                    Saving...
+                  </>
+                ) : (
+                  "Save Stock Entry"
+                )}
               </button>
             </div>
           </form>
@@ -499,14 +615,26 @@ export const AddingPaddyStock = () => {
         size="xl"
       >
         <div className="space-y-4">
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <h4 className="font-medium text-blue-900 mb-2">
+          <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
+            <h4 className="font-medium text-green-900 mb-2">
               Stock Entry Completed Successfully!
             </h4>
-            <p className="text-blue-700 text-sm">
+            <p className="text-green-700 text-sm">
               Would you like to record the payment for this purchase now?
             </p>
           </div>
+
+          {savedStockData && (
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h5 className="font-medium text-gray-900 mb-2">Purchase Summary:</h5>
+              <div className="text-sm text-gray-700 space-y-1">
+                <p><span className="font-medium">Buyer:</span> {savedStockData.buyerName}</p>
+                <p><span className="font-medium">Total Amount:</span> Rs. {savedStockData.totalAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</p>
+                <p><span className="font-medium">Stock ID:</span> {savedStockData.stockId}</p>
+                <p><span className="font-medium">Purchase ID:</span> {savedStockData.purchaseId}</p>
+              </div>
+            </div>
+          )}
 
           {savedStockData && (
             <BuyerPayment
@@ -515,6 +643,8 @@ export const AddingPaddyStock = () => {
               totalAmount={savedStockData.totalAmount}
               onPaymentComplete={handlePaymentComplete}
               onCancel={handleSkipPayment}
+              stockId={savedStockData.stockId}
+              purchaseId={savedStockData.purchaseId}
             />
           )}
 

@@ -19,6 +19,7 @@ import {
   Menu,
   ChevronLeft,
   Building2,
+  Wallet, // Added for Accounts
 } from "lucide-react";
 
 // Navigation Item Component
@@ -128,6 +129,16 @@ const Navbar = () => {
       to: "/home/logistics",
       label: "Logistics",
       icon: <Truck className="h-5 w-5" />,
+    },
+    {
+      to: "/home/mobile-stock",
+      label: "Loading & Unloading",
+      icon: <Truck className="h-5 w-5" />,
+    },
+    {
+      to: "/home/accounts",
+      label: "Accounts",
+      icon: <Wallet className="h-5 w-5" />, // Updated icon
     },
     {
       to: "/home/liabilities",

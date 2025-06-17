@@ -26,6 +26,10 @@ import { SubStockPage } from "./pages/home/pages/SubStockPage";
 import BusinessSelector from "./components/BusinessSelector";
 import CashflowPage from "./pages/home/pages/CashflowPage";
 import Liabilities from "./pages/liabilities/Liabilities";
+import Accounts from "./pages/home/pages/Accounts";
+import DayRoutine from "./pages/home/pages/DayRoutine";
+import RoutesPlanning from "./pages/RoutesManager/RoutesPalning";
+import AssignRoutes from "./pages/RoutesManager/AssignRoutes";
 
 const App = () => {
   return (
@@ -55,11 +59,15 @@ const App = () => {
               <Route path="customers" element={<Customers />} />
               <Route path="employees" element={<Employees />} />
               <Route path="logistics" element={<Logistics />} />
+              <Route path="mobile-stock" element={<DayRoutine />} />
+              <Route path="accounts" element={<Accounts />} />
               <Route path="liabilities" element={<Liabilities />} />
               <Route path="cashflows" element={<CashflowPage />} />
               <Route path="reports" element={<Reports />} />
               <Route path="settings" element={<Settings />} />
               <Route path="help" element={<ContactUs />} />
+              <Route path="mobile-stock/routes-planning" element={<RoutesPlanning />} />
+              <Route path="mobile-stock/assign-routes" element={<AssignRoutes />} />
             </Route>
 
             {/* Protected Routes - Business Operations */}
@@ -79,9 +87,13 @@ const App = () => {
               <Route path="customers" element={<Customers />} />
               <Route path="employees" element={<Employees />} />
               <Route path="logistics" element={<Logistics />} />
+              <Route path="mobile-stock" element={<DayRoutine />} />
+              <Route path="accounts" element={<Accounts />} />
               <Route path="reports" element={<Reports />} />
               <Route path="settings" element={<Settings />} />
               <Route path="help" element={<ContactUs />} />
+              <Route path="mobile-stock/routes-planning" element={<RoutesPlanning />} />
+              <Route path="mobile-stock/assign-routes" element={<AssignRoutes />} />
             </Route>
 
             {/* Redirect legacy paths to home for business selection */}
@@ -102,9 +114,16 @@ const App = () => {
               path="/logistics"
               element={<Navigate to="/home" replace />}
             />
+            <Route
+              path="/mobile-stock"
+              element={<Navigate to="/home" replace />}
+            />
+            <Route path="/accounts" element={<Navigate to="/home" replace />} />
             <Route path="/reports" element={<Navigate to="/home" replace />} />
             <Route path="/settings" element={<Navigate to="/home" replace />} />
             <Route path="/help" element={<Navigate to="/home" replace />} />
+            <Route path="/mobile-stock/routes-planning" element={<Navigate to="/home" replace />} />
+            <Route path="/mobile-stock/assign-routes" element={<Navigate to="/home" replace />} />
 
             {/* Fallback for unknown routes */}
             <Route path="*" element={<Navigate to="/home" replace />} />
