@@ -30,6 +30,7 @@ import Accounts from "./pages/home/pages/Accounts";
 import DayRoutine from "./pages/home/pages/DayRoutine";
 import RoutesPlanning from "./pages/RoutesManager/RoutesPalning";
 import AssignRoutes from "./pages/RoutesManager/AssignRoutes";
+import Loading from "./components/loading/Loading";
 
 const App = () => {
   return (
@@ -68,6 +69,8 @@ const App = () => {
               <Route path="help" element={<ContactUs />} />
               <Route path="mobile-stock/routes-planning" element={<RoutesPlanning />} />
               <Route path="mobile-stock/assign-routes" element={<AssignRoutes />} />
+              <Route path="mobile-stock/loading" element={<Loading />} />
+
             </Route>
 
             {/* Protected Routes - Business Operations */}
@@ -94,6 +97,7 @@ const App = () => {
               <Route path="help" element={<ContactUs />} />
               <Route path="mobile-stock/routes-planning" element={<RoutesPlanning />} />
               <Route path="mobile-stock/assign-routes" element={<AssignRoutes />} />
+              <Route path="mobile-stock/loading" element={<Loading />} />
             </Route>
 
             {/* Redirect legacy paths to home for business selection */}
@@ -124,6 +128,7 @@ const App = () => {
             <Route path="/help" element={<Navigate to="/home" replace />} />
             <Route path="/mobile-stock/routes-planning" element={<Navigate to="/home" replace />} />
             <Route path="/mobile-stock/assign-routes" element={<Navigate to="/home" replace />} />
+            <Route path="/mobile-stock/loading" element={<Navigate to="/home" replace />} />
 
             {/* Fallback for unknown routes */}
             <Route path="*" element={<Navigate to="/home" replace />} />

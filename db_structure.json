@@ -27,7 +27,7 @@
 │   │   ├── purchases/{purchaseId}: { date, items[], total, paymentStatus, paymentType }
 │   │   └── payments/{paymentId}: { amount, method, date, linkedPurchaseId }
 │   ├── routes/{routeId}: { name, areas[] }(done)
-│   ├── loadings/{loadingId}: { repId, vehicleId, routeId, date, items[], status }
+│   ├── loadings/{loadingId}: { repId, vehicleId, routeId, date, items[], status }(done)
 │   ├── dailyCollections/{docId}: { repId, date, routeId, vehicleId, cashCollected, chequeCollected, creditPending, totalSales, totalItemsSold[] }
 │   ├── visitLogs/{logId}: { date, repId, routeId, customerId, visited, notes }
 │   ├── productCatalog/{productId}: { name, type, unit, price }

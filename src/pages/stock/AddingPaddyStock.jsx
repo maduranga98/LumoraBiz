@@ -8,6 +8,8 @@ import {
   serverTimestamp,
   doc,
   updateDoc,
+  setDoc,
+  getDoc,
 } from "firebase/firestore";
 import { useBusiness } from "../../contexts/BusinessContext";
 import { useAuth } from "../../contexts/AuthContext";
@@ -21,35 +23,40 @@ export const AddingPaddyStock = () => {
 
   // States
   const [buyers, setBuyers] = useState([]);
-  const [paddyTypes, setPaddyTypes] = useState([
-    "Kiri Samba",
-    "Sudu Kakulu",
-    "Basmathi",
-    "Nadu",
-    "Samba",
-    "Red Raw Rice",
-    "Other",
-  ]);
+  const [paddyTypes, setPaddyTypes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingPaddyTypes, setLoadingPaddyTypes] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     buyerId: "",
     buyerName: "",
-    paddyType: "",
+    paddyTypeId: "",
+    paddyTypeName: "",
+    paddyCode: "",
     quantity: "",
     price: "",
     notes: "",
   });
-  const [customPaddyType, setCustomPaddyType] = useState("");
+
+  // Add new paddy type modal states
+  const [isAddPaddyTypeModalOpen, setIsAddPaddyTypeModalOpen] = useState(false);
+  const [newPaddyTypeData, setNewPaddyTypeData] = useState({
+    name: "",
+ 
+    generatedCode: "",
+  });
+  const [addingPaddyType, setAddingPaddyType] = useState(false);
+  const [generatingCode, setGeneratingCode] = useState(false);
 
   // Payment modal states
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [savedStockData, setSavedStockData] = useState(null);
 
-  // Fetch buyers when component mounts
+  // Fetch buyers and paddy types when component mounts
   useEffect(() => {
     if (currentUser && currentBusiness?.id) {
       fetchBuyers();
+      fetchPaddyTypes();
     } else {
       setLoading(false);
     }
@@ -64,7 +71,6 @@ export const AddingPaddyStock = () => {
 
     setLoading(true);
     try {
-      // Correct collection path for your structure
       const buyersCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/buyers`;
       console.log("Fetching buyers from:", buyersCollectionPath);
 
@@ -83,9 +89,6 @@ export const AddingPaddyStock = () => {
       setBuyers(buyersList);
     } catch (error) {
       console.error("Error fetching buyers:", error);
-      console.error("Error code:", error.code);
-      console.error("Error message:", error.message);
-      
       if (error.code === 'permission-denied') {
         toast.error("Permission denied. Check your Firestore rules.");
       } else if (error.code === 'not-found') {
@@ -95,6 +98,43 @@ export const AddingPaddyStock = () => {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Fetch paddy types from Firestore
+  const fetchPaddyTypes = async () => {
+    if (!currentUser || !currentBusiness?.id) {
+      return;
+    }
+
+    setLoadingPaddyTypes(true);
+    try {
+      const paddyTypesCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/productsTypes`;
+      console.log("Fetching paddy types from:", paddyTypesCollectionPath);
+
+      const paddyTypesQuery = query(collection(db, paddyTypesCollectionPath));
+      const querySnapshot = await getDocs(paddyTypesQuery);
+      const paddyTypesList = [];
+
+      querySnapshot.forEach((doc) => {
+        paddyTypesList.push({
+          id: doc.id, // This is the paddy code
+          code: doc.id,
+          ...doc.data(),
+        });
+      });
+
+      console.log("Fetched paddy types:", paddyTypesList);
+      setPaddyTypes(paddyTypesList.sort((a, b) => a.name.localeCompare(b.name)));
+    } catch (error) {
+      console.error("Error fetching paddy types:", error);
+      if (error.code === 'permission-denied') {
+        toast.error("Permission denied accessing paddy types.");
+      } else {
+        toast.error("Failed to load paddy types");
+      }
+    } finally {
+      setLoadingPaddyTypes(false);
     }
   };
 
@@ -115,6 +155,15 @@ export const AddingPaddyStock = () => {
         buyerId: value,
         buyerName: selectedBuyer ? selectedBuyer.name : "",
       }));
+    } else if (name === "paddyTypeId") {
+      // If selecting a paddy type, update related fields
+      const selectedPaddyType = paddyTypes.find((type) => type.id === value);
+      setFormData((prev) => ({
+        ...prev,
+        paddyTypeId: value,
+        paddyTypeName: selectedPaddyType ? selectedPaddyType.name : "",
+        paddyCode: selectedPaddyType ? selectedPaddyType.code : "",
+      }));
     } else {
       setFormData((prev) => ({
         ...prev,
@@ -123,17 +172,204 @@ export const AddingPaddyStock = () => {
     }
   };
 
+  // Check if code exists in database
+  const checkCodeExistsInDB = async (code) => {
+    if (!code || !currentUser || !currentBusiness?.id) return false;
+    
+    try {
+      const paddyTypeDocPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/productsTypes/${code}`;
+      const docRef = doc(db, paddyTypeDocPath);
+      const docSnap = await getDoc(docRef);
+      
+      return docSnap.exists();
+    } catch (error) {
+      console.error("Error checking code existence:", error);
+      return false;
+    }
+  };
+
+  // Generate meaningful paddy code from name
+  const generatePaddyCode = (name) => {
+    if (!name || !name.trim()) return "";
+    
+    const cleanName = name.trim().toLowerCase();
+    let code = "";
+    
+    // Split by spaces and take first letters
+    const words = cleanName.split(/\s+/);
+    
+    if (words.length === 1) {
+      // Single word - take first 2-3 letters based on length
+      const word = words[0];
+      if (word.length <= 3) {
+        code = word.toUpperCase();
+      } else if (word.length <= 6) {
+        code = word.substring(0, 2).toUpperCase();
+      } else {
+        code = word.substring(0, 3).toUpperCase();
+      }
+    } else if (words.length === 2) {
+      // Two words - take first letter of each
+      code = (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
+    } else {
+      // Multiple words - take first letter of each up to 3 letters
+      code = words.slice(0, 3).map(word => word.charAt(0)).join("").toUpperCase();
+    }
+    
+    return code;
+  };
+
+  // Check if code already exists and generate unique one
+  const generateUniqueCode = async (baseName) => {
+    const baseCode = generatePaddyCode(baseName);
+    if (!baseCode) return "";
+    
+    // First check local state for quick validation
+    const localExistingCodes = paddyTypes.map(type => type.code);
+    
+    // Then check database for the base code
+    const baseCodeExistsInDB = await checkCodeExistsInDB(baseCode);
+    
+    if (!localExistingCodes.includes(baseCode) && !baseCodeExistsInDB) {
+      return baseCode;
+    }
+    
+    // If base code exists, try with numbers
+    for (let i = 1; i <= 99; i++) {
+      const numberedCode = `${baseCode}${i}`;
+      const numberedCodeExistsInDB = await checkCodeExistsInDB(numberedCode);
+      
+      if (!localExistingCodes.includes(numberedCode) && !numberedCodeExistsInDB) {
+        return numberedCode;
+      }
+    }
+    
+    // If all numbered codes are taken, use timestamp
+    const timestampCode = `${baseCode}${Date.now().toString().slice(-3)}`;
+    const timestampCodeExistsInDB = await checkCodeExistsInDB(timestampCode);
+    
+    if (!timestampCodeExistsInDB) {
+      return timestampCode;
+    }
+    
+    // Final fallback - use full timestamp
+    return `${baseCode}${Date.now()}`;
+  };
+
+  // Handle new paddy type form changes
+  const handleNewPaddyTypeChange = async (e) => {
+    const { name, value } = e.target;
+    
+    if (name === "name") {
+      setGeneratingCode(true);
+      
+      // Generate code when name changes
+      try {
+        const generatedCode = await generateUniqueCode(value);
+        setNewPaddyTypeData((prev) => ({
+          ...prev,
+          [name]: value,
+          generatedCode: generatedCode,
+        }));
+      } catch (error) {
+        console.error("Error generating code:", error);
+        setNewPaddyTypeData((prev) => ({
+          ...prev,
+          [name]: value,
+          generatedCode: "",
+        }));
+      } finally {
+        setGeneratingCode(false);
+      }
+    } else {
+      setNewPaddyTypeData((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
+  };
+
+  // Add new paddy type
+  const handleAddPaddyType = async (e) => {
+    e.preventDefault();
+
+    if (!newPaddyTypeData.name || !newPaddyTypeData.generatedCode) {
+      toast.error("Please enter a paddy name");
+      return;
+    }
+
+    if (!currentUser || !currentBusiness?.id) {
+      toast.error("Authentication error");
+      return;
+    }
+
+    setAddingPaddyType(true);
+
+    try {
+      // Final check for code uniqueness before saving
+      const finalCode = await generateUniqueCode(newPaddyTypeData.name);
+      
+      if (!finalCode) {
+        toast.error("Unable to generate a unique code. Please try a different name.");
+        return;
+      }
+
+      // Double-check that the final code doesn't exist in database
+      const codeExists = await checkCodeExistsInDB(finalCode);
+      if (codeExists) {
+        toast.error("Generated code already exists. Please try again or use a different name.");
+        return;
+      }
+      
+      const paddyTypeData = {
+        name: newPaddyTypeData.name.trim(),
+      
+        businessId: currentBusiness.id,
+        ownerId: currentUser.uid,
+        createdBy: currentUser.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      // Use the generated code as document ID
+      const paddyTypeDocPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/productsTypes/${finalCode}`;
+      await setDoc(doc(db, paddyTypeDocPath), paddyTypeData);
+
+      toast.success(`Paddy type added successfully! Code: ${finalCode}`);
+      
+      // Reset form and close modal
+      setNewPaddyTypeData({ name: "", generatedCode: "" });
+      setGeneratingCode(false);
+      setIsAddPaddyTypeModalOpen(false);
+      
+      // Refresh paddy types list
+      await fetchPaddyTypes();
+    } catch (error) {
+      console.error("Error adding paddy type:", error);
+      if (error.code === 'permission-denied') {
+        toast.error("Permission denied. Check your Firestore rules.");
+      } else if (error.code === 'already-exists') {
+        toast.error("A paddy type with this code already exists. Please try again.");
+      } else {
+        toast.error("Failed to add paddy type. Please try again.");
+      }
+    } finally {
+      setAddingPaddyType(false);
+    }
+  };
+
   // Reset form data
   const resetForm = () => {
     setFormData({
       buyerId: "",
       buyerName: "",
-      paddyType: "",
+      paddyTypeId: "",
+      paddyTypeName: "",
+      paddyCode: "",
       quantity: "",
       price: "",
       notes: "",
     });
-    setCustomPaddyType("");
   };
 
   // Handle form submission
@@ -146,13 +382,8 @@ export const AddingPaddyStock = () => {
       return;
     }
 
-    if (!formData.paddyType && formData.paddyType !== "Other") {
+    if (!formData.paddyTypeId) {
       toast.error("Please select a paddy type");
-      return;
-    }
-
-    if (formData.paddyType === "Other" && !customPaddyType) {
-      toast.error("Please enter a custom paddy type");
       return;
     }
 
@@ -180,13 +411,14 @@ export const AddingPaddyStock = () => {
 
     try {
       const totalAmount = parseFloat(formData.quantity) * parseFloat(formData.price);
-      const finalPaddyType = formData.paddyType === "Other" ? customPaddyType : formData.paddyType;
 
       // First, create purchase record in buyer's subcollection
       const purchaseData = {
         buyerId: formData.buyerId,
         buyerName: formData.buyerName,
-        paddyType: finalPaddyType,
+        paddyTypeId: formData.paddyTypeId,
+        paddyTypeName: formData.paddyTypeName,
+        paddyCode: formData.paddyCode,
         quantity: parseFloat(formData.quantity),
         price: parseFloat(formData.price),
         totalAmount: totalAmount,
@@ -195,8 +427,8 @@ export const AddingPaddyStock = () => {
         ownerId: currentUser.uid,
         purchaseType: "paddy_stock",
         status: "completed",
-        paymentId: null, // Will be updated when payment is recorded
-        stockId: null, // Will be updated after stock creation
+        paymentId: null,
+        stockId: null,
         createdBy: currentUser.uid,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -213,17 +445,19 @@ export const AddingPaddyStock = () => {
       const stockData = {
         buyerId: formData.buyerId,
         buyerName: formData.buyerName,
-        paddyType: finalPaddyType,
+        paddyTypeId: formData.paddyTypeId,
+        paddyTypeName: formData.paddyTypeName,
+        paddyCode: formData.paddyCode,
         quantity: parseFloat(formData.quantity),
         price: parseFloat(formData.price),
         totalAmount: totalAmount,
         notes: formData.notes || null,
         businessId: currentBusiness.id,
         ownerId: currentUser.uid,
-        stockType: "raw", // Indicates this is raw paddy stock
-        status: "available", // Available, processed, sold
-        purchaseId: purchaseId, // Reference to purchase record
-        paymentId: null, // Will be updated when payment is recorded
+        stockType: "raw",
+        status: "available",
+        purchaseId: purchaseId,
+        paymentId: null,
         createdBy: currentUser.uid,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -257,9 +491,6 @@ export const AddingPaddyStock = () => {
       setIsPaymentModalOpen(true);
     } catch (error) {
       console.error("Error adding paddy stock:", error);
-      console.error("Error code:", error.code);
-      console.error("Error message:", error.message);
-      
       if (error.code === 'permission-denied') {
         toast.error("Permission denied. Check your Firestore rules.");
       } else {
@@ -273,7 +504,6 @@ export const AddingPaddyStock = () => {
   // Handle payment completion
   const handlePaymentComplete = async (paymentData) => {
     try {
-      // Save payment data to Firebase using correct path
       const paymentsCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/payments`;
       
       const paymentRecord = {
@@ -460,47 +690,74 @@ export const AddingPaddyStock = () => {
 
             {/* Paddy Type Selection */}
             <div>
-              <label
-                htmlFor="paddyType"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Paddy Type <span className="text-red-500">*</span>
-              </label>
-              <select
-                id="paddyType"
-                name="paddyType"
-                value={formData.paddyType}
-                onChange={handleChange}
-                className="block w-full border border-gray-300 rounded-lg shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                required
-              >
-                <option value="">-- Select Paddy Type --</option>
-                {paddyTypes.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center justify-between mb-1">
+                <label
+                  htmlFor="paddyTypeId"
+                  className="block text-sm font-medium text-gray-700"
+                >
+                  Paddy Type <span className="text-red-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsAddPaddyTypeModalOpen(true)}
+                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-blue-700 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  <svg
+                    className="-ml-0.5 mr-1 h-3 w-3"
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  Add Type
+                </button>
+              </div>
+              
+              {loadingPaddyTypes ? (
+                <div className="flex items-center justify-center py-3 border border-gray-300 rounded-lg">
+                  <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-600"></div>
+                  <span className="ml-2 text-sm text-gray-600">Loading paddy types...</span>
+                </div>
+              ) : (
+                <select
+                  id="paddyTypeId"
+                  name="paddyTypeId"
+                  value={formData.paddyTypeId}
+                  onChange={handleChange}
+                  className="block w-full border border-gray-300 rounded-lg shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  required
+                >
+                  <option value="">-- Select Paddy Type --</option>
+                  {paddyTypes.map((type) => (
+                    <option key={type.id} value={type.id}>
+                      {type.code} - {type.name}
+                    
+                    </option>
+                  ))}
+                </select>
+              )}
+              
+              {paddyTypes.length === 0 && !loadingPaddyTypes && (
+                <div className="mt-2 text-sm text-gray-500">
+                  No paddy types found. Click "Add Type" to create your first paddy type.
+                </div>
+              )}
             </div>
 
-            {/* Custom Paddy Type (shows only when "Other" is selected) */}
-            {formData.paddyType === "Other" && (
+            {/* Display selected paddy code */}
+            {formData.paddyCode && (
               <div>
-                <label
-                  htmlFor="customPaddyType"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Custom Paddy Type <span className="text-red-500">*</span>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Paddy Code
                 </label>
-                <input
-                  type="text"
-                  id="customPaddyType"
-                  value={customPaddyType}
-                  onChange={(e) => setCustomPaddyType(e.target.value)}
-                  className="block w-full border border-gray-300 rounded-lg shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  placeholder="Enter custom paddy type"
-                  required
-                />
+                <div className="py-2.5 px-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-800 font-medium">
+                  {formData.paddyCode}
+                </div>
               </div>
             )}
 
@@ -606,6 +863,103 @@ export const AddingPaddyStock = () => {
           </form>
         </div>
       )}
+
+      {/* Add Paddy Type Modal */}
+      <Modal
+        isOpen={isAddPaddyTypeModalOpen}
+        onClose={() => {
+          setIsAddPaddyTypeModalOpen(false);
+          setNewPaddyTypeData({ name: "", generatedCode: "" });
+          setGeneratingCode(false);
+        }}
+        title="Add New Paddy Type"
+        size="lg"
+      >
+        <form onSubmit={handleAddPaddyType} className="space-y-4">
+          <div>
+            <label
+              htmlFor="name"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
+              Paddy Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              id="name"
+              name="name"
+              value={newPaddyTypeData.name}
+              onChange={handleNewPaddyTypeChange}
+              className="block w-full border border-gray-300 rounded-lg shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              placeholder="e.g., Kiri Samba, Basmathi, Kurakkan"
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Code will be auto-generated (e.g., "Kiri Samba" → "KS", "Rathu Nadu" → "RN")
+            </p>
+          </div>
+
+          {/* Auto-generated Code Display */}
+          {(newPaddyTypeData.generatedCode || generatingCode) && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Generated Paddy Code
+              </label>
+              {generatingCode ? (
+                <div className="py-2.5 px-3 bg-gray-50 border border-gray-200 rounded-lg flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-600 mr-2"></div>
+                  <span className="text-gray-600">Checking availability...</span>
+                </div>
+              ) : (
+                <div className="py-2.5 px-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-800 font-medium">
+                  {newPaddyTypeData.generatedCode}
+                </div>
+              )}
+              <p className="text-xs text-gray-500 mt-1">
+                {generatingCode 
+                  ? "Verifying code uniqueness in database..." 
+                  : "This code is automatically generated and verified as unique"
+                }
+              </p>
+            </div>
+          )}
+
+          
+
+          <div className="flex justify-end space-x-3 pt-4">
+            <button
+              type="button"
+              onClick={() => {
+                setIsAddPaddyTypeModalOpen(false);
+                setNewPaddyTypeData({ name: "", description: "", generatedCode: "" });
+                setGeneratingCode(false);
+              }}
+              disabled={addingPaddyType}
+              className="bg-white py-2.5 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={addingPaddyType || generatingCode || !newPaddyTypeData.generatedCode}
+              className="bg-blue-600 py-2.5 px-6 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+            >
+              {addingPaddyType ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                  Adding...
+                </>
+              ) : generatingCode ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                  Generating Code...
+                </>
+              ) : (
+                "Add Paddy Type"
+              )}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Payment Modal */}
       <Modal

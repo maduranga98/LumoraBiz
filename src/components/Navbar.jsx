@@ -131,7 +131,7 @@ const Navbar = () => {
       icon: <Truck className="h-5 w-5" />,
     },
     {
-      to: "/home/mobile-stock",
+      to: "/home/mobile-stock/loading",
       label: "Loading & Unloading",
       icon: <Truck className="h-5 w-5" />,
     },

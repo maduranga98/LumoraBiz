@@ -242,7 +242,7 @@ const ViewPaddyStock = () => {
         businessId: currentBusiness.id,
         ownerId: currentUser.uid,
         sourceStockId: selectedStock.id,
-        sourcePaddyType: selectedStock.paddyType,
+        sourcePaddyType: selectedStock.paddyTypeName,
         sourceQuantity: selectedStock.quantity,
         sourcePrice: selectedStock.price,
         conversionDate: new Date(),
@@ -371,8 +371,8 @@ const ViewPaddyStock = () => {
   const getPaddyTypes = () => {
     const types = new Set();
     stocks.forEach((stock) => {
-      if (stock.paddyType) {
-        types.add(stock.paddyType);
+      if (stock.paddyTypeName) {
+        types.add(stock.paddyTypeName);
       }
     });
     return Array.from(types).sort();
@@ -392,12 +392,12 @@ const ViewPaddyStock = () => {
       // Search term filter (case insensitive)
       const matchesSearch =
         searchTerm === "" ||
-        stock.paddyType?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        stock.paddyTypeName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         stock.buyerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         stock.notes?.toLowerCase().includes(searchTerm.toLowerCase());
 
       // Paddy type filter
-      const matchesType = filterType === "" || stock.paddyType === filterType;
+      const matchesType = filterType === "" || stock.paddyTypeName === filterType;
 
       // Buyer filter
       const matchesBuyer = filterBuyer === "" || stock.buyerId === filterBuyer;
@@ -863,7 +863,7 @@ const ViewPaddyStock = () => {
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
-                          {stock.paddyType || "—"}
+                          {stock.paddyTypeName || "—"}
                         </div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">

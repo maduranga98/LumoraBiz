@@ -1,18 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../services/firebase';
-import { 
-  collection, 
-  addDoc, 
-  updateDoc, 
-  doc, 
-  serverTimestamp,
-  query,
-  where,
-  getDocs,
-  increment,
-  getDoc,
-  setDoc
-} from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBusiness } from '../../contexts/BusinessContext';
 import { toast } from 'react-hot-toast';
@@ -66,7 +52,7 @@ const ConvertToOtherModal = ({
     }
   }, [isOpen]);
 
-  // Generate batch number
+  // Generate batch number for reference
   const generateBatchNumber = () => {
     const timestamp = new Date().toISOString().replace(/[-:.]/g, '').slice(0, 15);
     const random = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -143,303 +129,9 @@ const ConvertToOtherModal = ({
     return Object.keys(newErrors).length === 0;
   };
 
-  // 🆕 NEW: Update centralized product stock totals
-  const updateCentralizedStockTotals = async (byproducts, batchNumber) => {
-    try {
-      console.log('📊 Updating centralized product stock totals...');
-      
-      // Path to the centralized stock totals document
-      const stockTotalsDocPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/stockTotals`;
-      
-      // Prepare the update data - increment each product quantity
-      const updateData = {};
-      
-      for (const [productKey, quantity] of Object.entries(byproducts)) {
-        const quantityNum = parseFloat(quantity);
-        if (quantityNum > 0) {
-          // Use increment to add to existing totals
-          updateData[productKey] = increment(quantityNum);
-          console.log(`📈 Will increment ${productKey}: +${quantityNum} kg`);
-        }
-      }
-
-      if (Object.keys(updateData).length > 0) {
-        try {
-          // Try to update existing document
-          await updateDoc(doc(db, stockTotalsDocPath), {
-            ...updateData,
-            lastUpdated: serverTimestamp(),
-            lastBatchNumber: batchNumber,
-            lastProcessedAt: serverTimestamp()
-          });
-          console.log('✅ Updated existing centralized stock totals');
-        } catch (error) {
-          if (error.code === 'not-found') {
-            // Document doesn't exist, create it with initial totals
-            console.log('📝 Creating new centralized stock totals document...');
-            
-            const initialData = {
-              // Initialize all product totals
-              rice: 0,
-              hunuSahal: 0,
-              kadunuSahal: 0,
-              ricePolish: 0,
-              dahaiyya: 0,
-              flour: 0,
-              
-              // Add the new quantities
-              ...Object.fromEntries(
-                Object.entries(byproducts)
-                  .filter(([_, quantity]) => parseFloat(quantity) > 0)
-                  .map(([key, quantity]) => [key, parseFloat(quantity)])
-              ),
-              
-              // Metadata
-              businessId: currentBusiness.id,
-              ownerId: currentUser.uid,
-              stockType: 'centralized_totals',
-              createdAt: serverTimestamp(),
-              lastUpdated: serverTimestamp(),
-              lastBatchNumber: batchNumber,
-              lastProcessedAt: serverTimestamp()
-            };
-
-            await setDoc(doc(db, stockTotalsDocPath), initialData);
-            console.log('✅ Created new centralized stock totals document');
-          } else {
-            throw error;
-          }
-        }
-      }
-      
-    } catch (error) {
-      console.error('❌ Error updating centralized stock totals:', error);
-      throw error;
-    }
-  };
-
-  // Save byproducts to buyer's purchase record
-  const saveByproductsToPurchase = async (purchaseId, byproducts, batchNumber) => {
-    if (!stock?.buyerId || !purchaseId) {
-      console.log('❌ Missing buyerId or purchaseId');
-      return;
-    }
-
-    try {
-      // Fixed path - buyers collection (odd number of segments: 7)
-      const purchaseDocPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/buyers/${stock.buyerId}/purchases/${purchaseId}`;
-      
-      await updateDoc(doc(db, purchaseDocPath), {
-        byproducts: byproducts,
-        batchNumber: batchNumber,
-        processedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-
-      console.log('✅ Byproducts saved to purchase record');
-    } catch (error) {
-      console.error('❌ Error saving byproducts to purchase:', error);
-      // Don't throw error to prevent breaking the entire process
-      console.warn('⚠️ Continuing without updating purchase record');
-    }
-  };
-
-  // Update or create stock totals in processedStock document
-  const updateStockTotals = async (byproducts) => {
-    try {
-      console.log('📊 Updating stock totals in processedStock document...');
-      
-      // Path to the processedStock document
-      const processedStockDocPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/processedStock`;
-      
-      // Prepare the update data for the 'data' field
-      const updateData = {};
-      
-      for (const [productKey, quantity] of Object.entries(byproducts)) {
-        const quantityNum = parseFloat(quantity);
-        if (quantityNum > 0) {
-          // Use increment to add to existing totals
-          updateData[`data.${productKey}`] = increment(quantityNum);
-          console.log(`📈 Will increment ${productKey}: +${quantityNum} kg`);
-        }
-      }
-
-      if (Object.keys(updateData).length > 0) {
-        try {
-          // Try to update existing document
-          await updateDoc(doc(db, processedStockDocPath), {
-            ...updateData,
-            updatedAt: serverTimestamp(),
-            lastProcessedBatch: stock?.id || null
-          });
-          console.log('✅ Updated existing processedStock totals');
-        } catch (error) {
-          if (error.code === 'not-found') {
-            // Document doesn't exist, create it
-            console.log('📝 Creating new processedStock document with initial totals...');
-            
-            const initialData = {};
-            for (const [productKey, quantity] of Object.entries(byproducts)) {
-              const quantityNum = parseFloat(quantity);
-              if (quantityNum > 0) {
-                initialData[productKey] = quantityNum;
-              }
-            }
-
-            const newDocData = {
-              data: initialData,
-              businessId: currentBusiness.id,
-              ownerId: currentUser.uid,
-              stockType: 'processed_totals',
-              status: 'active',
-              createdBy: currentUser.uid,
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-              lastProcessedBatch: stock?.id || null
-            };
-
-            await setDoc(doc(db, processedStockDocPath), newDocData);
-            console.log('✅ Created new processedStock document with totals');
-          } else {
-            throw error;
-          }
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error updating stock totals:', error);
-      throw error;
-    }
-  };
-
-  // Create single batch document for processed products
-  const createProcessedBatchDocument = async (byproducts, batchNumber) => {
-    try {
-      console.log('🏭 Creating single batch document...');
-      
-      // Filter out products with 0 quantity for cleaner data
-      const validProducts = {};
-      Object.entries(byproducts).forEach(([key, value]) => {
-        if (parseFloat(value) > 0) {
-          validProducts[key] = parseFloat(value);
-        }
-      });
-
-      const batchData = {
-        batchNumber: batchNumber,
-        stockType: 'processed_batch',
-        status: 'available',
-        
-        // All products in this batch
-        products: validProducts,
-        totalQuantity: getTotalConverted(),
-        
-        // Reference data
-        buyerId: stock?.buyerId,
-        buyerName: stock?.buyerName,
-        purchaseId: stock?.purchaseId || null,
-        paymentId: stock?.paymentId || null,
-        rawStockId: stock?.id || null,
-        
-        // Original paddy data
-        originalPaddyType: stock?.paddyType,
-        originalQuantity: stock?.quantity,
-        originalPricePerKg: stock?.price,
-        
-        // Processing data
-        electricityData: {
-          startNumber: convertedData.startElectricityNumber,
-          endNumber: convertedData.endElectricityNumber,
-          consumption: (() => {
-            const start = parseFloat(convertedData.startElectricityNumber);
-            const end = parseFloat(convertedData.endElectricityNumber);
-            return (!isNaN(start) && !isNaN(end) && end > start) ? (end - start) : 0;
-          })()
-        },
-        
-        // Business data
-        businessId: currentBusiness.id,
-        ownerId: currentUser.uid,
-        
-        // Timestamps
-        createdBy: currentUser.uid,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        processedAt: serverTimestamp(),
-      };
-
-      // Add to processed stock collection
-      const processedStockPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/processedStock/stock`;
-      const docRef = await addDoc(collection(db, processedStockPath), batchData);
-      
-      console.log(`✅ Created batch document: ${batchNumber}`);
-      
-      return {
-        id: docRef.id,
-        batchNumber: batchNumber,
-        ...batchData
-      };
-    } catch (error) {
-      console.error('❌ Error creating batch document:', error);
-      throw error;
-    }
-  };
-
-  // Update raw stock status to processed (optional - only if raw stock exists)
-  const updateRawStockStatus = async (batchId, batchNumber) => {
-    if (!stock?.id) {
-      console.log('ℹ️ No raw stock ID provided - skipping raw stock update');
-      return;
-    }
-
-    try {
-      console.log(`🔍 Attempting to update raw stock: ${stock.id}`);
-      
-      // Try different possible paths for raw stock (only odd segment paths)
-      const possiblePaths = [
-        `owners/${currentUser.uid}/businesses/${currentBusiness.id}/rawStock`,
-        `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock`,
-        `owners/${currentUser.uid}/businesses/${currentBusiness.id}/inventory`,
-        ...(stock.buyerId ? [`owners/${currentUser.uid}/businesses/${currentBusiness.id}/buyers/${stock.buyerId}/stock`] : []),
-      ];
-
-      let updateSuccessful = false;
-
-      for (const path of possiblePaths) {
-        try {
-          console.log(`🔍 Trying path: ${path}/${stock.id}`);
-          
-          await updateDoc(doc(db, path, stock.id), {
-            status: 'processed',
-            processedBatchId: batchId,
-            batchNumber: batchNumber,
-            processedAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-
-          console.log(`✅ Raw stock status updated successfully at: ${path}`);
-          updateSuccessful = true;
-          break;
-        } catch (pathError) {
-          // Don't log every path error as it's expected when starting fresh
-          continue;
-        }
-      }
-
-      if (!updateSuccessful) {
-        console.log('ℹ️ Raw stock document not found - this is normal for initial setup');
-        console.log('💡 The system will work perfectly without updating raw stock status');
-        console.log('📋 All processing data is safely stored in the batch document');
-      }
-
-    } catch (error) {
-      console.log('ℹ️ Raw stock update skipped:', error.message);
-      // This is completely normal for initial setup
-    }
-  };
-
-  // 🎯 UPDATED: Handle form submission with enhanced database operations
+  // 🎯 UPDATED: Handle form submission - NO DATABASE OPERATIONS
   const handleSubmit = async () => {
-    console.log('🔄 Convert & Calculate Price clicked');
+    console.log('🔄 Calculate Price clicked');
     
     if (!validateForm()) {
       console.log('❌ Validation failed');
@@ -454,9 +146,9 @@ const ConvertToOtherModal = ({
     setIsSubmitting(true);
 
     try {
-      // Generate unique batch number
+      // Generate unique batch number for reference only
       const batchNumber = generateBatchNumber();
-      console.log('🏷️ Generated batch number:', batchNumber);
+      console.log('🏷️ Generated batch number for reference:', batchNumber);
 
       // Prepare byproducts data (excluding electricity numbers)
       const byproducts = {
@@ -470,42 +162,7 @@ const ConvertToOtherModal = ({
 
       console.log('📦 Prepared byproducts:', byproducts);
 
-      // 1. Create single batch document for all processed products
-      console.log('🏭 Creating single batch document...');
-      const batchDocument = await createProcessedBatchDocument(byproducts, batchNumber);
-      
-      // 2. Update stock totals in processedStock document (existing functionality)
-      console.log('📊 Updating stock totals in processedStock document...');
-      await updateStockTotals(byproducts);
-      
-      // 3. 🆕 Update centralized product stock totals (new functionality)
-      console.log('📊 Updating centralized product stock totals...');
-      await updateCentralizedStockTotals(byproducts, batchNumber);
-
-      // 4. Update buyer's purchase record with byproducts (with graceful error handling)
-      if (stock?.purchaseId) {
-        console.log('📝 Updating purchase record with byproducts...');
-        await saveByproductsToPurchase(stock.purchaseId, {
-          ...byproducts,
-          electricityData: {
-            startNumber: convertedData.startElectricityNumber,
-            endNumber: convertedData.endElectricityNumber,
-            consumption: (() => {
-              const start = parseFloat(convertedData.startElectricityNumber);
-              const end = parseFloat(convertedData.endElectricityNumber);
-              return (!isNaN(start) && !isNaN(end) && end > start) ? (end - start) : 0;
-            })()
-          },
-          batchId: batchDocument.id,
-          totalProcessedQuantity: getTotalConverted()
-        }, batchNumber);
-      }
-
-      // 5. Update raw stock status (optional - only if exists)
-      console.log('📦 Checking for raw stock to update...');
-      await updateRawStockStatus(batchDocument.id, batchNumber);
-
-      // 📊 Prepare data for PriceCalculation component
+      // 📊 Prepare data for PriceCalculation component (NO DATABASE SAVING)
       const submissionData = {
         // All converted product data
         rice: convertedData.rice,
@@ -525,17 +182,26 @@ const ConvertToOtherModal = ({
           originalQuantity: stock?.quantity,
           pricePerKg: stock?.price,
           totalAmount: (stock?.quantity || 0) * (stock?.price || 0),
-          paddyType: stock?.paddyType,
+          paddyType: stock?.paddyTypeName,
           purchaseId: stock?.purchaseId,
           paymentId: stock?.paymentId
         },
         
-        // Include batch information
-        batchDocument: batchDocument,
+        // Include batch information for reference
         batchNumber: batchNumber,
         
         // Add metadata
-        conversionTimestamp: new Date().toISOString()
+        conversionTimestamp: new Date().toISOString(),
+        
+        // Add electricity consumption calculation
+        electricityConsumption: (() => {
+          const start = parseFloat(convertedData.startElectricityNumber);
+          const end = parseFloat(convertedData.endElectricityNumber);
+          return (!isNaN(start) && !isNaN(end) && end > start) ? (end - start) : 0;
+        })(),
+        
+        // Add total converted quantity
+        totalConverted: getTotalConverted()
       };
 
       console.log('📊 Prepared data for PriceCalculation:', submissionData);
@@ -561,12 +227,12 @@ const ConvertToOtherModal = ({
       setShowPriceCalculation(true);
       console.log('✅ Price calculation should now be visible');
       
-      toast.success(`Batch ${batchNumber} processed and centralized stock totals updated successfully!`);
+      toast.success(`Conversion data prepared successfully! Use the price calculator to analyze costs.`);
       
     } catch (error) {
       console.error('❌ Error in handleSubmit:', error);
-      toast.error('Failed to process conversion. Please try again.');
-      setErrors({ general: 'Failed to submit conversion. Please try again.' });
+      toast.error('Failed to prepare conversion data. Please try again.');
+      setErrors({ general: 'Failed to prepare conversion data. Please try again.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -630,35 +296,11 @@ const ConvertToOtherModal = ({
               </button>
             </div>
 
-            {/* Enhanced Batch Info Banner */}
-            <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-6">
-              <h3 className="text-lg font-medium text-purple-900 mb-2">
-                🏷️ Centralized Stock Management System
-              </h3>
-              <div className="text-sm text-purple-700 space-y-1">
-                <p>✅ Creates batch tracking for full traceability</p>
-                <p>✅ Updates centralized stock totals for easy inventory management</p>
-                <p>✅ Maintains running totals for rice, hunu sahal, kadunu sahal, rice polish, dahaiyya, and flour</p>
-                <p>✅ Updates buyer purchase records with processing details</p>
-              </div>
-            </div>
-
-            {/* Stock Path Info */}
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
-              <h3 className="text-lg font-medium text-blue-900 mb-2">
-                📁 Stock Storage Structure
-              </h3>
-              <div className="text-xs text-blue-700 space-y-1 font-mono">
-                <p>Centralized Totals: /stock/stockTotals (document)</p>
-                <p>Batch Records: /stock/processedStock/stock/</p>
-                <p>Summary Data: /stock/processedStock (document)</p>
-                <p>Buyer Updates: /buyers/[buyerId]/purchases/[purchaseId]</p>
-              </div>
-            </div>
+            
 
             {/* Original Stock Information */}
             {stock && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-6">
                 <h3 className="text-lg font-medium text-gray-900 mb-3">
                   Original Stock Information
                 </h3>
@@ -673,7 +315,7 @@ const ConvertToOtherModal = ({
                   </div>
                   <div>
                     <span className="font-medium text-gray-700">Paddy Type:</span>
-                    <span className="ml-2 text-gray-600">{stock.paddyType}</span>
+                    <span className="ml-2 text-gray-600">{stock.paddyTypeName}</span>
                   </div>
                   <div>
                     <span className="font-medium text-gray-700">Original Quantity:</span>
@@ -687,12 +329,6 @@ const ConvertToOtherModal = ({
                     <span className="font-medium text-gray-700">Total Amount:</span>
                     <span className="ml-2 text-gray-600">Rs. {((stock.quantity || 0) * (stock.price || 0)).toLocaleString('en-IN')}</span>
                   </div>
-                  {stock.purchaseId && (
-                    <div>
-                      <span className="font-medium text-gray-700">Purchase ID:</span>
-                      <span className="ml-2 text-gray-600">{stock.purchaseId}</span>
-                    </div>
-                  )}
                 </div>
               </div>
             )}
@@ -892,7 +528,7 @@ const ConvertToOtherModal = ({
                       Processing from:
                     </span>
                     <span className="text-sm font-semibold text-blue-600">
-                      {stock.quantity} kg {stock.paddyType}
+                      {stock.quantity} kg {stock.paddyTypeName}
                     </span>
                   </div>
                 )}
@@ -924,14 +560,14 @@ const ConvertToOtherModal = ({
                 {isSubmitting ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
-                    Processing & Updating Totals...
+                    Preparing Data...
                   </>
                 ) : (
                   <>
                     <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 002 2z" />
                     </svg>
-                    Process Batch & Calculate Price
+                    Calculate Price Only
                   </>
                 )}
               </button>
