@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { db } from "../../services/firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
-
+import { useAuth } from "../../contexts/AuthContext";
+import { useBusiness } from "../../contexts/BusinessContext";
 export const SubItemsDropdown = ({
   selectedItem,
   onItemSelect,
@@ -21,22 +22,20 @@ export const SubItemsDropdown = ({
   const dropdownRef = useRef(null);
 
   // Get current business ID from localStorage
-  const getCurrentBusinessId = () => {
-    return localStorage.getItem("currentBusinessId");
-  };
+  const { currentUser } = useAuth();
+  const { currentBusiness } = useBusiness();
 
   // Fetch items from Firebase
   const fetchItems = async () => {
-    const businessId = getCurrentBusinessId();
-    if (!businessId) {
-      setLoading(false);
-      return;
-    }
+    const businessId = currentBusiness.id;
+    const ownerId = currentUser.uid;
 
     try {
       const itemsQuery = query(
-        collection(db, "items"),
-        where("businessId", "==", businessId)
+        collection(
+          db,
+          `owners/${ownerId}/businesses/${businessId}/stock/materialStock/items`
+        )
       );
 
       const querySnapshot = await getDocs(itemsQuery);
