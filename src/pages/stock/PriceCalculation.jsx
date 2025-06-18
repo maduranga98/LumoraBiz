@@ -1,6 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../services/firebase';
-import { collection, query, getDocs } from 'firebase/firestore';
+import { 
+  collection, 
+  query, 
+  getDocs, 
+  addDoc, 
+  updateDoc, 
+  doc, 
+  serverTimestamp,
+  where,
+  getDoc,
+  setDoc,
+  increment
+} from 'firebase/firestore';
 import { useBusiness } from '../../contexts/BusinessContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'react-hot-toast';
@@ -17,7 +29,9 @@ import {
   Plus,
   Trash2,
   AlertTriangle,
-  Info
+  Info,
+  Save,
+  Database
 } from 'lucide-react';
 
 const PriceCalculation = ({ 
@@ -31,6 +45,7 @@ const PriceCalculation = ({
   // States
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [electricityUnitPrice, setElectricityUnitPrice] = useState(25);
   const [selectedEmployees, setSelectedEmployees] = useState([]);
   const [otherExpenses, setOtherExpenses] = useState([
@@ -63,6 +78,414 @@ const PriceCalculation = ({
       totalCostFor100kg: 0
     }
   });
+
+  // Generate batch number
+  const generateBatchNumber = () => {
+    const timestamp = new Date().toISOString().replace(/[-:.]/g, '').slice(0, 15);
+    const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+    return `BATCH_${timestamp}_${random}`;
+  };
+
+  // Save byproducts to buyer's purchase record
+  const saveByproductsToPurchase = async (purchaseId, byproducts, batchNumber, pricingData) => {
+    if (!conversionData?.originalStock?.buyerId || !purchaseId) {
+      console.log('❌ Missing buyerId or purchaseId');
+      return;
+    }
+
+    try {
+      const purchaseDocPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/buyers/${conversionData.originalStock.buyerId}/purchases/${purchaseId}`;
+      
+      await updateDoc(doc(db, purchaseDocPath), {
+        byproducts: byproducts,
+        batchNumber: batchNumber,
+        processedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        pricingData: pricingData,
+        processingExpenses: {
+          electricityCost: results.breakdown.electricityCost,
+          laborCost: results.breakdown.laborCost,
+          otherExpenses: results.breakdown.otherExpensesCost,
+          totalProcessingCost: results.totalProcessingExpense
+        }
+      });
+
+      console.log('✅ Byproducts saved to purchase record');
+    } catch (error) {
+      console.error('❌ Error saving byproducts to purchase:', error);
+      console.warn('⚠️ Continuing without updating purchase record');
+    }
+  };
+
+  // Update or create stock totals in processedStock document
+  const updateStockTotals = async (byproducts) => {
+    try {
+      console.log('📊 Updating stock totals in processedStock document...');
+      
+      const processedStockDocPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/processedStock`;
+      
+      const updateData = {};
+      
+      for (const [productKey, quantity] of Object.entries(byproducts)) {
+        const quantityNum = parseFloat(quantity);
+        if (quantityNum > 0) {
+          updateData[`data.${productKey}`] = increment(quantityNum);
+          console.log(`📈 Will increment ${productKey}: +${quantityNum} kg`);
+        }
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        try {
+          await updateDoc(doc(db, processedStockDocPath), {
+            ...updateData,
+            updatedAt: serverTimestamp(),
+            lastProcessedBatch: conversionData?.originalStock?.stockId || null
+          });
+          console.log('✅ Updated existing processedStock totals');
+        } catch (error) {
+          if (error.code === 'not-found') {
+            console.log('📝 Creating new processedStock document with initial totals...');
+            
+            const initialData = {};
+            for (const [productKey, quantity] of Object.entries(byproducts)) {
+              const quantityNum = parseFloat(quantity);
+              if (quantityNum > 0) {
+                initialData[productKey] = quantityNum;
+              }
+            }
+
+            const newDocData = {
+              data: initialData,
+              businessId: currentBusiness.id,
+              ownerId: currentUser.uid,
+              stockType: 'processed_totals',
+              status: 'active',
+              createdBy: currentUser.uid,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+              lastProcessedBatch: conversionData?.originalStock?.stockId || null
+            };
+
+            await setDoc(doc(db, processedStockDocPath), newDocData);
+            console.log('✅ Created new processedStock document with totals');
+          } else {
+            throw error;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error updating stock totals:', error);
+      throw error;
+    }
+  };
+
+  // Find existing batch with same price or create new one
+  const findOrCreateBatch = async (byproducts, batchNumber, pricingData) => {
+    try {
+      console.log('🔍 Looking for existing batch with same pricing...');
+      
+      const processedStockPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/processedStock/stock`;
+      
+      // Query for existing batches with same adjusted rice price (rounded to 2 decimal places)
+      const priceQuery = query(
+        collection(db, processedStockPath),
+        where('status', '==', 'available'),
+        where('pricingData.adjustedRicePrice', '==', Math.round(results.adjustedRicePrice * 100) / 100)
+      );
+      
+      const querySnapshot = await getDocs(priceQuery);
+      
+      if (!querySnapshot.empty) {
+        // Found existing batch with same price - update it
+        const existingBatch = querySnapshot.docs[0];
+        const existingData = existingBatch.data();
+        
+        console.log('📦 Found existing batch with same price:', existingBatch.id);
+        
+        // Merge products - add quantities to existing batch
+        const mergedProducts = { ...existingData.products };
+        for (const [productKey, quantity] of Object.entries(byproducts)) {
+          const quantityNum = parseFloat(quantity);
+          if (quantityNum > 0) {
+            mergedProducts[productKey] = (mergedProducts[productKey] || 0) + quantityNum;
+          }
+        }
+        
+        // Update existing batch
+        await updateDoc(doc(db, processedStockPath, existingBatch.id), {
+          products: mergedProducts,
+          totalQuantity: increment(getTotalConverted()),
+          updatedAt: serverTimestamp(),
+          lastMergedAt: serverTimestamp(),
+          mergedBatches: [...(existingData.mergedBatches || []), batchNumber],
+          processingHistory: [...(existingData.processingHistory || []), {
+            batchNumber: batchNumber,
+            timestamp: serverTimestamp(),
+            addedProducts: byproducts,
+            electricityData: {
+              startNumber: conversionData.startElectricityNumber,
+              endNumber: conversionData.endElectricityNumber,
+              consumption: results.breakdown.electricityCost / electricityUnitPrice
+            }
+          }]
+        });
+        
+        console.log('✅ Merged with existing batch');
+        return {
+          id: existingBatch.id,
+          batchNumber: existingData.batchNumber,
+          merged: true,
+          originalBatchNumber: batchNumber
+        };
+        
+      } else {
+        // No existing batch found - create new one
+        console.log('📝 Creating new batch with calculated pricing...');
+        
+        const validProducts = {};
+        Object.entries(byproducts).forEach(([key, value]) => {
+          if (parseFloat(value) > 0) {
+            validProducts[key] = parseFloat(value);
+          }
+        });
+
+        const batchData = {
+          batchNumber: batchNumber,
+          stockType: 'processed_batch',
+          status: 'available',
+          
+          // All products in this batch
+          products: validProducts,
+          totalQuantity: getTotalConverted(),
+          
+          // 🎯 NEW: Pricing data from calculations
+          pricingData: {
+            adjustedRicePrice: Math.round(results.adjustedRicePrice * 100) / 100,
+            recommendedSellingPrice: Math.round(results.recommendedSellingPrice * 100) / 100,
+            profitPercentage: profitPercentage,
+            profitFromByproducts: results.profitFromByproducts,
+            totalProcessingExpense: results.totalProcessingExpense,
+            paddyCostPer100kg: results.paddyCostPer100kg,
+            riceOutputKg: riceOutputKg,
+            breakdown: results.breakdown,
+            calculatedAt: serverTimestamp()
+          },
+          
+          // Processing configuration
+          processingConfig: {
+            electricityUnitPrice: electricityUnitPrice,
+            selectedEmployees: selectedEmployees,
+            otherExpenses: otherExpenses,
+            byproductRates: byproductRates
+          },
+          
+          // Reference data
+          buyerId: conversionData?.originalStock?.buyerId,
+          buyerName: conversionData?.originalStock?.buyerName,
+          purchaseId: conversionData?.originalStock?.purchaseId || null,
+          paymentId: conversionData?.originalStock?.paymentId || null,
+          rawStockId: conversionData?.originalStock?.stockId || null,
+          
+          // Original paddy data
+          originalPaddyType: conversionData?.originalStock?.paddyType,
+          originalQuantity: conversionData?.originalStock?.originalQuantity,
+          originalPricePerKg: conversionData?.originalStock?.pricePerKg,
+          
+          // Processing data
+          electricityData: {
+            startNumber: conversionData.startElectricityNumber,
+            endNumber: conversionData.endElectricityNumber,
+            consumption: (parseFloat(conversionData.endElectricityNumber) - parseFloat(conversionData.startElectricityNumber)),
+            cost: results.breakdown.electricityCost
+          },
+          
+          // Business data
+          businessId: currentBusiness.id,
+          ownerId: currentUser.uid,
+          
+          // Timestamps
+          createdBy: currentUser.uid,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          processedAt: serverTimestamp(),
+        };
+
+        const docRef = await addDoc(collection(db, processedStockPath), batchData);
+        
+        console.log(`✅ Created new batch document: ${batchNumber}`);
+        
+        return {
+          id: docRef.id,
+          batchNumber: batchNumber,
+          merged: false,
+          ...batchData
+        };
+      }
+    } catch (error) {
+      console.error('❌ Error in findOrCreateBatch:', error);
+      throw error;
+    }
+  };
+
+  // Update raw stock status to processed (optional - only if raw stock exists)
+  const updateRawStockStatus = async (batchId, batchNumber) => {
+    if (!conversionData?.originalStock?.stockId) {
+      console.log('ℹ️ No raw stock ID provided - skipping raw stock update');
+      return;
+    }
+
+    try {
+      console.log(`🔍 Attempting to update raw stock: ${conversionData.originalStock.stockId}`);
+      
+      const possiblePaths = [
+        `owners/${currentUser.uid}/businesses/${currentBusiness.id}/rawStock`,
+        `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock`,
+        `owners/${currentUser.uid}/businesses/${currentBusiness.id}/inventory`,
+        ...(conversionData.originalStock.buyerId ? [`owners/${currentUser.uid}/businesses/${currentBusiness.id}/buyers/${conversionData.originalStock.buyerId}/stock`] : []),
+      ];
+
+      let updateSuccessful = false;
+
+      for (const path of possiblePaths) {
+        try {
+          await updateDoc(doc(db, path, conversionData.originalStock.stockId), {
+            status: 'processed',
+            processedBatchId: batchId,
+            batchNumber: batchNumber,
+            processedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            pricingData: {
+              adjustedRicePrice: results.adjustedRicePrice,
+              recommendedSellingPrice: results.recommendedSellingPrice,
+              profitFromByproducts: results.profitFromByproducts
+            }
+          });
+
+          console.log(`✅ Raw stock status updated successfully at: ${path}`);
+          updateSuccessful = true;
+          break;
+        } catch (pathError) {
+          continue;
+        }
+      }
+
+      if (!updateSuccessful) {
+        console.log('ℹ️ Raw stock document not found - this is normal for initial setup');
+      }
+
+    } catch (error) {
+      console.log('ℹ️ Raw stock update skipped:', error.message);
+    }
+  };
+
+  // 🎯 MAIN SAVE FUNCTION
+  const handleSaveData = async () => {
+    console.log('💾 Save Data clicked');
+
+    if (!currentUser || !currentBusiness?.id) {
+      toast.error('Authentication or business context missing');
+      return;
+    }
+
+    if (!conversionData) {
+      toast.error('No conversion data available to save');
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      // Generate unique batch number
+      const batchNumber = generateBatchNumber();
+      console.log('🏷️ Generated batch number:', batchNumber);
+
+      // Prepare byproducts data (excluding electricity numbers)
+      const byproducts = {
+        rice: conversionData.rice || '0',
+        hunuSahal: conversionData.hunuSahal || '0',
+        kadunuSahal: conversionData.kadunuSahal || '0',
+        ricePolish: conversionData.ricePolish || '0',
+        dahaiyya: conversionData.dahaiyya || '0',
+        flour: conversionData.flour || '0',
+      };
+
+      console.log('📦 Prepared byproducts:', byproducts);
+
+      // Prepare comprehensive pricing data
+      const pricingData = {
+        adjustedRicePrice: results.adjustedRicePrice,
+        recommendedSellingPrice: results.recommendedSellingPrice,
+        profitPercentage: profitPercentage,
+        profitFromByproducts: results.profitFromByproducts,
+        totalProcessingExpense: results.totalProcessingExpense,
+        paddyCostPer100kg: results.paddyCostPer100kg,
+        riceOutputKg: riceOutputKg,
+        breakdown: results.breakdown,
+        byproductRates: byproductRates,
+        electricityUnitPrice: electricityUnitPrice,
+        calculatedAt: new Date().toISOString()
+      };
+
+      // 1. Find existing batch with same price or create new batch document
+      console.log('🏭 Finding/Creating batch document with pricing...');
+      const batchDocument = await findOrCreateBatch(byproducts, batchNumber, pricingData);
+      
+      // 2. Update stock totals in processedStock document
+      console.log('📊 Updating stock totals in processedStock document...');
+      await updateStockTotals(byproducts);
+
+      // 3. Update buyer's purchase record with byproducts and pricing
+      if (conversionData?.originalStock?.purchaseId) {
+        console.log('📝 Updating purchase record with byproducts and pricing...');
+        await saveByproductsToPurchase(
+          conversionData.originalStock.purchaseId, 
+          {
+            ...byproducts,
+            electricityData: {
+              startNumber: conversionData.startElectricityNumber,
+              endNumber: conversionData.endElectricityNumber,
+              consumption: (parseFloat(conversionData.endElectricityNumber) - parseFloat(conversionData.startElectricityNumber)),
+              cost: results.breakdown.electricityCost
+            },
+            batchId: batchDocument.id,
+            totalProcessedQuantity: getTotalConverted()
+          }, 
+          batchDocument.merged ? batchDocument.originalBatchNumber : batchDocument.batchNumber,
+          pricingData
+        );
+      }
+
+      // 4. Update raw stock status (optional - only if exists)
+      console.log('📦 Checking for raw stock to update...');
+      await updateRawStockStatus(batchDocument.id, batchDocument.batchNumber);
+
+      // Success message
+      const successMessage = batchDocument.merged 
+        ? `Products merged with existing batch! Cost: ${formatCurrency(results.adjustedRicePrice)}/kg`
+        : `New batch ${batchDocument.batchNumber} created! Cost: ${formatCurrency(results.adjustedRicePrice)}/kg`;
+      
+      toast.success(successMessage);
+      
+      console.log('✅ All data saved successfully');
+      
+    } catch (error) {
+      console.error('❌ Error in handleSaveData:', error);
+      toast.error('Failed to save processing data. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Calculate total converted quantity
+  const getTotalConverted = () => {
+    if (!conversionData) return 0;
+    return Object.entries(conversionData)
+      .filter(([key]) => !key.includes('Electric') && !key.includes('original') && !key.includes('batch'))
+      .reduce((total, [_, value]) => {
+        const num = parseFloat(value) || 0;
+        return total + num;
+      }, 0);
+  };
 
   // Fetch employees
   const fetchEmployees = async () => {
@@ -251,6 +674,24 @@ const PriceCalculation = ({
                 <span>Back</span>
               </button>
             )}
+            {/* 🎯 NEW: Save Data Button */}
+            <button 
+              onClick={handleSaveData}
+              disabled={saving}
+              className="flex items-center space-x-1 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm disabled:opacity-50"
+            >
+              {saving ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>Save Data</span>
+                </>
+              )}
+            </button>
             {onClose && (
               <button onClick={onClose} className="flex items-center space-x-1 bg-red-100 hover:bg-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
                 <X className="w-4 h-4" />
@@ -258,6 +699,16 @@ const PriceCalculation = ({
               </button>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Info Banner */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="flex items-center space-x-2">
+          <Database className="w-5 h-5 text-blue-600" />
+          <p className="text-blue-800 text-sm font-medium">
+            Clicking "Save Data" will create batch records, update stock totals, and save pricing information to the database.
+          </p>
         </div>
       </div>
 
