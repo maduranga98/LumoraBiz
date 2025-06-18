@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { SubItemsDropdown } from "./SubItemsDropdown";
 import Input from "../Input";
 import Button from "../Button";
-import { db, auth } from "../../services/firebase";
+import { db } from "../../services/firebase";
 import {
   collection,
   addDoc,
@@ -10,11 +10,20 @@ import {
   where,
   getDocs,
   serverTimestamp,
+  doc,
+  updateDoc,
+  writeBatch,
+  runTransaction,
 } from "firebase/firestore";
 import { toast } from "react-hot-toast";
+import { useAuth } from "../../contexts/AuthContext";
+import { useBusiness } from "../../contexts/BusinessContext";
 
 export const ItemMove = () => {
+  const { currentUser } = useAuth();
+  const { currentBusiness } = useBusiness();
   const [selectedItem, setSelectedItem] = useState(null);
+  const [quantity, setQuantity] = useState("");
   const [recipient, setRecipient] = useState("");
   const [purpose, setPurpose] = useState("");
   const [notes, setNotes] = useState("");
@@ -23,10 +32,8 @@ export const ItemMove = () => {
   const [selectedBatches, setSelectedBatches] = useState([]);
   const [totalAvailableStock, setTotalAvailableStock] = useState(0);
 
-  // Get current business ID
-  const getCurrentBusinessId = () => {
-    return localStorage.getItem("currentBusinessId");
-  };
+  const businessId = currentBusiness?.id;
+  const ownerId = currentUser?.uid;
 
   // Calculate stock batches with FIFO logic
   const calculateStockBatches = (movements) => {
@@ -51,24 +58,25 @@ export const ItemMove = () => {
 
     // Create initial batches from IN movements
     inMovements.forEach((movement) => {
-      if (movement.quantity > 0) {
+      if (movement.totalQuantity > 0) {
         batches.push({
           id: movement.id,
-          originalQuantity: movement.quantity,
-          remainingQuantity: movement.quantity,
+          originalQuantity: movement.totalQuantity,
+          remainingQuantity: movement.totalQuantity,
           unitPrice: movement.unitPrice || 0,
           total: movement.total || 0,
           date:
             movement.createdAt?.toDate?.()?.toLocaleDateString() || "Unknown",
           createdAt: movement.createdAt,
           supplier: movement.supplier || "Direct Entry",
+          stockDocRef: movement.stockDocRef || movement.id, // Reference to original stock document
         });
       }
     });
 
     // Apply OUT movements using FIFO
     outMovements.forEach((outMovement) => {
-      let remainingToDeduct = outMovement.quantity || 0;
+      let remainingToDeduct = outMovement.totalQuantity || 0;
 
       for (let i = 0; i < batches.length && remainingToDeduct > 0; i++) {
         const batch = batches[i];
@@ -97,14 +105,15 @@ export const ItemMove = () => {
 
   // Fetch current stock for selected item from movements
   const fetchCurrentStock = async (itemId) => {
-    const businessId = getCurrentBusinessId();
-    if (!businessId || !itemId) return;
+    if (!businessId || !itemId || !ownerId) return;
 
     try {
-      // Fetch all movements for this item
+      // Fetch all movements for this item from the stock collection
       const movementsQuery = query(
-        collection(db, "itemMovements"),
-        where("businessId", "==", businessId),
+        collection(
+          db,
+          `owners/${ownerId}/businesses/${businessId}/stock/materialStock/stock`
+        ),
         where("itemId", "==", itemId)
       );
 
@@ -114,6 +123,7 @@ export const ItemMove = () => {
       querySnapshot.forEach((doc) => {
         movements.push({
           id: doc.id,
+          stockDocRef: doc.id, // Store document reference for updates
           ...doc.data(),
         });
       });
@@ -135,6 +145,7 @@ export const ItemMove = () => {
   // Handle item selection
   const handleItemSelect = (item) => {
     setSelectedItem(item);
+    setQuantity(""); // Reset quantity when item changes
     if (item) {
       fetchCurrentStock(item.id);
     } else {
@@ -156,18 +167,38 @@ export const ItemMove = () => {
     );
 
     setSelectedBatches((prev) => {
+      let updatedBatches;
       const existing = prev.find((s) => s.batchId === batchId);
       if (existing) {
         if (quantity === 0) {
-          return prev.filter((s) => s.batchId !== batchId);
+          updatedBatches = prev.filter((s) => s.batchId !== batchId);
+        } else {
+          updatedBatches = prev.map((s) =>
+            s.batchId === batchId ? { ...s, quantity } : s
+          );
         }
-        return prev.map((s) =>
-          s.batchId === batchId ? { ...s, quantity } : s
-        );
       } else if (quantity > 0) {
-        return [...prev, { batchId, quantity, unitPrice: batch.unitPrice }];
+        updatedBatches = [
+          ...prev,
+          {
+            batchId,
+            quantity,
+            unitPrice: batch.unitPrice,
+            stockDocRef: batch.stockDocRef,
+          },
+        ];
+      } else {
+        updatedBatches = prev;
       }
-      return prev;
+
+      // Update the quantity field to reflect total selected
+      const totalSelected = updatedBatches.reduce(
+        (sum, batch) => sum + batch.quantity,
+        0
+      );
+      setQuantity(totalSelected.toString());
+
+      return updatedBatches;
     });
   };
 
@@ -199,6 +230,7 @@ export const ItemMove = () => {
             batchId: batch.id,
             quantity: selectQuantity,
             unitPrice: batch.unitPrice,
+            stockDocRef: batch.stockDocRef,
           });
           remainingToSelect -= selectQuantity;
         }
@@ -210,7 +242,7 @@ export const ItemMove = () => {
     }
   };
 
-  // Handle form submission
+  // Handle form submission with transaction
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -235,51 +267,109 @@ export const ItemMove = () => {
       return;
     }
 
-    const totalMoveQuantity = getTotalSelectedQuantity();
+    if (!businessId || !ownerId) {
+      toast.error("Missing business or user information");
+      return;
+    }
 
+    const totalMoveQuantity = getTotalSelectedQuantity();
     setLoading(true);
-    const businessId = getCurrentBusinessId();
 
     try {
-      // Create movement records for each selected batch
-      const movementPromises = selectedBatches.map(async (selectedBatch) => {
-        const batch = stockBatches.find((b) => b.id === selectedBatch.batchId);
+      // Use transaction to ensure data consistency
+      await runTransaction(db, async (transaction) => {
+        const stockCollectionPath = `owners/${ownerId}/businesses/${businessId}/stock/materialStock/stock`;
+        const movementsCollectionPath = `owners/${ownerId}/businesses/${businessId}/stock/materialStock/movements`;
 
-        const movementData = {
-          businessId,
-          itemId: selectedItem.id,
-          itemName: selectedItem.itemName,
-          category: selectedItem.category,
-          unitType: selectedItem.unitType,
-          movementType: "OUT",
-          quantity: selectedBatch.quantity,
-          unitPrice: selectedBatch.unitPrice,
-          discount: 0,
-          subtotal: selectedBatch.quantity * selectedBatch.unitPrice,
-          discountAmount: 0,
-          total: selectedBatch.quantity * selectedBatch.unitPrice,
-          recipient: recipient.trim(),
-          purpose: purpose.trim(),
-          notes: notes.trim() || null,
-          batchId: selectedBatch.batchId, // Reference to original batch
-          originalBatchDate: batch?.date,
-          movedBy: auth.currentUser?.uid,
-          movedByName:
-            auth.currentUser?.displayName ||
-            auth.currentUser?.email ||
-            "Unknown User",
-          ownerId: auth.currentUser?.uid,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        };
+        // First, verify stock availability and prepare updates
+        const stockUpdates = [];
+        for (const selectedBatch of selectedBatches) {
+          const stockDocRef = doc(
+            db,
+            stockCollectionPath,
+            selectedBatch.stockDocRef
+          );
+          const stockDoc = await transaction.get(stockDocRef);
 
-        return addDoc(collection(db, "itemMovements"), movementData);
+          if (!stockDoc.exists()) {
+            throw new Error(`Stock batch ${selectedBatch.batchId} not found`);
+          }
+
+          const stockData = stockDoc.data();
+          const currentQuantity = stockData.totalQuantity || 0;
+
+          if (currentQuantity < selectedBatch.quantity) {
+            throw new Error(
+              `Insufficient stock in batch ${selectedBatch.batchId}. Available: ${currentQuantity}, Requested: ${selectedBatch.quantity}`
+            );
+          }
+
+          stockUpdates.push({
+            docRef: stockDocRef,
+            newQuantity: currentQuantity - selectedBatch.quantity,
+            selectedBatch,
+            originalData: stockData,
+          });
+        }
+
+        // Update stock quantities
+        for (const update of stockUpdates) {
+          transaction.update(update.docRef, {
+            totalQuantity: update.newQuantity,
+            updatedAt: serverTimestamp(),
+          });
+        }
+
+        // Create movement records
+        for (const update of stockUpdates) {
+          const batch = stockBatches.find(
+            (b) => b.id === update.selectedBatch.batchId
+          );
+
+          const movementData = {
+            businessId,
+            itemId: selectedItem.id,
+            itemName: selectedItem.itemName,
+            category: selectedItem.category,
+            unitType: selectedItem.unitType,
+            movementType: "OUT",
+            numberOfPacks: 0,
+            numberOfUnits: update.selectedBatch.quantity,
+            totalQuantity: update.selectedBatch.quantity,
+            itemsPerPack: selectedItem.itemsPerPack || 1,
+            unitPrice: update.selectedBatch.unitPrice,
+            discount: 0,
+            subtotal:
+              update.selectedBatch.quantity * update.selectedBatch.unitPrice,
+            discountAmount: 0,
+            total:
+              update.selectedBatch.quantity * update.selectedBatch.unitPrice,
+            recipient: recipient.trim(),
+            purpose: purpose.trim(),
+            notes: notes.trim() || null,
+            batchId: update.selectedBatch.batchId,
+            stockBatchRef: update.selectedBatch.stockDocRef,
+            originalBatchDate: batch?.date,
+            movedBy: ownerId,
+            movedByName:
+              currentUser?.displayName || currentUser?.email || "Unknown User",
+            ownerId: ownerId,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            // Additional tracking fields
+            remainingStockAfterMove: update.newQuantity,
+            originalStockBeforeMove: update.originalData.totalQuantity,
+          };
+
+          const newMovementRef = doc(collection(db, movementsCollectionPath));
+          transaction.set(newMovementRef, movementData);
+        }
       });
 
-      await Promise.all(movementPromises);
-
       toast.success(
-        `Successfully moved ${totalMoveQuantity} ${selectedItem.unitType} of ${selectedItem.itemName} to ${recipient}`
+        `Successfully moved ${totalMoveQuantity.toFixed(2)} ${
+          selectedItem.unitType
+        } of ${selectedItem.itemName} to ${recipient}`
       );
 
       // Reset form
@@ -289,7 +379,12 @@ export const ItemMove = () => {
       await fetchCurrentStock(selectedItem.id);
     } catch (error) {
       console.error("Error processing item movement:", error);
-      toast.error("Failed to process item movement. Please try again.");
+
+      if (error.message.includes("Insufficient stock")) {
+        toast.error(error.message);
+      } else {
+        toast.error("Failed to process item movement. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -297,6 +392,7 @@ export const ItemMove = () => {
 
   // Handle form reset
   const handleReset = () => {
+    setQuantity("");
     setRecipient("");
     setPurpose("");
     setNotes("");
@@ -330,6 +426,41 @@ export const ItemMove = () => {
             />
           </div>
 
+          {/* Quick Quantity Entry */}
+          {selectedItem && totalAvailableStock > 0 && (
+            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+              <h3 className="text-sm font-medium text-gray-700 mb-3">
+                Quick Entry (Auto-select using FIFO)
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label={`Total Quantity to Move (Units)`}
+                  type="number"
+                  value={quantity}
+                  onChange={handleQuantityChange}
+                  placeholder="Enter total quantity"
+                  min="0"
+                  max={totalAvailableStock}
+                  step="0.01"
+                  helperText="System will auto-select batches using FIFO method"
+                />
+                <div className="flex items-end">
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setQuantity("");
+                      setSelectedBatches([]);
+                    }}
+                    variant="outline"
+                    className="h-10"
+                  >
+                    Clear Selection
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Stock Batches Selection */}
           {selectedItem && stockBatches.length > 0 && (
             <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
@@ -337,8 +468,7 @@ export const ItemMove = () => {
                 Available Stock Batches - Select Quantities to Move
               </h3>
               <div className="text-xs text-blue-600 mb-3">
-                Total Available: {totalAvailableStock.toFixed(2)}{" "}
-                {selectedItem.unitType}
+                Total Available: {totalAvailableStock.toFixed(2)} Units
               </div>
 
               <div className="space-y-3 max-h-64 overflow-y-auto">
@@ -362,8 +492,7 @@ export const ItemMove = () => {
                         <div>
                           <span className="text-gray-600">Available:</span>
                           <p className="font-medium text-gray-900">
-                            {batch.remainingQuantity.toFixed(2)}{" "}
-                            {selectedItem.unitType}
+                            {batch.remainingQuantity.toFixed(2)} Units
                           </p>
                         </div>
                         <div>
@@ -380,7 +509,7 @@ export const ItemMove = () => {
                         </div>
                         <div>
                           <label className="block text-xs text-gray-600 mb-1">
-                            Move Quantity ({selectedItem.unitType}):
+                            Move Quantity (Units):
                           </label>
                           <input
                             type="number"
@@ -426,8 +555,7 @@ export const ItemMove = () => {
                     <div>
                       <span className="text-green-600">Total to Move:</span>
                       <p className="font-semibold text-green-800">
-                        {getTotalSelectedQuantity().toFixed(2)}{" "}
-                        {selectedItem.unitType}
+                        {getTotalSelectedQuantity().toFixed(2)} Units
                       </p>
                     </div>
                     <div>
@@ -520,67 +648,6 @@ export const ItemMove = () => {
             />
           </div>
 
-          {/* Movement Summary */}
-          {selectedItem && selectedBatches.length > 0 && (
-            <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
-              <h3 className="text-sm font-medium text-orange-800 mb-3">
-                Movement Summary
-              </h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-orange-600">Item:</span>
-                  <span className="font-medium text-orange-800">
-                    {selectedItem.itemName}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-orange-600">Total Quantity:</span>
-                  <span className="font-semibold text-orange-800">
-                    {getTotalSelectedQuantity().toFixed(2)}{" "}
-                    {selectedItem.unitType}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-orange-600">Batches Selected:</span>
-                  <span className="font-medium text-orange-800">
-                    {selectedBatches.length}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-orange-600">Total Value:</span>
-                  <span className="font-semibold text-orange-800">
-                    Rs. {getTotalValue().toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex justify-between border-t border-orange-200 pt-2">
-                  <span className="text-orange-600">Remaining Stock:</span>
-                  <span className="font-bold text-orange-800">
-                    {(totalAvailableStock - getTotalSelectedQuantity()).toFixed(
-                      2
-                    )}{" "}
-                    {selectedItem.unitType}
-                  </span>
-                </div>
-                {recipient && (
-                  <div className="flex justify-between">
-                    <span className="text-orange-600">Recipient:</span>
-                    <span className="font-medium text-orange-800">
-                      {recipient}
-                    </span>
-                  </div>
-                )}
-                {purpose && (
-                  <div className="flex justify-between">
-                    <span className="text-orange-600">Purpose:</span>
-                    <span className="font-medium text-orange-800">
-                      {purpose}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
           {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-200">
             <Button
@@ -608,41 +675,6 @@ export const ItemMove = () => {
             </Button>
           </div>
         </form>
-      </div>
-
-      {/* Instructions */}
-      <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
-        <div className="flex items-start space-x-3">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-            />
-          </svg>
-          <div>
-            <h3 className="text-sm font-medium text-yellow-800">
-              Unit-Based Stock Movement Instructions
-            </h3>
-            <ul className="text-sm text-yellow-700 mt-1 space-y-1">
-              <li>
-                • Select specific quantities from each stock batch as needed
-              </li>
-              <li>• Stock batches are shown in FIFO order (oldest first)</li>
-              <li>• Each batch shows different purchase prices and dates</li>
-              <li>• Enter exact quantities you need from each batch</li>
-              <li>• System will track the cost and value of moved items</li>
-              <li>• All movements are recorded and cannot be undone</li>
-            </ul>
-          </div>
-        </div>
       </div>
     </div>
   );

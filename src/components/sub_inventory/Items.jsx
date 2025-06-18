@@ -4,18 +4,17 @@ import { collection, addDoc } from "firebase/firestore";
 import { toast } from "react-hot-toast";
 import Input from "../../components/Input";
 import Button from "../../components/Button";
-
+import { useAuth } from "../../contexts/AuthContext";
+import { useBusiness } from "../../contexts/BusinessContext";
 export const Items = () => {
+    const { currentUser } = useAuth();
+    const { currentBusiness } = useBusiness();
   const [itemName, setItemName] = useState("");
   const [unitType, setUnitType] = useState("");
   const [itemsPerPack, setItemsPerPack] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Get current business ID from localStorage
-  const getCurrentBusinessId = () => {
-    return localStorage.getItem("currentBusinessId");
-  };
-
+ 
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -36,9 +35,16 @@ export const Items = () => {
       return;
     }
 
-    const businessId = getCurrentBusinessId();
+    const businessId = currentBusiness.id;
+    const ownerId = currentUser.uid;
+
     if (!businessId) {
       toast.error("Please select a business first");
+      return;
+    }
+
+    if (!ownerId) {
+      toast.error("User authentication required");
       return;
     }
 
@@ -52,13 +58,16 @@ export const Items = () => {
         itemsPerPack: parseInt(itemsPerPack),
         category: "General", // Default category
         businessId,
-        ownerId: auth.currentUser?.uid,
+        ownerId,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      // Add document to 'items' collection
-      await addDoc(collection(db, "items"), itemData);
+      // Updated path: /owners/{ownerId}/businesses/{businessId}/stock/materialStock
+      const materialStockPath = `owners/${ownerId}/businesses/${businessId}/stock/materialStock/items`;
+      
+      // Add document to nested collection
+      await addDoc(collection(db, materialStockPath), itemData);
 
       // Show success message
       toast.success("Item added successfully");
