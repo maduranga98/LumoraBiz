@@ -6,10 +6,11 @@
 │   │   ├── name, role, salaryType, payRate, etc. (done)
 │   │   ├── attendance/{date}: { status, inTime, outTime } (done)
 │   │   ├── leaves/{leaveId}: { type, date, reason, approved }
-│   │   └── salaryAdvance/{advanceId}: { amount, date, note }
+│   │   └── salaryAdvance/{advanceId}: { amount, date, note }(done)
+│   │   └── salary/{advanceId}: { amount, date, note }(done)
 │   ├── roles/{roleId}: { name, permissions[] }
 │   ├── temporaryWorks/{workId}: { employeeId, task, wage, date } (done)
-│   ├── paySheets/{month}: { employeeId, totalPay, advances, finalPay, breakdown }
+│   ├── paySheets/{month}: { employeeId, totalPay, advances, finalPay, breakdown }(done)
 │   ├── logistics
 │   │   ├── vehicles/{vehicleId}: { number, model, capacity, mileage, status } (done)
 │   │   ├── mileageLogs/{logId}: { vehicleId, startMileage, endMileage, date, distance } 
@@ -18,8 +19,8 @@
 │   ├── stock
 │   │   ├── paddy, rice, hunu sahal, kadunu sahal, rice polish, dahaiya, flour - total stock
 │   │   ├── rawProcessedStock/{stockId}: { buyerId, item, quantity, type(paddy/rice), paymentDetails[], date } (done)
-│   │   ├── baggedStock/{bagId}: { sizeKg, quantity, riceType, createdFromStockId }
-│   │   └── materialStock/{itemId}: { type(bag/thread/paper), quantity, unit, addedDate }
+│   │   ├── baggedStock/{bagId}: { sizeKg, quantity, riceType, createdFromStockId }(done)
+│   │   └── materialStock/{itemId}: { type(bag/thread/paper), quantity, unit, addedDate }(done)
 │   ├── buyers/{buyerId}: { name, contact, address } (done)
 │   │   └── payments/{paymentId}: { type(cash/cheque/credit/mixed), amount, date, note }(done)
 │   ├── salesReps/{repId}: { name, phone, email, assignedRoutes[] }(done)

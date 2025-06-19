@@ -1,32 +1,34 @@
-// src/pages/home/home.jsx
+// src/components/PageLayout.jsx
 import React from "react";
-import { useNavigate, Link, useLocation } from "react-router-dom";
-import { useAuth } from "../../contexts/AuthContext";
-import { Dashboard } from "./pages/Dashboard";
+import { Link } from "react-router-dom";
 
-const Home = () => {
-  const { currentUser, logout } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-      navigate("/login");
-    } catch (error) {
-      console.error("Failed to log out:", error);
-    }
-  };
-
-  // This component now only renders the Dashboard
-  // The navbar is handled by NavbarLayout in App.jsx
-  // Other routes (like /home/inventory) are handled by their respective components
+const PageLayout = ({ children, title, subtitle, actions }) => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Main Content Area */}
       <main className="flex-1">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <Dashboard />
+          {/* Page Header */}
+          {(title || subtitle || actions) && (
+            <div className="mb-8">
+              <div className="flex items-center justify-between">
+                <div>
+                  {title && (
+                    <h1 className="text-3xl font-bold text-gray-900">
+                      {title}
+                    </h1>
+                  )}
+                  {subtitle && <p className="mt-2 text-gray-600">{subtitle}</p>}
+                </div>
+                {actions && (
+                  <div className="flex items-center space-x-3">{actions}</div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Page Content */}
+          <div className="space-y-6">{children}</div>
         </div>
       </main>
 
@@ -76,4 +78,4 @@ const Home = () => {
   );
 };
 
-export default Home;
+export default PageLayout;

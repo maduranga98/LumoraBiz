@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { db } from '../../services/firebase';
+import React, { useState, useEffect } from "react";
+import { db } from "../../services/firebase";
 import {
   collection,
   query,
   where,
   getDocs,
+  getDoc,
   orderBy,
   doc,
   addDoc,
@@ -12,10 +13,11 @@ import {
   increment,
   serverTimestamp,
   writeBatch,
-} from 'firebase/firestore';
-import { toast } from 'react-hot-toast';
-import { useAuth } from '../../contexts/AuthContext';
-import { useBusiness } from '../../contexts/BusinessContext';
+} from "firebase/firestore";
+import { toast } from "react-hot-toast";
+import { useAuth } from "../../contexts/AuthContext";
+import { useBusiness } from "../../contexts/BusinessContext";
+import { MapPin, Clock, Navigation, User } from "lucide-react";
 
 const Loading = () => {
   const { currentUser } = useAuth();
@@ -25,19 +27,189 @@ const Loading = () => {
   const [baggedStocks, setBaggedStocks] = useState({});
   const [groupedProducts, setGroupedProducts] = useState({});
   const [selectedProducts, setSelectedProducts] = useState({});
+  const [salesReps, setSalesReps] = useState([]);
+  const [selectedSalesRep, setSelectedSalesRep] = useState("");
+  const [todayRouteInfo, setTodayRouteInfo] = useState(null);
+  const [allRoutes, setAllRoutes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [loadingNotes, setLoadingNotes] = useState('');
   const [isProcessingLoading, setIsProcessingLoading] = useState(false);
 
   // Fetch data when current business changes
   useEffect(() => {
     if (currentBusiness?.id && currentUser?.uid) {
-      fetchBaggedStocks();
+      Promise.all([fetchBaggedStocks(), fetchSalesReps(), fetchAllRoutes()]);
     } else {
       setLoading(false);
     }
   }, [currentBusiness?.id, currentUser?.uid]);
+
+  // Update today's route when sales rep is selected
+  useEffect(() => {
+    if (selectedSalesRep) {
+      fetchTodayRoute(selectedSalesRep);
+    } else {
+      setTodayRouteInfo(null);
+    }
+  }, [selectedSalesRep, allRoutes]);
+
+  // Fetch sales representatives
+  const fetchSalesReps = async () => {
+    try {
+      const salesRepsRef = collection(
+        db,
+        "owners",
+        currentUser.uid,
+        "businesses",
+        currentBusiness.id,
+        "salesReps"
+      );
+
+      const snapshot = await getDocs(salesRepsRef);
+      const repsData = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      setSalesReps(repsData);
+    } catch (error) {
+      console.error("Error fetching sales reps:", error);
+      toast.error("Failed to load sales representatives");
+    }
+  };
+
+  // Fetch all routes for reference
+  const fetchAllRoutes = async () => {
+    try {
+      const routesRef = collection(
+        db,
+        "owners",
+        currentUser.uid,
+        "businesses",
+        currentBusiness.id,
+        "routes"
+      );
+
+      const snapshot = await getDocs(routesRef);
+      const routesData = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      setAllRoutes(routesData);
+    } catch (error) {
+      console.error("Error fetching routes:", error);
+      toast.error("Failed to load routes");
+    }
+  };
+
+  // Fetch today's route for selected sales rep
+  const fetchTodayRoute = async (repId) => {
+    try {
+      // Get current date info
+      const today = new Date();
+      const currentMonth = today.getMonth() + 1;
+      const currentYear = today.getFullYear();
+      const currentDay = today.getDate();
+      const planId = `${currentYear}-${currentMonth
+        .toString()
+        .padStart(2, "0")}`;
+
+      console.log("Fetching route for:", { repId, planId, currentDay });
+
+      // Find the selected rep to get their details
+      const selectedRep = salesReps.find((rep) => rep.id === repId);
+      if (!selectedRep) {
+        console.log("Selected rep not found");
+        setTodayRouteInfo(null);
+        return;
+      }
+
+      // Fetch monthly plan for this rep using the repId
+      const monthlyPlanDocRef = doc(
+        db,
+        "owners",
+        currentUser.uid,
+        "businesses",
+        currentBusiness.id,
+        "salesReps",
+        repId,
+        "monthlyPlans",
+        planId
+      );
+
+      console.log("Monthly plan path:", monthlyPlanDocRef.path);
+
+      const monthlyPlanDoc = await getDoc(monthlyPlanDocRef);
+
+      if (!monthlyPlanDoc.exists()) {
+        console.log("No monthly plan found for", planId);
+        setTodayRouteInfo({
+          dayType: "no_plan",
+          isWorkingDay: false,
+          hasRoute: false,
+          route: null,
+          message: `No monthly plan found for ${planId}`,
+        });
+        return;
+      }
+
+      const planData = monthlyPlanDoc.data();
+      console.log("Plan data:", planData);
+
+      const dailyPlans = planData.dailyPlans || {};
+      const todayPlan = dailyPlans[currentDay];
+
+      console.log("Today's plan:", todayPlan);
+
+      if (!todayPlan) {
+        console.log("No plan found for day", currentDay);
+        setTodayRouteInfo({
+          dayType: "no_plan",
+          isWorkingDay: false,
+          hasRoute: false,
+          route: null,
+          message: `No plan found for day ${currentDay}`,
+        });
+        return;
+      }
+
+      // Check if it's a working day and has a route assigned
+      if (todayPlan.dayType === "sunday" || !todayPlan.selectedRoute) {
+        setTodayRouteInfo({
+          dayType: todayPlan.dayType,
+          isWorkingDay: todayPlan.dayType === "working",
+          hasRoute: false,
+          route: null,
+        });
+        return;
+      }
+
+      // Find the actual route details
+      const routeDetails = allRoutes.find(
+        (route) => route.id === todayPlan.selectedRoute
+      );
+
+      console.log("Route details found:", routeDetails);
+
+      setTodayRouteInfo({
+        dayType: todayPlan.dayType,
+        isWorkingDay: true,
+        hasRoute: true,
+        route: routeDetails || null,
+        routeId: todayPlan.selectedRoute,
+      });
+    } catch (error) {
+      console.error("Error fetching today's route:", error);
+      setTodayRouteInfo({
+        dayType: "error",
+        isWorkingDay: false,
+        hasRoute: false,
+        route: null,
+        error: error.message,
+      });
+    }
+  };
 
   // Process grouped products when bagged stocks change
   useEffect(() => {
@@ -53,12 +225,22 @@ const Loading = () => {
 
     try {
       const baggedStocksData = {};
-      const productTypes = ['rice', 'hunuSahal', 'kadunuSahal', 'ricePolish', 'dahaiyya', 'flour'];
-      
+      const productTypes = [
+        "rice",
+        "hunuSahal",
+        "kadunuSahal",
+        "ricePolish",
+        "dahaiyya",
+        "flour",
+      ];
+
       for (const productType of productTypes) {
         const productCode = getProductTypeCode(productType);
         const baggedStockQuery = query(
-          collection(db, `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`),
+          collection(
+            db,
+            `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`
+          ),
           where("status", "==", "available"),
           orderBy("createdAt", "desc")
         );
@@ -99,12 +281,14 @@ const Loading = () => {
     const codeMap = {
       rice: "rice",
       hunuSahal: "hunu_sahal",
-      kadunuSahal: "kadunu_sahal", 
+      kadunuSahal: "kadunu_sahal",
       ricePolish: "rice_polish",
       dahaiyya: "dahaiyya",
       flour: "flour",
     };
-    return codeMap[productType] || productType.toLowerCase().replace(/\s+/g, '_');
+    return (
+      codeMap[productType] || productType.toLowerCase().replace(/\s+/g, "_")
+    );
   };
 
   // Process grouped products by type and price
@@ -114,33 +298,38 @@ const Loading = () => {
     Object.entries(baggedStocks).forEach(([productType, bags]) => {
       // Group bags by recommended selling price
       const priceGroups = {};
-      
-      bags.forEach(bag => {
+
+      bags.forEach((bag) => {
         const price = bag.recommendedSellingPrice || bag.pricePerKg || 0;
         const priceKey = price.toString();
-        
+
         if (!priceGroups[priceKey]) {
           priceGroups[priceKey] = {
             price: price,
             bags: [],
             totalWeight: 0,
-            totalBags: 0
+            totalBags: 0,
           };
         }
-        
+
         priceGroups[priceKey].bags.push(bag);
         priceGroups[priceKey].totalWeight += bag.weight || 0;
         priceGroups[priceKey].totalBags += 1;
       });
 
       // Convert to array and sort by price
-      const priceOptions = Object.values(priceGroups).sort((a, b) => a.price - b.price);
+      const priceOptions = Object.values(priceGroups).sort(
+        (a, b) => a.price - b.price
+      );
 
       grouped[productType] = {
         productType,
         priceOptions,
-        totalAvailableWeight: bags.reduce((sum, bag) => sum + (bag.weight || 0), 0),
-        totalAvailableBags: bags.length
+        totalAvailableWeight: bags.reduce(
+          (sum, bag) => sum + (bag.weight || 0),
+          0
+        ),
+        totalAvailableBags: bags.length,
       };
     });
 
@@ -149,25 +338,30 @@ const Loading = () => {
 
   // Handle product selection change
   const handleProductChange = (productType, field, value) => {
-    setSelectedProducts(prev => ({
+    setSelectedProducts((prev) => ({
       ...prev,
       [productType]: {
         ...prev[productType],
         [field]: value,
         // Reset quantity when price changes
-        ...(field === 'selectedPriceIndex' ? { quantity: 0 } : {})
-      }
+        ...(field === "selectedPriceIndex" ? { quantity: 0 } : {}),
+      },
     }));
   };
 
   // Calculate total for a product
   const calculateProductTotal = (productType) => {
     const selection = selectedProducts[productType];
-    if (!selection || !selection.quantity || selection.selectedPriceIndex === undefined) {
+    if (
+      !selection ||
+      !selection.quantity ||
+      selection.selectedPriceIndex === undefined
+    ) {
       return 0;
     }
 
-    const priceOption = groupedProducts[productType]?.priceOptions[selection.selectedPriceIndex];
+    const priceOption =
+      groupedProducts[productType]?.priceOptions[selection.selectedPriceIndex];
     if (!priceOption) return 0;
 
     return selection.quantity * priceOption.price;
@@ -191,7 +385,8 @@ const Loading = () => {
   const createLoading = async () => {
     // Validate selections
     const validSelections = Object.entries(selectedProducts).filter(
-      ([_, selection]) => selection?.quantity > 0 && selection?.selectedPriceIndex !== undefined
+      ([_, selection]) =>
+        selection?.quantity > 0 && selection?.selectedPriceIndex !== undefined
     );
 
     if (validSelections.length === 0) {
@@ -199,16 +394,31 @@ const Loading = () => {
       return;
     }
 
+    // Validate sales rep selection
+    if (!selectedSalesRep) {
+      toast.error("Please select a sales representative");
+      return;
+    }
+
     // Validate quantities
     for (const [productType, selection] of validSelections) {
-      const priceOption = groupedProducts[productType]?.priceOptions[selection.selectedPriceIndex];
+      const priceOption =
+        groupedProducts[productType]?.priceOptions[
+          selection.selectedPriceIndex
+        ];
       if (!priceOption) {
-        toast.error(`Invalid price selection for ${formatProductType(productType)}`);
+        toast.error(
+          `Invalid price selection for ${formatProductType(productType)}`
+        );
         return;
       }
 
       if (selection.quantity > priceOption.totalWeight) {
-        toast.error(`Not enough ${formatProductType(productType)} available. Max: ${priceOption.totalWeight} kg`);
+        toast.error(
+          `Not enough ${formatProductType(productType)} available. Max: ${
+            priceOption.totalWeight
+          } kg`
+        );
         return;
       }
     }
@@ -221,11 +431,19 @@ const Loading = () => {
       let totalValue = 0;
       let totalWeight = 0;
 
+      // Get selected sales rep details
+      const selectedSalesRepData = salesReps.find(
+        (rep) => rep.id === selectedSalesRep
+      );
+
       // Process each selected product
       for (const [productType, selection] of validSelections) {
-        const priceOption = groupedProducts[productType].priceOptions[selection.selectedPriceIndex];
+        const priceOption =
+          groupedProducts[productType].priceOptions[
+            selection.selectedPriceIndex
+          ];
         const productCode = getProductTypeCode(productType);
-        
+
         let remainingQuantity = selection.quantity;
         const usedBags = [];
 
@@ -236,39 +454,49 @@ const Loading = () => {
           const bagWeight = bag.weight || 0;
           if (bagWeight <= remainingQuantity) {
             // Use entire bag
-            usedBags.push({ 
+            usedBags.push({
               bagId: bag.bagId,
               bagDocId: bag.id,
               weight: bagWeight,
-              pricePerKg: priceOption.price
+              pricePerKg: priceOption.price,
             });
             remainingQuantity -= bagWeight;
 
-            // Mark bag as loaded (still available but in loading)
-            const bagRef = doc(db, `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`, bag.id);
+            // Mark bag as loaded
+            const bagRef = doc(
+              db,
+              `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`,
+              bag.id
+            );
             batch.update(bagRef, {
-              status: 'loaded',
+              status: "loaded",
               loadedAt: serverTimestamp(),
-              loadingNotes: loadingNotes,
-              updatedAt: serverTimestamp()
+              salesRepId: selectedSalesRep,
+              salesRepName: selectedSalesRepData?.name || "",
+              updatedAt: serverTimestamp(),
             });
           } else {
-            // Partial bag usage (this shouldn't happen in typical bag sales, but handling it)
-            usedBags.push({ 
+            // Partial bag usage
+            usedBags.push({
               bagId: bag.bagId,
               bagDocId: bag.id,
               weight: remainingQuantity,
-              pricePerKg: priceOption.price
+              pricePerKg: priceOption.price,
             });
             remainingQuantity = 0;
-            
+
             // For partial usage, mark as loaded
-            const bagRef = doc(db, `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`, bag.id);
+            const bagRef = doc(
+              db,
+              `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`,
+              bag.id
+            );
             batch.update(bagRef, {
-              status: 'loaded',
+              status: "loaded",
               loadedAt: serverTimestamp(),
-              loadingNotes: loadingNotes,
-              updatedAt: serverTimestamp()
+              salesRepId: selectedSalesRep,
+              salesRepName: selectedSalesRepData?.name || "",
+              updatedAt: serverTimestamp(),
             });
           }
         }
@@ -281,7 +509,7 @@ const Loading = () => {
           pricePerKg: priceOption.price,
           totalValue: productTotal,
           bagsUsed: usedBags,
-          bagsCount: usedBags.length
+          bagsCount: usedBags.length,
         });
 
         totalValue += productTotal;
@@ -289,32 +517,53 @@ const Loading = () => {
       }
 
       // Create loading record
-      const loadingRef = doc(collection(db, `owners/${currentUser.uid}/businesses/${currentBusiness.id}/loadings`));
+      const loadingRef = doc(
+        collection(
+          db,
+          `owners/${currentUser.uid}/businesses/${currentBusiness.id}/loadings`
+        )
+      );
       batch.set(loadingRef, {
         loadingId: loadingRef.id,
         items: loadingItems,
         totalWeight: totalWeight,
         totalValue: totalValue,
         itemCount: loadingItems.length,
-        notes: loadingNotes,
-        status: 'prepared',
+        salesRepId: selectedSalesRep,
+        salesRepName: selectedSalesRepData?.name || "",
+        salesRepPhone: selectedSalesRepData?.phone || "",
+        salesRepEmail: selectedSalesRepData?.email || "",
+        todayRoute: todayRouteInfo?.route || null,
+        routeId: todayRouteInfo?.routeId || null,
+        status: "prepared",
         createdAt: serverTimestamp(),
         createdBy: currentUser.uid,
         businessId: currentBusiness.id,
-        ownerId: currentUser.uid
+        ownerId: currentUser.uid,
       });
 
       // Update stock totals
-      const stockTotalsRef = doc(db, `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/stockTotals`);
+      const stockTotalsRef = doc(
+        db,
+        `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/stockTotals`
+      );
       const stockUpdates = {};
-      
-      loadingItems.forEach(item => {
-        stockUpdates[`${item.productType}_bagged_total`] = increment(-item.quantity);
-        stockUpdates[`${item.productType}_bags_count`] = increment(-item.bagsCount);
-        stockUpdates[`${item.productType}_loaded_total`] = increment(item.quantity);
-        stockUpdates[`${item.productType}_loaded_bags_count`] = increment(item.bagsCount);
+
+      loadingItems.forEach((item) => {
+        stockUpdates[`${item.productType}_bagged_total`] = increment(
+          -item.quantity
+        );
+        stockUpdates[`${item.productType}_bags_count`] = increment(
+          -item.bagsCount
+        );
+        stockUpdates[`${item.productType}_loaded_total`] = increment(
+          item.quantity
+        );
+        stockUpdates[`${item.productType}_loaded_bags_count`] = increment(
+          item.bagsCount
+        );
       });
-      
+
       stockUpdates.lastUpdated = serverTimestamp();
       batch.update(stockTotalsRef, stockUpdates);
 
@@ -322,13 +571,16 @@ const Loading = () => {
 
       // Reset form
       setSelectedProducts({});
-      setLoadingNotes('');
+      setSelectedSalesRep("");
 
       // Refresh data
       await fetchBaggedStocks();
 
-      toast.success(`Loading created successfully! Total value: ${formatCurrency(totalValue)} for ${totalWeight}kg`);
-
+      toast.success(
+        `Loading created successfully for ${
+          selectedSalesRepData?.name
+        }! Total value: ${formatCurrency(totalValue)} for ${totalWeight}kg`
+      );
     } catch (error) {
       console.error("Error creating loading:", error);
       toast.error("Failed to create loading");
@@ -367,6 +619,15 @@ const Loading = () => {
     return typeMap[type] || type;
   };
 
+  // Get today's day of week for route scheduling
+  const formatTodayInfo = () => {
+    const today = new Date();
+    const dayName = today.toLocaleDateString("en-US", { weekday: "long" });
+    const dayNumber = today.getDate();
+    const monthName = today.toLocaleDateString("en-US", { month: "long" });
+    return `${dayName}, ${monthName} ${dayNumber}`;
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -381,8 +642,8 @@ const Loading = () => {
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl">
           <h3 className="font-medium">Error loading bagged stocks</h3>
           <p className="text-sm">{error}</p>
-          <button 
-            onClick={fetchBaggedStocks}
+          <button
+            onClick={() => Promise.all([fetchBaggedStocks(), fetchSalesReps()])}
             className="mt-2 text-sm text-red-600 hover:text-red-700 font-medium"
           >
             Try Again
@@ -393,13 +654,12 @@ const Loading = () => {
   }
 
   const hasProducts = Object.keys(groupedProducts).length > 0;
+  const selectedRep = salesReps.find((rep) => rep.id === selectedSalesRep);
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">
-          Create Loading
-        </h1>
+        <h1 className="text-2xl font-bold text-gray-800">Create Loading</h1>
         <p className="text-gray-600 mt-1">
           Select products and quantities to prepare for loading
         </p>
@@ -429,23 +689,185 @@ const Loading = () => {
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Loading Notes */}
+          {/* Loading Information */}
           <div className="bg-white shadow-sm rounded-xl p-6 border border-gray-200">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
               Loading Information
             </h2>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Notes (Optional)
+
+            {/* Sales Representative Selection */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Sales Representative <span className="text-red-500">*</span>
               </label>
-              <textarea
-                value={loadingNotes}
-                onChange={(e) => setLoadingNotes(e.target.value)}
+              <select
+                value={selectedSalesRep}
+                onChange={(e) => setSelectedSalesRep(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                rows="3"
-                placeholder="Add any notes about this loading..."
-              />
+                required
+              >
+                <option value="">Select a sales representative</option>
+                {salesReps.map((rep) => (
+                  <option key={rep.id} value={rep.id}>
+                    {rep.name} {rep.employeeId ? `(${rep.employeeId})` : ""}
+                  </option>
+                ))}
+              </select>
+              {salesReps.length === 0 && (
+                <p className="text-xs text-gray-500 mt-1">
+                  No sales representatives found. Please add sales reps first.
+                </p>
+              )}
             </div>
+
+            {/* Selected Sales Rep Info with Routes */}
+            {selectedSalesRep && selectedRep && (
+              <div className="mt-4 space-y-4">
+                {/* Sales Rep Details */}
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-medium">
+                      <User className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-sm font-medium text-blue-900">
+                        {selectedRep.name}
+                      </h3>
+                      <div className="flex items-center space-x-4 text-xs text-blue-700 mt-1">
+                        {selectedRep.employeeId && (
+                          <span>ID: {selectedRep.employeeId}</span>
+                        )}
+                        {selectedRep.phone && (
+                          <span>📞 {selectedRep.phone}</span>
+                        )}
+                        {selectedRep.email && (
+                          <span>📧 {selectedRep.email}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Today's Route */}
+                {todayRouteInfo ? (
+                  <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-center space-x-2 mb-3">
+                      <Navigation className="h-5 w-5 text-green-600" />
+                      <h3 className="text-sm font-medium text-green-900">
+                        Today's Route - {formatTodayInfo()}
+                      </h3>
+                    </div>
+
+                    {todayRouteInfo.error ? (
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                        <div className="flex items-center space-x-2">
+                          <MapPin className="h-4 w-4 text-red-600" />
+                          <p className="text-sm text-red-700">
+                            Error loading route: {todayRouteInfo.error}
+                          </p>
+                        </div>
+                      </div>
+                    ) : todayRouteInfo.message ? (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                        <div className="flex items-center space-x-2">
+                          <Clock className="h-4 w-4 text-amber-600" />
+                          <p className="text-sm text-amber-700">
+                            {todayRouteInfo.message}
+                          </p>
+                        </div>
+                      </div>
+                    ) : !todayRouteInfo.isWorkingDay ? (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                        <div className="flex items-center space-x-2">
+                          <Clock className="h-4 w-4 text-amber-600" />
+                          <p className="text-sm text-amber-700">
+                            {todayRouteInfo.dayType === "sunday"
+                              ? "Sunday - Non-working day"
+                              : "Non-working day"}
+                          </p>
+                        </div>
+                      </div>
+                    ) : !todayRouteInfo.hasRoute ? (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                        <div className="flex items-center space-x-2">
+                          <MapPin className="h-4 w-4 text-amber-600" />
+                          <p className="text-sm text-amber-700">
+                            No route assigned for today
+                          </p>
+                        </div>
+                      </div>
+                    ) : todayRouteInfo.route ? (
+                      <div className="bg-white p-3 rounded-lg border border-green-200">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2 mb-2">
+                              <MapPin className="h-4 w-4 text-green-600" />
+                              <span className="font-medium text-green-900">
+                                {todayRouteInfo.route.name}
+                              </span>
+                            </div>
+                            <div className="space-y-1 text-xs text-green-700">
+                              <p>
+                                <span className="font-medium">Areas:</span>{" "}
+                                {todayRouteInfo.route.areas?.length > 0
+                                  ? todayRouteInfo.route.areas
+                                      .slice(0, 3)
+                                      .join(", ") +
+                                    (todayRouteInfo.route.areas.length > 3
+                                      ? "..."
+                                      : "")
+                                  : "No areas specified"}
+                              </p>
+                              <div className="flex items-center space-x-4">
+                                {todayRouteInfo.route.estimatedDistance && (
+                                  <span>
+                                    📍 {todayRouteInfo.route.estimatedDistance}{" "}
+                                    km
+                                  </span>
+                                )}
+                                {todayRouteInfo.route.estimatedTime && (
+                                  <span className="flex items-center space-x-1">
+                                    <Clock className="h-3 w-3" />
+                                    <span>
+                                      {todayRouteInfo.route.estimatedTime} min
+                                    </span>
+                                  </span>
+                                )}
+                              </div>
+                              {todayRouteInfo.route.description && (
+                                <p className="mt-1">
+                                  <span className="font-medium">Notes:</span>{" "}
+                                  {todayRouteInfo.route.description}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                        <div className="flex items-center space-x-2">
+                          <MapPin className="h-4 w-4 text-red-600" />
+                          <p className="text-sm text-red-700">
+                            Route assigned but route details not found (Route
+                            ID: {todayRouteInfo.routeId})
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : selectedSalesRep ? (
+                  <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                    <div className="flex items-center space-x-2">
+                      <Clock className="h-5 w-5 text-gray-600" />
+                      <p className="text-sm text-gray-600">
+                        Loading route information...
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            )}
           </div>
 
           {/* Products Table */}
@@ -455,7 +877,7 @@ const Loading = () => {
                 Available Products
               </h2>
             </div>
-            
+
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -478,75 +900,103 @@ const Loading = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {Object.entries(groupedProducts).map(([productType, productData]) => (
-                    <tr key={productType} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div>
-                            <div className="text-sm font-medium text-gray-900">
-                              {formatProductType(productType)}
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              {productData.totalAvailableBags} bags available
+                  {Object.entries(groupedProducts).map(
+                    ([productType, productData]) => (
+                      <tr key={productType} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">
+                                {formatProductType(productType)}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {productData.totalAvailableBags} bags available
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900 font-semibold">
-                          {formatNumber(productData.totalAvailableWeight)} kg
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {productData.priceOptions.length === 1 ? (
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900 font-semibold">
-                            {formatCurrency(productData.priceOptions[0].price)}
+                            {formatNumber(productData.totalAvailableWeight)} kg
                           </div>
-                        ) : (
-                          <select
-                            value={selectedProducts[productType]?.selectedPriceIndex || ''}
-                            onChange={(e) => handleProductChange(productType, 'selectedPriceIndex', parseInt(e.target.value))}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                          >
-                            <option value="">Select price</option>
-                            {productData.priceOptions.map((option, index) => (
-                              <option key={index} value={index}>
-                                {formatCurrency(option.price)} ({formatNumber(option.totalWeight)}kg available)
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <input
-                          type="number"
-                          min="0"
-                          max={
-                            productData.priceOptions.length === 1 
-                              ? productData.priceOptions[0].totalWeight
-                              : selectedProducts[productType]?.selectedPriceIndex !== undefined
-                                ? productData.priceOptions[selectedProducts[productType].selectedPriceIndex].totalWeight
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {productData.priceOptions.length === 1 ? (
+                            <div className="text-sm text-gray-900 font-semibold">
+                              {formatCurrency(
+                                productData.priceOptions[0].price
+                              )}
+                            </div>
+                          ) : (
+                            <select
+                              value={
+                                selectedProducts[productType]
+                                  ?.selectedPriceIndex || ""
+                              }
+                              onChange={(e) =>
+                                handleProductChange(
+                                  productType,
+                                  "selectedPriceIndex",
+                                  parseInt(e.target.value)
+                                )
+                              }
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                            >
+                              <option value="">Select price</option>
+                              {productData.priceOptions.map((option, index) => (
+                                <option key={index} value={index}>
+                                  {formatCurrency(option.price)} (
+                                  {formatNumber(option.totalWeight)}kg
+                                  available)
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <input
+                            type="number"
+                            min="0"
+                            max={
+                              productData.priceOptions.length === 1
+                                ? productData.priceOptions[0].totalWeight
+                                : selectedProducts[productType]
+                                    ?.selectedPriceIndex !== undefined
+                                ? productData.priceOptions[
+                                    selectedProducts[productType]
+                                      .selectedPriceIndex
+                                  ].totalWeight
                                 : 0
-                          }
-                          step="0.01"
-                          value={selectedProducts[productType]?.quantity || ''}
-                          onChange={(e) => handleProductChange(productType, 'quantity', parseFloat(e.target.value) || 0)}
-                          disabled={
-                            productData.priceOptions.length > 1 && 
-                            selectedProducts[productType]?.selectedPriceIndex === undefined
-                          }
-                          className="w-20 px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100"
-                          placeholder="0"
-                        />
-                        <span className="ml-1 text-xs text-gray-500">kg</span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-semibold text-gray-900">
-                          {formatCurrency(calculateProductTotal(productType))}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                            }
+                            step="0.01"
+                            value={
+                              selectedProducts[productType]?.quantity || ""
+                            }
+                            onChange={(e) =>
+                              handleProductChange(
+                                productType,
+                                "quantity",
+                                parseFloat(e.target.value) || 0
+                              )
+                            }
+                            disabled={
+                              productData.priceOptions.length > 1 &&
+                              selectedProducts[productType]
+                                ?.selectedPriceIndex === undefined
+                            }
+                            className="w-20 px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100"
+                            placeholder="0"
+                          />
+                          <span className="ml-1 text-xs text-gray-500">kg</span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-semibold text-gray-900">
+                            {formatCurrency(calculateProductTotal(productType))}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  )}
                 </tbody>
               </table>
             </div>
@@ -556,7 +1006,9 @@ const Loading = () => {
           <div className="bg-white shadow-sm rounded-xl p-6 border border-gray-200">
             <div className="flex justify-between items-center">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Loading Summary</h3>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Loading Summary
+                </h3>
                 <p className="text-sm text-gray-600 mt-1">
                   Total Quantity: {formatNumber(getTotalSelectedQuantity())} kg
                 </p>
@@ -568,12 +1020,12 @@ const Loading = () => {
                 <p className="text-sm text-gray-600">Total Value</p>
               </div>
             </div>
-            
+
             <div className="mt-6 flex justify-end space-x-3">
               <button
                 onClick={() => {
                   setSelectedProducts({});
-                  setLoadingNotes('');
+                  setSelectedSalesRep("");
                 }}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
                 disabled={isProcessingLoading}
@@ -583,12 +1035,13 @@ const Loading = () => {
               <button
                 onClick={createLoading}
                 disabled={
-                  isProcessingLoading || 
-                  calculateGrandTotal() <= 0
+                  isProcessingLoading ||
+                  calculateGrandTotal() <= 0 ||
+                  !selectedSalesRep
                 }
                 className="px-6 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isProcessingLoading ? 'Creating Loading...' : 'Create Loading'}
+                {isProcessingLoading ? "Creating Loading..." : "Create Loading"}
               </button>
             </div>
           </div>
