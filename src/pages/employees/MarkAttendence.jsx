@@ -129,7 +129,7 @@ const MarkAttendance = () => {
         employeesQuery = query(
           employeesCollectionRef,
           where("status", "==", "active"),
-          orderBy("employeeName", "asc")
+          orderBy("name", "asc")
         );
       } catch (queryError) {
         console.log(
@@ -241,7 +241,7 @@ const MarkAttendance = () => {
         } catch (employeeError) {
           // Employee might not have attendance record for this date
           console.log(
-            `No attendance record for ${employee.employeeName} on ${selectedDate}`
+            `No attendance record for ${employee.name} on ${selectedDate}`
           );
         }
       }
@@ -304,7 +304,7 @@ const MarkAttendance = () => {
                   id: `${employee.id}_${filterDate}`,
                   date: filterDate,
                   employeeId: employee.id,
-                  employeeName: employee.employeeName,
+                  employeeName: employee.name,
                   employeeRole: employee.role,
                   ...data,
                 });
@@ -326,7 +326,7 @@ const MarkAttendance = () => {
                 id: `${employee.id}_${doc.id}`,
                 date: doc.id, // Document ID is the date
                 employeeId: employee.id,
-                employeeName: employee.employeeName,
+                employeeName: employee.name,
                 employeeRole: employee.role,
                 ...data,
               });
@@ -334,7 +334,7 @@ const MarkAttendance = () => {
           }
         } catch (employeeError) {
           console.error(
-            `Error fetching attendance for ${employee.employeeName}:`,
+            `Error fetching attendance for ${employee.name}:`,
             employeeError
           );
         }
@@ -402,7 +402,7 @@ const MarkAttendance = () => {
         } else if (action === "checkout") {
           if (!existingAttendance.inTime) {
             toast.error(
-              `${employee.employeeName} must check in first before checking out`
+              `${employee.name} must check in first before checking out`
             );
             setMarkingLoading(false);
             return;
@@ -434,7 +434,7 @@ const MarkAttendance = () => {
         // Create new attendance record
         if (action === "checkout") {
           toast.error(
-            `${employee.employeeName} must check in first before checking out`
+            `${employee.name} must check in first before checking out`
           );
           setMarkingLoading(false);
           return;
@@ -466,19 +466,19 @@ const MarkAttendance = () => {
       let message = "";
       switch (action) {
         case "checkin":
-          message = `${employee.employeeName} checked in at ${currentTime}`;
+          message = `${employee.name} checked in at ${currentTime}`;
           break;
         case "checkout":
-          message = `${employee.employeeName} checked out at ${currentTime}`;
+          message = `${employee.name} checked out at ${currentTime}`;
           break;
         case "absent":
-          message = `${employee.employeeName} marked as absent`;
+          message = `${employee.name} marked as absent`;
           break;
         case "half_day":
-          message = `${employee.employeeName} marked as half day`;
+          message = `${employee.name} marked as half day`;
           break;
         default:
-          message = `${employee.employeeName} attendance updated`;
+          message = `${employee.name} attendance updated`;
       }
 
       toast.success(message);
@@ -520,7 +520,7 @@ const MarkAttendance = () => {
 
   const filteredEmployees = employees.filter(
     (employee) =>
-      employee.employeeName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      employee.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       employee.role?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -563,19 +563,19 @@ const MarkAttendance = () => {
           {employee.images?.employeePhoto ? (
             <img
               src={employee.images.employeePhoto}
-              alt={employee.employeeName}
+              alt={employee.name}
               className="w-14 h-14 rounded-full object-cover border-2 border-white shadow-sm"
             />
           ) : (
             <div className="w-14 h-14 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
               <span className="text-white font-semibold text-lg">
-                {employee.employeeName?.charAt(0)?.toUpperCase() || "?"}
+                {employee.name?.charAt(0)?.toUpperCase() || "?"}
               </span>
             </div>
           )}
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold text-gray-900 truncate">
-              {employee.employeeName}
+              {employee.name}
             </h3>
             <p className="text-sm text-gray-600 capitalize">
               {employee.role?.replace("_", " ")}
@@ -925,7 +925,7 @@ const MarkAttendance = () => {
                     <option value="">All Employees</option>
                     {employees.map((employee) => (
                       <option key={employee.id} value={employee.id}>
-                        {employee.employeeName}
+                        {employee.name}
                       </option>
                     ))}
                   </select>
@@ -1013,14 +1013,12 @@ const MarkAttendance = () => {
                             <div className="flex items-center">
                               <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center mr-3">
                                 <span className="text-white font-semibold text-sm">
-                                  {record.employeeName
-                                    ?.charAt(0)
-                                    ?.toUpperCase()}
+                                  {record.name?.charAt(0)?.toUpperCase()}
                                 </span>
                               </div>
                               <div>
                                 <div className="text-sm font-medium text-gray-900">
-                                  {record.employeeName}
+                                  {record.name}
                                 </div>
                                 <div className="text-sm text-gray-500 capitalize">
                                   {record.employeeRole?.replace("_", " ")}

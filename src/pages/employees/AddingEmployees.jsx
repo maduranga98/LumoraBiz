@@ -335,24 +335,23 @@ const AddingEmployees = () => {
 
       // If role is Sales Representative, also save to salesReps collection
       if (formData.role === "sales_rep") {
-        const salesRepsCollectionRef = collection(
+        // Create document reference directly with employeeId as the document ID
+        const salesRepDocRef = doc(
           db,
           "owners",
           uid,
           "businesses",
           businessId,
-          "salesReps"
+          "salesReps",
+          employeeId // Use employeeId as the document ID
         );
-        const salesRepDocRef = doc(salesRepsCollectionRef);
-        const repId = salesRepDocRef.id;
 
         const salesRepData = {
-          repId,
           name: formData.employeeName,
           phone: formData.mobile1,
           email: formData.email,
           imageUrl: imageUrls.employeePhoto || null,
-          employeeId, // Reference to the employee record
+          employeeId,
           businessId,
           ownerId: uid,
           createdAt: new Date(),
@@ -361,7 +360,7 @@ const AddingEmployees = () => {
         };
 
         await setDoc(salesRepDocRef, salesRepData);
-        console.log("Sales rep saved with ID:", repId);
+        console.log("Sales rep saved with ID:", employeeId);
       }
 
       toast.success("Employee registered successfully");
@@ -717,7 +716,7 @@ const AddingEmployees = () => {
                 {formData.salaryType === "daily"
                   ? "Daily Wage"
                   : formData.salaryType === "monthly"
-                  ? "Monthly Salary"
+                  ? "Daily Wage"
                   : "Pay Rate"}{" "}
                 <span className="text-red-500">*</span>
               </label>
@@ -735,7 +734,7 @@ const AddingEmployees = () => {
                     formData.salaryType === "daily"
                       ? "Enter daily wage"
                       : formData.salaryType === "monthly"
-                      ? "Enter monthly salary"
+                      ? "Enter daily wage to calculate monthly"
                       : "Enter pay rate"
                   }
                   required

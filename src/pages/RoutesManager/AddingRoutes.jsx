@@ -1,26 +1,32 @@
-import React, { useState } from 'react';
-import { collection, addDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { toast } from 'react-hot-toast';
-import Input from '../../components/Input';
+import React, { useState } from "react";
+import {
+  collection,
+  addDoc,
+  updateDoc,
+  serverTimestamp,
+} from "firebase/firestore";
+import { toast } from "react-hot-toast";
+import Input from "../../components/Input";
 import { useAuth } from "../../contexts/AuthContext";
 import { useBusiness } from "../../contexts/BusinessContext";
-import { db } from '../../services/firebase';
-import { MapPin, Plus, X, Save, Loader2 } from 'lucide-react';
+import { db } from "../../services/firebase";
+import { MapPin, Plus, X, Save, Loader2, Info } from "lucide-react";
 
-const AddingRoutes = () => {
-  const [name, setName] = useState('');
-  const [areas, setAreas] = useState(['']);
-  const [description, setDescription] = useState('');
-  const [estimatedDistance, setEstimatedDistance] = useState('');
-  const [estimatedTime, setEstimatedTime] = useState('');
+const AddingRoutes = ({ onRouteAdded }) => {
+  const [name, setName] = useState("");
+  const [areas, setAreas] = useState([""]);
+  const [description, setDescription] = useState("");
+  const [estimatedDistance, setEstimatedDistance] = useState("");
+  const [estimatedTime, setEstimatedTime] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  
+  const [showTips, setShowTips] = useState(false);
+
   const { currentUser } = useAuth();
   const { currentBusiness } = useBusiness();
 
   // Add new area input
   const addAreaInput = () => {
-    setAreas([...areas, '']);
+    setAreas([...areas, ""]);
   };
 
   // Remove area input
@@ -40,33 +46,33 @@ const AddingRoutes = () => {
 
   // Reset form
   const resetForm = () => {
-    setName('');
-    setAreas(['']);
-    setDescription('');
-    setEstimatedDistance('');
-    setEstimatedTime('');
+    setName("");
+    setAreas([""]);
+    setDescription("");
+    setEstimatedDistance("");
+    setEstimatedTime("");
   };
 
   // Validate form
   const validateForm = () => {
     if (!name.trim()) {
-      toast.error('Route name is required');
+      toast.error("Route name is required");
       return false;
     }
-    
-    const validAreas = areas.filter(area => area.trim() !== '');
+
+    const validAreas = areas.filter((area) => area.trim() !== "");
     if (validAreas.length === 0) {
-      toast.error('At least one area is required');
+      toast.error("At least one area is required");
       return false;
     }
 
     if (!currentBusiness?.id) {
-      toast.error('No business selected');
+      toast.error("No business selected");
       return false;
     }
 
     if (!currentUser?.uid) {
-      toast.error('User not authenticated');
+      toast.error("User not authenticated");
       return false;
     }
 
@@ -78,18 +84,18 @@ const AddingRoutes = () => {
     if (!validateForm()) return;
 
     setIsLoading(true);
-    
+
     try {
-      const validAreas = areas.filter(area => area.trim() !== '');
-      
+      const validAreas = areas.filter((area) => area.trim() !== "");
+
       // Reference to the routes collection
       const routesRef = collection(
-        db, 
-        'owners', 
-        currentUser.uid, 
-        'businesses', 
-        currentBusiness.id, 
-        'routes'
+        db,
+        "owners",
+        currentUser.uid,
+        "businesses",
+        currentBusiness.id,
+        "routes"
       );
 
       // Add the route document first to get the docId
@@ -97,79 +103,112 @@ const AddingRoutes = () => {
         name: name.trim(),
         areas: validAreas,
         description: description.trim(),
-        estimatedDistance: estimatedDistance ? parseFloat(estimatedDistance) : null,
+        estimatedDistance: estimatedDistance
+          ? parseFloat(estimatedDistance)
+          : null,
         estimatedTime: estimatedTime ? parseInt(estimatedTime) : null,
-        status: 'active',
+        status: "active",
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         createdBy: currentUser.uid,
         businessId: currentBusiness.id,
         ownerId: currentUser.uid,
-        routeId: '', // Will be updated with the actual docId
+        routeId: "", // Will be updated with the actual docId
       });
 
       // Update the document with the routeId (docId)
       await updateDoc(docRef, {
         routeId: docRef.id,
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
       });
-      
-      toast.success('Route saved successfully!');
-      console.log('Route saved with ID:', docRef.id);
-      
+
+      toast.success("Route saved successfully!");
+      console.log("Route saved with ID:", docRef.id);
+
       // Reset form after successful save
       resetForm();
-      
+
+      // Call the callback if provided
+      if (onRouteAdded) {
+        onRouteAdded();
+      }
     } catch (error) {
-      console.error('Error saving route:', error);
-      toast.error('Failed to save route. Please try again.');
+      console.error("Error saving route:", error);
+      toast.error("Failed to save route. Please try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center space-x-3 mb-2">
-          <div className="p-2 bg-blue-100 rounded-lg">
-            <MapPin className="h-6 w-6 text-blue-600" />
+    <div className="max-w-2xl mx-auto p-4">
+      {/* Compact Header */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <div className="p-1.5 bg-blue-100 rounded-lg">
+              <MapPin className="h-5 w-5 text-blue-600" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">Add New Route</h1>
+              <p className="text-sm text-gray-600">
+                Create delivery routes quickly
+              </p>
+            </div>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Routes Planning</h1>
+
+          {/* Tips Toggle */}
+          <button
+            onClick={() => setShowTips(!showTips)}
+            className="flex items-center space-x-1 text-sm text-blue-600 hover:text-blue-700"
+          >
+            <Info className="h-4 w-4" />
+            <span>Tips</span>
+          </button>
         </div>
-        <p className="text-gray-600">Create and manage delivery routes for your business</p>
+
+        {/* Collapsible Tips */}
+        {showTips && (
+          <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="text-sm text-blue-700 space-y-1">
+              <p>• Use clear, descriptive names</p>
+              <p>• Add multiple areas for comprehensive coverage</p>
+              <p>• Include distance/time for better planning</p>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Form */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="space-y-6">
+      {/* Compact Form */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div className="space-y-4">
           {/* Route Name */}
           <div>
-            <Input 
-              label="Route Name" 
-              type="text" 
-              placeholder="Enter the route name (e.g., Downtown Route, Zone A)" 
-              value={name} 
+            <Input
+              label="Route Name"
+              type="text"
+              placeholder="e.g., Downtown Route, Zone A"
+              value={name}
               onChange={(e) => setName(e.target.value)}
               required
             />
           </div>
 
-          {/* Areas */}
+          {/* Areas - Compact Layout */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Areas Covered <span className="text-red-500">*</span>
             </label>
-            <div className="space-y-3">
+            <div className="space-y-2">
               {areas.map((area, index) => (
                 <div key={index} className="flex items-center space-x-2">
                   <div className="flex-1">
-                    <Input
+                    <input
                       type="text"
-                      placeholder={`Area ${index + 1} (e.g., Main Street, City Center)`}
+                      placeholder={`Area ${index + 1}`}
                       value={area}
                       onChange={(e) => updateArea(index, e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                   {areas.length > 1 && (
@@ -184,39 +223,25 @@ const AddingRoutes = () => {
                   )}
                 </div>
               ))}
-              
+
               <button
                 type="button"
                 onClick={addAreaInput}
-                className="flex items-center space-x-2 text-blue-600 hover:text-blue-700 text-sm font-medium"
+                className="flex items-center space-x-1 text-blue-600 hover:text-blue-700 text-sm font-medium mt-2"
               >
                 <Plus className="h-4 w-4" />
-                <span>Add Another Area</span>
+                <span>Add Area</span>
               </button>
             </div>
           </div>
 
-          {/* Description */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Description
-            </label>
-            <textarea
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-              rows="3"
-              placeholder="Optional description of the route, special instructions, or notes"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </div>
-
-          {/* Route Details */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Route Details - Inline */}
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <Input
-                label="Estimated Distance (km)"
+                label="Distance (km)"
                 type="number"
-                placeholder="e.g., 25.5"
+                placeholder="25.5"
                 value={estimatedDistance}
                 onChange={(e) => setEstimatedDistance(e.target.value)}
                 step="0.1"
@@ -225,9 +250,9 @@ const AddingRoutes = () => {
             </div>
             <div>
               <Input
-                label="Estimated Time (minutes)"
+                label="Time (min)"
                 type="number"
-                placeholder="e.g., 45"
+                placeholder="45"
                 value={estimatedTime}
                 onChange={(e) => setEstimatedTime(e.target.value)}
                 min="0"
@@ -235,12 +260,26 @@ const AddingRoutes = () => {
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex items-center justify-end space-x-3 pt-6 border-t border-gray-200">
+          {/* Description - Compact */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description (Optional)
+            </label>
+            <textarea
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+              rows="2"
+              placeholder="Route notes or special instructions..."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+
+          {/* Action Buttons - Compact */}
+          <div className="flex items-center justify-end space-x-2 pt-4 border-t border-gray-200">
             <button
               type="button"
               onClick={resetForm}
-              className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
+              className="px-3 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
               disabled={isLoading}
             >
               Reset
@@ -249,7 +288,7 @@ const AddingRoutes = () => {
               type="button"
               onClick={handleSaveRoute}
               disabled={isLoading}
-              className="flex items-center space-x-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg font-medium transition-colors"
+              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg font-medium transition-colors text-sm"
             >
               {isLoading ? (
                 <>
@@ -267,21 +306,37 @@ const AddingRoutes = () => {
         </div>
       </div>
 
-      {/* Info Card */}
-      <div className="mt-6 bg-blue-50 rounded-lg p-4">
-        <div className="flex items-start space-x-3">
-          <MapPin className="h-5 w-5 text-blue-600 mt-0.5" />
-          <div>
-            <h3 className="text-sm font-medium text-blue-900 mb-1">Route Planning Tips</h3>
-            <ul className="text-sm text-blue-700 space-y-1">
-              <li>• Add multiple areas to create comprehensive routes</li>
-              <li>• Include estimated distance and time for better planning</li>
-              <li>• Use clear, descriptive names for easy identification</li>
-              <li>• Consider traffic patterns and delivery windows</li>
-            </ul>
+      {/* Quick Preview */}
+      {(name || areas.some((area) => area.trim())) && (
+        <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+          <h3 className="text-sm font-medium text-gray-700 mb-2">Preview:</h3>
+          <div className="text-sm text-gray-600 space-y-1">
+            {name && (
+              <p>
+                <span className="font-medium">Route:</span> {name}
+              </p>
+            )}
+            {areas.filter((area) => area.trim()).length > 0 && (
+              <p>
+                <span className="font-medium">Areas:</span>{" "}
+                {areas.filter((area) => area.trim()).join(", ")}
+              </p>
+            )}
+            {estimatedDistance && (
+              <p>
+                <span className="font-medium">Distance:</span>{" "}
+                {estimatedDistance} km
+              </p>
+            )}
+            {estimatedTime && (
+              <p>
+                <span className="font-medium">Time:</span> {estimatedTime}{" "}
+                minutes
+              </p>
+            )}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
