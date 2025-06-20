@@ -85,9 +85,9 @@ export const AddingPaddyStock = () => {
       setBuyers(buyersList);
     } catch (error) {
       console.error("Error fetching buyers:", error);
-      if (error.code === 'permission-denied') {
+      if (error.code === "permission-denied") {
         toast.error("Permission denied. Check your Firestore rules.");
-      } else if (error.code === 'not-found') {
+      } else if (error.code === "not-found") {
         toast.error("Buyers collection not found.");
       } else {
         toast.error("Failed to load buyers data");
@@ -118,10 +118,12 @@ export const AddingPaddyStock = () => {
         });
       });
 
-      setPaddyTypes(paddyTypesList.sort((a, b) => a.name.localeCompare(b.name)));
+      setPaddyTypes(
+        paddyTypesList.sort((a, b) => a.name.localeCompare(b.name))
+      );
     } catch (error) {
       console.error("Error fetching paddy types:", error);
-      if (error.code === 'permission-denied') {
+      if (error.code === "permission-denied") {
         toast.error("Permission denied accessing paddy types.");
       } else {
         toast.error("Failed to load paddy types");
@@ -168,12 +170,12 @@ export const AddingPaddyStock = () => {
   // Check if code exists in database
   const checkCodeExistsInDB = async (code) => {
     if (!code || !currentUser || !currentBusiness?.id) return false;
-    
+
     try {
       const paddyTypeDocPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/productsTypes/${code}`;
       const docRef = doc(db, paddyTypeDocPath);
       const docSnap = await getDoc(docRef);
-      
+
       return docSnap.exists();
     } catch (error) {
       console.error("Error checking code existence:", error);
@@ -184,13 +186,13 @@ export const AddingPaddyStock = () => {
   // Generate meaningful paddy code from name
   const generatePaddyCode = (name) => {
     if (!name || !name.trim()) return "";
-    
+
     const cleanName = name.trim().toLowerCase();
     let code = "";
-    
+
     // Split by spaces and take first letters
     const words = cleanName.split(/\s+/);
-    
+
     if (words.length === 1) {
       // Single word - take first 2-3 letters based on length
       const word = words[0];
@@ -206,9 +208,13 @@ export const AddingPaddyStock = () => {
       code = (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
     } else {
       // Multiple words - take first letter of each up to 3 letters
-      code = words.slice(0, 3).map(word => word.charAt(0)).join("").toUpperCase();
+      code = words
+        .slice(0, 3)
+        .map((word) => word.charAt(0))
+        .join("")
+        .toUpperCase();
     }
-    
+
     return code;
   };
 
@@ -216,35 +222,38 @@ export const AddingPaddyStock = () => {
   const generateUniqueCode = async (baseName) => {
     const baseCode = generatePaddyCode(baseName);
     if (!baseCode) return "";
-    
+
     // First check local state for quick validation
-    const localExistingCodes = paddyTypes.map(type => type.code);
-    
+    const localExistingCodes = paddyTypes.map((type) => type.code);
+
     // Then check database for the base code
     const baseCodeExistsInDB = await checkCodeExistsInDB(baseCode);
-    
+
     if (!localExistingCodes.includes(baseCode) && !baseCodeExistsInDB) {
       return baseCode;
     }
-    
+
     // If base code exists, try with numbers
     for (let i = 1; i <= 99; i++) {
       const numberedCode = `${baseCode}${i}`;
       const numberedCodeExistsInDB = await checkCodeExistsInDB(numberedCode);
-      
-      if (!localExistingCodes.includes(numberedCode) && !numberedCodeExistsInDB) {
+
+      if (
+        !localExistingCodes.includes(numberedCode) &&
+        !numberedCodeExistsInDB
+      ) {
         return numberedCode;
       }
     }
-    
+
     // If all numbered codes are taken, use timestamp
     const timestampCode = `${baseCode}${Date.now().toString().slice(-3)}`;
     const timestampCodeExistsInDB = await checkCodeExistsInDB(timestampCode);
-    
+
     if (!timestampCodeExistsInDB) {
       return timestampCode;
     }
-    
+
     // Final fallback - use full timestamp
     return `${baseCode}${Date.now()}`;
   };
@@ -252,10 +261,10 @@ export const AddingPaddyStock = () => {
   // Handle new paddy type form changes
   const handleNewPaddyTypeChange = async (e) => {
     const { name, value } = e.target;
-    
+
     if (name === "name") {
       setGeneratingCode(true);
-      
+
       // Generate code when name changes
       try {
         const generatedCode = await generateUniqueCode(value);
@@ -301,19 +310,23 @@ export const AddingPaddyStock = () => {
     try {
       // Final check for code uniqueness before saving
       const finalCode = await generateUniqueCode(newPaddyTypeData.name);
-      
+
       if (!finalCode) {
-        toast.error("Unable to generate a unique code. Please try a different name.");
+        toast.error(
+          "Unable to generate a unique code. Please try a different name."
+        );
         return;
       }
 
       // Double-check that the final code doesn't exist in database
       const codeExists = await checkCodeExistsInDB(finalCode);
       if (codeExists) {
-        toast.error("Generated code already exists. Please try again or use a different name.");
+        toast.error(
+          "Generated code already exists. Please try again or use a different name."
+        );
         return;
       }
-      
+
       const paddyTypeData = {
         name: newPaddyTypeData.name.trim(),
         businessId: currentBusiness.id,
@@ -328,20 +341,22 @@ export const AddingPaddyStock = () => {
       await setDoc(doc(db, paddyTypeDocPath), paddyTypeData);
 
       toast.success(`Paddy type added successfully! Code: ${finalCode}`);
-      
+
       // Reset form and close modal
       setNewPaddyTypeData({ name: "", generatedCode: "" });
       setGeneratingCode(false);
       setIsAddPaddyTypeModalOpen(false);
-      
+
       // Refresh paddy types list
       await fetchPaddyTypes();
     } catch (error) {
       console.error("Error adding paddy type:", error);
-      if (error.code === 'permission-denied') {
+      if (error.code === "permission-denied") {
         toast.error("Permission denied. Check your Firestore rules.");
-      } else if (error.code === 'already-exists') {
-        toast.error("A paddy type with this code already exists. Please try again.");
+      } else if (error.code === "already-exists") {
+        toast.error(
+          "A paddy type with this code already exists. Please try again."
+        );
       } else {
         toast.error("Failed to add paddy type. Please try again.");
       }
@@ -402,7 +417,8 @@ export const AddingPaddyStock = () => {
     setSubmitting(true);
 
     try {
-      const totalAmount = parseFloat(formData.quantity) * parseFloat(formData.price);
+      const totalAmount =
+        parseFloat(formData.quantity) * parseFloat(formData.price);
 
       // First, create purchase record in buyer's subcollection
       const purchaseData = {
@@ -428,7 +444,10 @@ export const AddingPaddyStock = () => {
 
       // Add purchase to buyer's purchases subcollection
       const purchaseCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/buyers/${formData.buyerId}/purchases`;
-      const purchaseDocRef = await addDoc(collection(db, purchaseCollectionPath), purchaseData);
+      const purchaseDocRef = await addDoc(
+        collection(db, purchaseCollectionPath),
+        purchaseData
+      );
       const purchaseId = purchaseDocRef.id;
 
       // Then, create stock record with purchaseId reference
@@ -455,7 +474,10 @@ export const AddingPaddyStock = () => {
 
       // Use the correct collection path for stock
       const stockCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/rawProcessedStock/stock`;
-      const stockDocRef = await addDoc(collection(db, stockCollectionPath), stockData);
+      const stockDocRef = await addDoc(
+        collection(db, stockCollectionPath),
+        stockData
+      );
       const stockId = stockDocRef.id;
 
       // Update purchase record with stockId
@@ -479,7 +501,7 @@ export const AddingPaddyStock = () => {
       setIsPaymentModalOpen(true);
     } catch (error) {
       console.error("Error adding paddy stock:", error);
-      if (error.code === 'permission-denied') {
+      if (error.code === "permission-denied") {
         toast.error("Permission denied. Check your Firestore rules.");
       } else {
         toast.error("Failed to add paddy stock. Please try again.");
@@ -493,7 +515,7 @@ export const AddingPaddyStock = () => {
   const handlePaymentComplete = async (paymentData) => {
     try {
       const paymentsCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/payments`;
-      
+
       const paymentRecord = {
         ...paymentData,
         type: "stock_purchase",
@@ -506,7 +528,10 @@ export const AddingPaddyStock = () => {
         createdAt: serverTimestamp(),
       };
 
-      const paymentDocRef = await addDoc(collection(db, paymentsCollectionPath), paymentRecord);
+      const paymentDocRef = await addDoc(
+        collection(db, paymentsCollectionPath),
+        paymentRecord
+      );
       const paymentId = paymentDocRef.id;
 
       // Update stock record with paymentId
@@ -654,17 +679,29 @@ export const AddingPaddyStock = () => {
                     onClick={() => setIsAddPaddyTypeModalOpen(true)}
                     className="inline-flex items-center px-2 py-1 border border-transparent text-xs font-medium rounded text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   >
-                    <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                    <svg
+                      className="w-3 h-3 mr-1"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M12 4v16m8-8H4"
+                      />
                     </svg>
                     Add Type
                   </button>
                 </div>
-                
+
                 {loadingPaddyTypes ? (
                   <div className="flex items-center justify-center py-3 border border-gray-300 rounded-lg">
                     <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-indigo-600"></div>
-                    <span className="ml-2 text-sm text-gray-600">Loading...</span>
+                    <span className="ml-2 text-sm text-gray-600">
+                      Loading...
+                    </span>
                   </div>
                 ) : (
                   <select
@@ -683,7 +720,7 @@ export const AddingPaddyStock = () => {
                     ))}
                   </select>
                 )}
-                
+
                 {paddyTypes.length === 0 && !loadingPaddyTypes && (
                   <div className="mt-1 text-xs text-gray-500">
                     No paddy types found. Click "Add Type" to create one.
@@ -750,8 +787,12 @@ export const AddingPaddyStock = () => {
                   Total Amount (Rs.)
                 </label>
                 <div className="py-2 px-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-800 font-semibold">
-                  Rs. {formData.quantity && formData.price
-                    ? (parseFloat(formData.quantity) * parseFloat(formData.price)).toLocaleString('en-IN', { maximumFractionDigits: 2 })
+                  Rs.{" "}
+                  {formData.quantity && formData.price
+                    ? (
+                        parseFloat(formData.quantity) *
+                        parseFloat(formData.price)
+                      ).toLocaleString("en-IN", { maximumFractionDigits: 2 })
                     : "0.00"}
                 </div>
               </div>
@@ -848,7 +889,9 @@ export const AddingPaddyStock = () => {
               {generatingCode ? (
                 <div className="py-2 px-3 bg-gray-50 border border-gray-200 rounded-lg flex items-center">
                   <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-indigo-600 mr-2"></div>
-                  <span className="text-gray-600 text-sm">Checking availability...</span>
+                  <span className="text-gray-600 text-sm">
+                    Checking availability...
+                  </span>
                 </div>
               ) : (
                 <div className="py-2 px-3 bg-indigo-50 border border-indigo-200 rounded-lg text-indigo-800 font-medium text-sm">
@@ -873,7 +916,11 @@ export const AddingPaddyStock = () => {
             </button>
             <button
               type="submit"
-              disabled={addingPaddyType || generatingCode || !newPaddyTypeData.generatedCode}
+              disabled={
+                addingPaddyType ||
+                generatingCode ||
+                !newPaddyTypeData.generatedCode
+              }
               className="px-6 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
             >
               {addingPaddyType ? (
@@ -913,12 +960,28 @@ export const AddingPaddyStock = () => {
 
           {savedStockData && (
             <div className="bg-gray-50 p-4 rounded-lg">
-              <h5 className="font-medium text-gray-900 mb-2">Purchase Summary:</h5>
+              <h5 className="font-medium text-gray-900 mb-2">
+                Purchase Summary:
+              </h5>
               <div className="text-sm text-gray-700 space-y-1">
-                <p><span className="font-medium">Buyer:</span> {savedStockData.buyerName}</p>
-                <p><span className="font-medium">Total Amount:</span> Rs. {savedStockData.totalAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</p>
-                <p><span className="font-medium">Stock ID:</span> {savedStockData.stockId}</p>
-                <p><span className="font-medium">Purchase ID:</span> {savedStockData.purchaseId}</p>
+                <p>
+                  <span className="font-medium">Buyer:</span>{" "}
+                  {savedStockData.buyerName}
+                </p>
+                <p>
+                  <span className="font-medium">Total Amount:</span> Rs.{" "}
+                  {savedStockData.totalAmount.toLocaleString("en-IN", {
+                    maximumFractionDigits: 2,
+                  })}
+                </p>
+                <p>
+                  <span className="font-medium">Stock ID:</span>{" "}
+                  {savedStockData.stockId}
+                </p>
+                <p>
+                  <span className="font-medium">Purchase ID:</span>{" "}
+                  {savedStockData.purchaseId}
+                </p>
               </div>
             </div>
           )}

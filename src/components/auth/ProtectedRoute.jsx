@@ -1,6 +1,5 @@
-// src/components/auth/ProtectedRoute.jsx
-import React, { useState, useEffect } from "react";
-import { Navigate } from "react-router-dom";
+import React from "react";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 
 const ProtectedRoute = ({
@@ -9,13 +8,27 @@ const ProtectedRoute = ({
   managerOnly = false,
   ownerOnly = false,
   allowedRoles = [],
-  fallbackPath = "/unauthorized",
+  redirectTo = null,
+  requirePermissions = [],
 }) => {
-  const { currentUser, userRole, loading: authLoading } = useAuth();
+  const {
+    currentUser,
+    userRole,
+    userProfile,
+    loading: authLoading,
+  } = useAuth();
+  const location = useLocation();
 
-  console.log("ProtectedRoute - currentUser:", currentUser);
-  console.log("ProtectedRoute - userRole:", userRole);
-  console.log("ProtectedRoute - authLoading:", authLoading);
+  console.log("ProtectedRoute Debug:", {
+    currentUser: currentUser?.uid,
+    userRole,
+    authLoading,
+    path: location.pathname,
+    adminOnly,
+    managerOnly,
+    ownerOnly,
+    allowedRoles,
+  });
 
   // Show loading state while checking authentication
   if (authLoading) {
@@ -23,7 +36,7 @@ const ProtectedRoute = ({
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+          <p className="mt-4 text-gray-600">Authenticating...</p>
         </div>
       </div>
     );
@@ -31,10 +44,16 @@ const ProtectedRoute = ({
 
   // Redirect to login if not authenticated
   if (!currentUser) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Check role-based access using the userRole from AuthContext
+  // Check if user role is available
+  if (!userRole) {
+    console.error("User role not available for authenticated user");
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // Helper function to check role-based access
   const checkRoleAccess = () => {
     // If no role restrictions, allow access
     if (!adminOnly && !managerOnly && !ownerOnly && allowedRoles.length === 0) {
@@ -54,8 +73,21 @@ const ProtectedRoute = ({
     return false;
   };
 
-  // Redirect based on user role if they don't have access
+  // Helper function to check permissions for managers
+  const checkPermissions = () => {
+    if (requirePermissions.length === 0) return true;
+    if (userRole !== "manager") return true; // Only managers need permission checks
+
+    const userPermissions = userProfile?.permissions || [];
+    return requirePermissions.every((permission) =>
+      userPermissions.includes(permission)
+    );
+  };
+
+  // Get the appropriate redirect path based on user role
   const getRedirectPath = () => {
+    if (redirectTo) return redirectTo;
+
     switch (userRole) {
       case "admin":
         return "/admin/dashboard";
@@ -64,48 +96,62 @@ const ProtectedRoute = ({
       case "owner":
         return "/home";
       default:
-        return fallbackPath;
+        return "/unauthorized";
     }
   };
 
-  // Check if user has access to this route
+  // Check if user has role-based access
   if (!checkRoleAccess()) {
-    console.log("Access denied. Redirecting to:", getRedirectPath());
+    console.log(
+      `Access denied: User role '${userRole}' not authorized for this route`
+    );
     return <Navigate to={getRedirectPath()} replace />;
   }
 
-  // Return the protected component if all checks pass
+  // Check if user has required permissions (for managers)
+  if (!checkPermissions()) {
+    console.log(
+      `Permission denied: User lacks required permissions: ${requirePermissions.join(
+        ", "
+      )}`
+    );
+    return <Navigate to={getRedirectPath()} replace />;
+  }
+
+  // User is authenticated and has proper access
   return children;
 };
 
-// Higher-order component for easy role checking
-export const withRoleProtection = (WrappedComponent, roleConfig = {}) => {
-  return (props) => (
-    <ProtectedRoute {...roleConfig}>
-      <WrappedComponent {...props} />
-    </ProtectedRoute>
-  );
-};
+// Higher-order component for easy role-specific route creation
+export const AdminRoute = ({ children, ...props }) => (
+  <ProtectedRoute adminOnly {...props}>
+    {children}
+  </ProtectedRoute>
+);
 
-// Utility hooks for role checking (simplified version that uses AuthContext)
-export const useUserRole = () => {
-  const { userRole, loading } = useAuth();
-  return { userRole, loading };
-};
+export const ManagerRoute = ({ children, ...props }) => (
+  <ProtectedRoute managerOnly {...props}>
+    {children}
+  </ProtectedRoute>
+);
 
-// Component to check if user has specific role
-export const RoleGuard = ({ allowedRoles, fallback = null, children }) => {
-  const { userRole, loading } = useUserRole();
+export const OwnerRoute = ({ children, ...props }) => (
+  <ProtectedRoute ownerOnly {...props}>
+    {children}
+  </ProtectedRoute>
+);
 
-  if (loading) {
-    return <div className="animate-pulse h-4 bg-gray-200 rounded"></div>;
-  }
+// Multi-role route components
+export const AdminManagerRoute = ({ children, ...props }) => (
+  <ProtectedRoute allowedRoles={["admin", "manager"]} {...props}>
+    {children}
+  </ProtectedRoute>
+);
 
-  if (!allowedRoles.includes(userRole)) {
-    return fallback;
-  }
-
-  return children;
-};
+export const OwnerManagerRoute = ({ children, ...props }) => (
+  <ProtectedRoute allowedRoles={["owner", "manager"]} {...props}>
+    {children}
+  </ProtectedRoute>
+);
 
 export default ProtectedRoute;

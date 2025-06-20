@@ -13,6 +13,7 @@ import {
   ArrowRight,
   AlertCircle,
   CheckCircle,
+  Loader2,
 } from "lucide-react";
 
 const Login = () => {
@@ -25,20 +26,28 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [rememberMe, setRememberMe] = useState(false);
 
-  const { adminLogin, userLogin, isAdminEmail } = useAuth();
+  const { adminLogin, userLogin, isAdminEmail, currentUser, userRole } =
+    useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   // Get the intended path from location state (if user was redirected to login)
   const from = location.state?.from?.pathname || "";
 
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (currentUser && userRole) {
+      const redirectPath = getDashboardPath(userRole);
+      navigate(redirectPath, { replace: true });
+    }
+  }, [currentUser, userRole, navigate]);
+
   // Auto-detect admin when @lumorabiz.com email is entered
   useEffect(() => {
     if (formData.email && isAdminEmail(formData.email)) {
       setIsAdminMode(true);
-    } else {
+    } else if (formData.email && !isAdminEmail(formData.email)) {
       setIsAdminMode(false);
     }
   }, [formData.email, isAdminEmail]);
@@ -47,47 +56,74 @@ const Login = () => {
   useEffect(() => {
     if (
       location.pathname === "/admin" ||
-      location.search.includes("admin=true")
+      location.search.includes("admin=true") ||
+      from.includes("/admin")
     ) {
       setIsAdminMode(true);
     }
-  }, [location]);
+  }, [location, from]);
+
+  // Load remembered username
+  useEffect(() => {
+    // No more remembered usernames - always start fresh
+    console.log("Login component loaded - no persistent data");
+  }, [isAdminMode]);
+
+  const validateForm = () => {
+    if (isAdminMode) {
+      if (!formData.email?.trim()) {
+        setError("Email is required for admin login");
+        return false;
+      }
+      if (!formData.password?.trim()) {
+        setError("Password is required");
+        return false;
+      }
+      if (!isAdminEmail(formData.email)) {
+        setError("Only @lumorabiz.com emails are authorized for admin access");
+        return false;
+      }
+    } else {
+      if (!formData.username?.trim()) {
+        setError("Username is required");
+        return false;
+      }
+      if (!formData.password?.trim()) {
+        setError("Password is required");
+        return false;
+      }
+    }
+    return true;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+
+    if (!validateForm()) {
+      return;
+    }
+
     setLoading(true);
 
     try {
       if (isAdminMode) {
-        if (!formData.email || !formData.password) {
-          throw new Error("Email and password are required");
-        }
-
         console.log("Attempting admin login...");
-        await adminLogin(formData.email, formData.password);
+        await adminLogin(formData.email.trim(), formData.password);
 
         // Navigate to admin dashboard or intended path
         const redirectPath = getLoginRedirect("admin", from);
         console.log("Admin login successful, redirecting to:", redirectPath);
         navigate(redirectPath, { replace: true });
       } else {
-        if (!formData.username || !formData.password) {
-          throw new Error("Username and password are required");
-        }
-
         console.log("Attempting user login with username:", formData.username);
-        const result = await userLogin(formData.username, formData.password);
+        const result = await userLogin(
+          formData.username.trim(),
+          formData.password
+        );
         const role = result.user.role;
 
         console.log("User login successful, user role:", role);
-
-        // Remember user if checkbox is checked
-        if (rememberMe) {
-          localStorage.setItem("rememberedUser", formData.username);
-        } else {
-          localStorage.removeItem("rememberedUser");
-        }
 
         // Navigate to appropriate dashboard or intended path
         const redirectPath = getLoginRedirect(role, from);
@@ -96,16 +132,33 @@ const Login = () => {
       }
     } catch (error) {
       console.error("Login error:", error);
-      setError(error.message);
+
+      // Handle specific Firebase auth errors
+      let errorMessage = error.message;
+
+      if (error.code === "auth/user-not-found") {
+        errorMessage = isAdminMode
+          ? "Admin account not found"
+          : "Invalid username or password";
+      } else if (error.code === "auth/wrong-password") {
+        errorMessage = "Invalid password";
+      } else if (error.code === "auth/invalid-email") {
+        errorMessage = "Invalid email format";
+      } else if (error.code === "auth/too-many-requests") {
+        errorMessage = "Too many failed attempts. Please try again later.";
+      }
+
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
   const handleInputChange = (e) => {
+    const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
-      [e.target.name]: e.target.value,
+      [name]: value,
     }));
 
     // Clear error when user starts typing
@@ -114,71 +167,68 @@ const Login = () => {
     }
   };
 
-  // Load remembered username
-  useEffect(() => {
-    const remembered = localStorage.getItem("rememberedUser");
-    if (remembered && !isAdminMode) {
-      setFormData((prev) => ({ ...prev, username: remembered }));
-      setRememberMe(true);
-    }
-  }, [isAdminMode]);
+  const handleModeToggle = () => {
+    setIsAdminMode(!isAdminMode);
+    setFormData({ email: "", username: "", password: "" });
+    setError("");
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-100 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 text-white">
+        <div
+          className={`${
+            isAdminMode
+              ? "bg-gradient-to-r from-red-600 to-red-700"
+              : "bg-gradient-to-r from-blue-600 to-indigo-600"
+          } px-8 py-6 text-white transition-all duration-300`}
+        >
           <div className="text-center">
             <div className="mx-auto w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4">
-              <Building className="w-8 h-8 text-white" />
+              {isAdminMode ? (
+                <Shield className="w-8 h-8 text-white" />
+              ) : (
+                <Building className="w-8 h-8 text-white" />
+              )}
             </div>
             <h1 className="text-2xl font-bold mb-2">Rice Mill System</h1>
-            <p className="text-blue-100">
-              {isAdminMode ? "Administrator Access" : "Welcome Back"}
+            <p className={`${isAdminMode ? "text-red-100" : "text-blue-100"}`}>
+              {isAdminMode ? "Admin Access Portal" : "Welcome back!"}
             </p>
           </div>
         </div>
 
-        <div className="p-8">
-          {/* Admin Mode Indicator (only shows when admin email is detected) */}
-          {isAdminMode && (
-            <div className="mb-6">
-              <div className="flex items-center justify-center p-3 rounded-lg bg-red-50 border border-red-200">
-                <Shield className="w-5 h-5 text-red-600 mr-2" />
-                <span className="text-red-800 font-medium">
-                  Administrator Login Detected
-                </span>
-              </div>
-            </div>
-          )}
+        {/* Login Form */}
+        <div className="px-8 py-8">
+          {/* Mode Toggle */}
+          <div className="flex items-center justify-center mb-6">
+            <button
+              type="button"
+              onClick={handleModeToggle}
+              className={`text-sm font-medium transition-colors ${
+                isAdminMode
+                  ? "text-red-600 hover:text-red-700"
+                  : "text-blue-600 hover:text-blue-700"
+              }`}
+            >
+              {isAdminMode ? "Switch to User Login" : "Admin Login?"}
+            </button>
+          </div>
 
-          {/* User Mode Indicator (default) */}
-          {!isAdminMode && (
-            <div className="mb-6">
-              <div className="flex items-center justify-center p-3 rounded-lg bg-blue-50 border border-blue-200">
-                <User className="w-5 h-5 text-blue-600 mr-2" />
-                <span className="text-blue-800 font-medium">
-                  Owner / Manager Login
-                </span>
-              </div>
+          {/* Error Display */}
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start">
+              <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 mr-3 flex-shrink-0" />
+              <div className="text-sm text-red-700">{error}</div>
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Error Message */}
-            {error && (
-              <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded-lg">
-                <div className="flex items-center">
-                  <AlertCircle className="w-5 h-5 text-red-400 mr-2" />
-                  <p className="text-red-700 text-sm font-medium">{error}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Email field (always visible for auto-detection) */}
+            {/* Email field (for admins and email detection) */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-3">
-                {isAdminMode ? "Admin Email Address" : "Email (Optional)"}
+                {isAdminMode ? "Admin Email" : "Email (Optional)"}
               </label>
               <div className="relative">
                 <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
@@ -187,7 +237,11 @@ const Login = () => {
                   name="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  className="w-full pl-12 pr-4 py-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  className={`w-full pl-12 pr-12 py-4 border ${
+                    error && isAdminMode ? "border-red-300" : "border-gray-300"
+                  } rounded-xl focus:ring-2 ${
+                    isAdminMode ? "focus:ring-red-500" : "focus:ring-blue-500"
+                  } focus:border-transparent transition-all`}
                   placeholder={
                     isAdminMode
                       ? "Enter your admin email"
@@ -195,9 +249,11 @@ const Login = () => {
                   }
                   required={isAdminMode}
                 />
-                {isAdminMode && (
-                  <CheckCircle className="absolute right-4 top-1/2 transform -translate-y-1/2 text-red-500 w-5 h-5" />
-                )}
+                {isAdminMode &&
+                  formData.email &&
+                  isAdminEmail(formData.email) && (
+                    <CheckCircle className="absolute right-4 top-1/2 transform -translate-y-1/2 text-red-500 w-5 h-5" />
+                  )}
               </div>
               {!isAdminMode && (
                 <p className="mt-2 text-xs text-gray-500">
@@ -225,13 +281,14 @@ const Login = () => {
                     name="username"
                     value={formData.username}
                     onChange={handleInputChange}
-                    className="w-full pl-12 pr-4 py-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    className={`w-full pl-12 pr-4 py-4 border ${
+                      error && !isAdminMode
+                        ? "border-red-300"
+                        : "border-gray-300"
+                    } rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all`}
                     placeholder="Enter your username"
                     required={!isAdminMode}
                   />
-                  {rememberMe && formData.username && (
-                    <CheckCircle className="absolute right-4 top-1/2 transform -translate-y-1/2 text-green-500 w-5 h-5" />
-                  )}
                 </div>
               </div>
             )}
@@ -248,7 +305,11 @@ const Login = () => {
                   name="password"
                   value={formData.password}
                   onChange={handleInputChange}
-                  className="w-full pl-12 pr-12 py-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  className={`w-full pl-12 pr-12 py-4 border ${
+                    error ? "border-red-300" : "border-gray-300"
+                  } rounded-xl focus:ring-2 ${
+                    isAdminMode ? "focus:ring-red-500" : "focus:ring-blue-500"
+                  } focus:border-transparent transition-all`}
                   placeholder="Enter your password"
                   required
                 />
@@ -266,23 +327,6 @@ const Login = () => {
               </div>
             </div>
 
-            {/* Remember Me (only for users) */}
-            {!isAdminMode && (
-              <div className="flex items-center justify-between">
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <span className="ml-2 text-sm text-gray-600">
-                    Remember username
-                  </span>
-                </label>
-              </div>
-            )}
-
             {/* Submit Button */}
             <button
               type="submit"
@@ -295,7 +339,7 @@ const Login = () => {
             >
               {loading ? (
                 <div className="flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></div>
+                  <Loader2 className="animate-spin h-5 w-5 mr-3" />
                   Signing in...
                 </div>
               ) : (
@@ -311,36 +355,37 @@ const Login = () => {
           <div className="mt-8 text-center">
             {isAdminMode ? (
               <p className="text-sm text-gray-600">
-                Having trouble? Contact system support
+                Having trouble?{" "}
+                <a
+                  href="mailto:support@lumorabiz.com"
+                  className="text-red-600 hover:text-red-700 font-medium"
+                >
+                  Contact IT Support
+                </a>
               </p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <p className="text-sm text-gray-600">
-                  Don't have login credentials? Contact your business owner for
-                  access.
+                  Don't have an account?{" "}
+                  <button
+                    onClick={() => navigate("/signup")}
+                    className="text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Sign up here
+                  </button>
                 </p>
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-xs text-gray-500">
-                    <strong>For Business Owners:</strong> Register your business
-                    through the signup process.
-                    <br />
-                    <strong>For Managers:</strong> Your owner will provide login
-                    credentials when adding you as an employee.
-                  </p>
-                </div>
+                <p className="text-sm text-gray-600">
+                  Forgot your password?{" "}
+                  <button
+                    onClick={() => navigate("/forgot-password")}
+                    className="text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Reset it
+                  </button>
+                </p>
               </div>
             )}
           </div>
-
-          {/* Admin Detection Info */}
-          {!isAdminMode && (
-            <div className="mt-6 p-4 bg-blue-50 rounded-xl">
-              <p className="text-xs text-blue-600 text-center">
-                <strong>System Administrators:</strong> Use your @lumorabiz.com
-                email for automatic admin access
-              </p>
-            </div>
-          )}
         </div>
       </div>
     </div>
