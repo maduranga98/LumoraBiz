@@ -1,3 +1,4 @@
+// src/contexts/AuthContext.jsx - NO STORAGE VERSION
 import React, { createContext, useContext, useState, useEffect } from "react";
 import {
   createUserWithEmailAndPassword,
@@ -32,13 +33,54 @@ export function AuthProvider({ children }) {
   const [userRole, setUserRole] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isAppStart, setIsAppStart] = useState(true); // Track if this is app start vs refresh
+
+  // Check if this is app start or page refresh
+  useEffect(() => {
+    // Use sessionStorage to detect if this is a fresh app start
+    const isRefresh = sessionStorage.getItem("app_session_active");
+
+    if (!isRefresh) {
+      // This is a fresh app start
+      setIsAppStart(true);
+      sessionStorage.setItem("app_session_active", "true");
+      console.log("🚀 Fresh app start - will show login page");
+    } else {
+      // This is a page refresh
+      setIsAppStart(false);
+      console.log("🔄 Page refresh - maintaining session if exists");
+    }
+  }, []);
 
   // Check if email is admin (Lumorabiz domain)
   const isAdminEmail = (email) => {
     return email.toLowerCase().endsWith("@lumorabiz.com");
   };
 
-  // Admin login (Firebase Auth)
+  // Generate unique username for managers
+  const generateUsername = async (name, ownerId) => {
+    const baseUsername = name.toLowerCase().replace(/\s+/g, "");
+    let username = baseUsername;
+    let counter = 1;
+
+    while (true) {
+      const managersQuery = query(
+        collection(db, "managers"),
+        where("username", "==", username),
+        where("ownerId", "==", ownerId)
+      );
+      const snapshot = await getDocs(managersQuery);
+
+      if (snapshot.empty) {
+        return username;
+      }
+
+      username = `${baseUsername}${counter}`;
+      counter++;
+    }
+  };
+
+  // Admin login (Firebase Auth only)
   async function adminLogin(email, password) {
     try {
       if (!isAdminEmail(email)) {
@@ -54,9 +96,10 @@ export function AuthProvider({ children }) {
       );
 
       // Set admin role automatically for Lumorabiz emails
+      setCurrentUser(userCredential.user);
       setUserRole("admin");
       setUserProfile({
-        name: "Administrator",
+        name: userCredential.user.displayName || "Administrator",
         email: email,
         role: "admin",
         domain: "lumorabiz.com",
@@ -69,14 +112,18 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // Owner/Manager login using username/password (but email is in Firebase Auth)
+  // Owner/Manager login using username/password (SESSION STORAGE FOR REFRESH)
   async function userLogin(username, password) {
     try {
+      if (!username || !password) {
+        throw new Error("Username and password are required");
+      }
+
       // First check owners collection
       const ownersQuery = query(
         collection(db, "owners"),
         where("username", "==", username),
-        where("password", "==", password) // In production, hash passwords
+        where("password", "==", password)
       );
 
       const ownersSnapshot = await getDocs(ownersQuery);
@@ -89,17 +136,14 @@ export function AuthProvider({ children }) {
           throw new Error("Account is deactivated");
         }
 
-        // Verify the owner's email exists in Firebase Auth
-        // This is important - the email should already be registered there
-        console.log("Owner found with email:", ownerData.email);
-
+        // Create custom user object for owners
         const customUser = {
-          uid: ownerDoc.id, // Use Firestore document ID as UID
+          uid: ownerDoc.id,
           email: ownerData.email,
           displayName: ownerData.name,
           username: ownerData.username,
           role: "owner",
-          firebaseUID: ownerData.firebaseUID, // Link to actual Firebase Auth UID
+          firebaseUID: ownerData.firebaseUID,
           ...ownerData,
         };
 
@@ -107,14 +151,20 @@ export function AuthProvider({ children }) {
         setUserRole("owner");
         setUserProfile(ownerData);
 
-        // Store session
-        localStorage.setItem(
-          "authSession",
+        // Store session data for refresh persistence (NOT localStorage)
+        sessionStorage.setItem(
+          "auth_session",
           JSON.stringify({
             uid: ownerDoc.id,
             role: "owner",
             data: ownerData,
+            timestamp: Date.now(),
           })
+        );
+
+        console.log(
+          "Owner logged in (session storage for refresh):",
+          customUser.username
         );
 
         return { user: customUser };
@@ -137,13 +187,15 @@ export function AuthProvider({ children }) {
           throw new Error("Account is deactivated");
         }
 
+        // Create custom user object for managers
         const customUser = {
           uid: managerDoc.id,
           email: managerData.email,
           displayName: managerData.name,
           username: managerData.username,
           role: "manager",
-          ownerId: managerData.ownerId, // Important for data access
+          ownerId: managerData.ownerId,
+          permissions: managerData.permissions || ["view_dashboard"],
           ...managerData,
         };
 
@@ -151,14 +203,20 @@ export function AuthProvider({ children }) {
         setUserRole("manager");
         setUserProfile(managerData);
 
-        // Store session
-        localStorage.setItem(
-          "authSession",
+        // Store session data for refresh persistence (NOT localStorage)
+        sessionStorage.setItem(
+          "auth_session",
           JSON.stringify({
             uid: managerDoc.id,
             role: "manager",
             data: managerData,
+            timestamp: Date.now(),
           })
+        );
+
+        console.log(
+          "Manager logged in (session storage for refresh):",
+          customUser.username
         );
 
         return { user: customUser };
@@ -171,7 +229,7 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // Owner signup (creates Firebase Auth + owner document) - FIXED VERSION
+  // Owner signup (creates Firebase Auth + owner document)
   async function ownerSignup(
     email,
     password,
@@ -181,6 +239,17 @@ export function AuthProvider({ children }) {
   ) {
     try {
       console.log("Creating owner with email:", email);
+
+      // Check if username already exists
+      const usernameQuery = query(
+        collection(db, "owners"),
+        where("username", "==", username)
+      );
+      const usernameSnapshot = await getDocs(usernameQuery);
+
+      if (!usernameSnapshot.empty) {
+        throw new Error("Username already exists");
+      }
 
       // Step 1: Create Firebase Auth user
       const userCredential = await createUserWithEmailAndPassword(
@@ -192,118 +261,86 @@ export function AuthProvider({ children }) {
 
       console.log("Firebase user created with UID:", firebaseUser.uid);
 
-      // Step 2: Update Firebase Auth profile
-      await updateProfile(firebaseUser, {
-        displayName: displayName,
-      });
+      try {
+        // Step 2: Update Firebase Auth profile
+        await updateProfile(firebaseUser, {
+          displayName: displayName,
+        });
 
-      // Step 3: Create owner document in Firestore using Firebase UID
-      const ownerData = {
-        name: displayName,
-        email: email,
-        username: username,
-        password: password, // In production, hash this
-        role: "owner",
-        status: "active",
-        firebaseUID: firebaseUser.uid, // Store Firebase Auth UID
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        // Include any additional data (business info, etc.)
-        ...additionalData,
-      };
+        // Step 3: Create owner document in Firestore using Firebase UID
+        const ownerData = {
+          name: displayName,
+          email: email,
+          username: username,
+          password: password, // In production, hash this
+          role: "owner",
+          status: "active",
+          firebaseUID: firebaseUser.uid,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          ...additionalData,
+        };
 
-      // Use Firebase Auth UID as the document ID for consistency
-      await setDoc(doc(db, "owners", firebaseUser.uid), ownerData);
+        await setDoc(doc(db, "owners", firebaseUser.uid), ownerData);
 
-      console.log(
-        "Owner document created in Firestore with ID:",
-        firebaseUser.uid
-      );
+        // Set auth state (MEMORY ONLY)
+        setCurrentUser(firebaseUser);
+        setUserRole("owner");
+        setUserProfile(ownerData);
 
-      return userCredential;
+        console.log("Owner document created successfully (session only)");
+        return userCredential;
+      } catch (firestoreError) {
+        // If Firestore operation fails, cleanup Firebase Auth user
+        console.error(
+          "Firestore error, cleaning up Firebase user:",
+          firestoreError
+        );
+        await firebaseUser.delete();
+        throw firestoreError;
+      }
     } catch (error) {
       console.error("Owner signup error:", error);
-
-      // If Firestore creation fails but Firebase Auth succeeded, we should clean up
-      if (error.code !== "auth/email-already-in-use" && auth.currentUser) {
-        try {
-          await auth.currentUser.delete();
-          console.log("Cleaned up Firebase Auth user due to Firestore error");
-        } catch (cleanupError) {
-          console.error("Failed to cleanup Firebase Auth user:", cleanupError);
-        }
-      }
-
       throw error;
     }
   }
 
-  // Generate unique username
-  async function generateUsername(baseName) {
-    const baseUsername = baseName
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "") // Remove special characters
-      .substring(0, 8); // Limit to 8 characters
-
-    let username = baseUsername;
-    let counter = 1;
-
-    // Check if username exists in both collections
-    while (true) {
-      const [ownerQuery, managerQuery] = await Promise.all([
-        getDocs(
-          query(collection(db, "owners"), where("username", "==", username))
-        ),
-        getDocs(
-          query(collection(db, "managers"), where("username", "==", username))
-        ),
-      ]);
-
-      if (ownerQuery.empty && managerQuery.empty) {
-        break; // Username is available
-      }
-
-      username = `${baseUsername}${counter}`;
-      counter++;
-
-      if (counter > 999) {
-        throw new Error("Unable to generate unique username");
-      }
-    }
-
-    return username;
-  }
-
-  // Create manager when owner adds employee with manager role
-  async function createManager(employeeData, ownerId) {
+  // Create manager (by owner)
+  async function createManager(managerData, ownerId) {
     try {
-      const username = await generateUsername(employeeData.name);
-      const password = `${username}123`; // Simple password generation
+      if (!ownerId) {
+        throw new Error("Owner ID is required");
+      }
 
-      const managerId = doc(collection(db, "managers")).id;
+      // Generate unique username
+      const username = await generateUsername(managerData.name, ownerId);
 
-      const managerData = {
-        name: employeeData.name,
+      // Generate temporary password (in production, let user set their own)
+      const password = `temp${Date.now()}`;
+
+      const managerId = `manager_${Date.now()}_${Math.random()
+        .toString(36)
+        .substr(2, 9)}`;
+
+      const finalManagerData = {
+        ...managerData,
         username: username,
         password: password,
-        email: employeeData.email || `${username}@mill.local`,
         role: "manager",
         status: "active",
         ownerId: ownerId,
-        department: employeeData.department || "general",
-        employeeId: employeeData.employeeId, // Link to employee record
-        permissions: employeeData.permissions || ["view_dashboard"],
+        permissions: managerData.permissions || ["view_dashboard"],
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      await setDoc(doc(db, "managers", managerId), managerData);
+      await setDoc(doc(db, "managers", managerId), finalManagerData);
 
       return {
         id: managerId,
         username: username,
         password: password,
-        ...managerData,
+        ...finalManagerData,
       };
     } catch (error) {
       console.error("Error creating manager:", error);
@@ -311,61 +348,116 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // Logout
+  // Logout with complete session cleanup
   async function logout() {
     try {
-      localStorage.removeItem("authSession");
+      // Clear sessionStorage
+      sessionStorage.removeItem("auth_session");
+      sessionStorage.removeItem("business_session");
 
-      // Only sign out from Firebase if we're actually signed in there
+      // Sign out from Firebase if there's a current user
       if (auth.currentUser) {
+        console.log("Signing out Firebase user:", auth.currentUser.email);
         await signOut(auth);
       }
 
+      // Clear all auth state
       setCurrentUser(null);
       setUserRole(null);
       setUserProfile(null);
+
+      console.log("Logout completed - all session data cleared");
     } catch (error) {
       console.error("Logout error:", error);
+      // Even if logout fails, clear local state
+      setCurrentUser(null);
+      setUserRole(null);
+      setUserProfile(null);
       throw error;
     }
   }
 
-  // Initialize auth state
+  // Initialize auth state with app start vs refresh detection
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // Check for existing session first (for username/password users)
-        const session = localStorage.getItem("authSession");
-        if (session) {
-          const sessionData = JSON.parse(session);
+        setLoading(true);
 
-          // Verify user still exists and is active
-          const collectionName =
-            sessionData.role === "owner" ? "owners" : "managers";
-          const userDoc = await getDoc(
-            doc(db, collectionName, sessionData.uid)
+        // If this is a fresh app start, always go to login
+        if (isAppStart) {
+          console.log(
+            "🚀 Fresh app start - clearing all data and going to login"
           );
-
-          if (userDoc.exists() && userDoc.data().status === "active") {
-            setCurrentUser({
-              uid: sessionData.uid,
-              role: sessionData.role,
-              ...sessionData.data,
-            });
-            setUserRole(sessionData.role);
-            setUserProfile(sessionData.data);
-          } else {
-            localStorage.removeItem("authSession");
-          }
+          setCurrentUser(null);
+          setUserRole(null);
+          setUserProfile(null);
           setLoading(false);
           return;
         }
 
-        // Check Firebase auth for admins (and potentially owners who login via Firebase)
+        // This is a page refresh - try to restore session
+        console.log("🔄 Page refresh - attempting to restore session");
+
+        // Check for existing session in sessionStorage
+        const sessionData = sessionStorage.getItem("auth_session");
+        if (sessionData) {
+          try {
+            const parsedSession = JSON.parse(sessionData);
+
+            // Verify user still exists and is active in database
+            const collectionName =
+              parsedSession.role === "owner" ? "owners" : "managers";
+            const userDoc = await getDoc(
+              doc(db, collectionName, parsedSession.uid)
+            );
+
+            if (userDoc.exists() && userDoc.data().status === "active") {
+              const userData = userDoc.data();
+
+              // Restore user session
+              const customUser = {
+                uid: parsedSession.uid,
+                role: parsedSession.role,
+                email: userData.email,
+                displayName: userData.name,
+                username: userData.username,
+                ...(parsedSession.role === "manager"
+                  ? {
+                      ownerId: userData.ownerId,
+                      permissions: userData.permissions || ["view_dashboard"],
+                    }
+                  : {}),
+                ...userData,
+              };
+
+              setCurrentUser(customUser);
+              setUserRole(parsedSession.role);
+              setUserProfile(userData);
+
+              console.log(
+                `✅ Session restored for ${parsedSession.role}:`,
+                userData.name
+              );
+              setLoading(false);
+              return;
+            } else {
+              console.log(
+                "❌ User no longer exists or inactive - clearing session"
+              );
+              sessionStorage.removeItem("auth_session");
+            }
+          } catch (sessionError) {
+            console.error("Session parsing error:", sessionError);
+            sessionStorage.removeItem("auth_session");
+          }
+        }
+
+        // Check Firebase auth state for admins
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
-          if (user) {
-            if (isAdminEmail(user.email)) {
-              // Admin user
+          try {
+            if (user && isAdminEmail(user.email)) {
+              console.log("✅ Firebase admin session restored:", user.email);
+
               setCurrentUser(user);
               setUserRole("admin");
               setUserProfile({
@@ -375,32 +467,39 @@ export function AuthProvider({ children }) {
                 domain: "lumorabiz.com",
               });
             } else {
-              // Check if this is an owner who might be signed in via Firebase
-              const ownerDoc = await getDoc(doc(db, "owners", user.uid));
-              if (ownerDoc.exists()) {
-                const ownerData = ownerDoc.data();
-                setCurrentUser(user);
-                setUserRole("owner");
-                setUserProfile(ownerData);
-              } else {
-                // Email exists in Firebase Auth but no corresponding owner record
-                console.warn("Firebase user exists but no owner record found");
+              // No valid session found
+              setCurrentUser(null);
+              setUserRole(null);
+              setUserProfile(null);
+
+              // Sign out any non-admin Firebase users
+              if (user && !isAdminEmail(user.email)) {
+                console.log("Signing out non-admin Firebase user");
                 await signOut(auth);
               }
             }
+          } catch (error) {
+            console.error("Auth state change error:", error);
+            setCurrentUser(null);
+            setUserRole(null);
+            setUserProfile(null);
+          } finally {
+            setLoading(false);
           }
-          setLoading(false);
         });
 
-        return unsubscribe;
+        return () => unsubscribe();
       } catch (error) {
         console.error("Auth initialization error:", error);
         setLoading(false);
       }
     };
 
-    initAuth();
-  }, []);
+    // Only run initialization after we've determined if this is app start or refresh
+    if (isAppStart !== null) {
+      initAuth();
+    }
+  }, [isAppStart]);
 
   const value = {
     currentUser,
@@ -422,3 +521,5 @@ export function AuthProvider({ children }) {
     </AuthContext.Provider>
   );
 }
+
+export default AuthProvider;

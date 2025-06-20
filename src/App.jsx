@@ -2,9 +2,9 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
-import ErrorBoundary from "./components/ErrorBoundary";
 import { AuthProvider } from "./contexts/AuthContext";
 import { routes } from "./routes/routes.jsx";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
 
 const App = () => {
   // Recursive function to render routes with proper structure
@@ -14,17 +14,21 @@ const App = () => {
     if (route.children) {
       return (
         <Route key={key} path={route.path} element={route.element}>
-          {route.children.map((child, childIndex) =>
-            child.index ? (
-              <Route key={`${key}-index`} index element={child.element} />
-            ) : (
-              <Route
-                key={child.path || `${key}-child-${childIndex}`}
-                path={child.path}
-                element={child.element}
-              />
-            )
-          )}
+          {route.children.map((child, childIndex) => {
+            if (child.index) {
+              return (
+                <Route key={`${key}-index`} index element={child.element} />
+              );
+            } else {
+              return (
+                <Route
+                  key={child.path || `${key}-child-${childIndex}`}
+                  path={child.path}
+                  element={child.element}
+                />
+              );
+            }
+          })}
         </Route>
       );
     }

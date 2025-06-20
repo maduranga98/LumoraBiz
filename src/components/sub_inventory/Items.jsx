@@ -2,19 +2,18 @@ import React, { useState } from "react";
 import { db, auth } from "../../services/firebase";
 import { collection, addDoc } from "firebase/firestore";
 import { toast } from "react-hot-toast";
-import Input from "../../components/Input";
-import Button from "../../components/Button";
+import Input from "../Input";
+import Button from "../Button";
 import { useAuth } from "../../contexts/AuthContext";
 import { useBusiness } from "../../contexts/BusinessContext";
 export const Items = () => {
-    const { currentUser } = useAuth();
-    const { currentBusiness } = useBusiness();
+  const { currentUser } = useAuth();
+  const { currentBusiness } = useBusiness();
   const [itemName, setItemName] = useState("");
   const [unitType, setUnitType] = useState("");
   const [itemsPerPack, setItemsPerPack] = useState("");
   const [loading, setLoading] = useState(false);
 
- 
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -65,7 +64,7 @@ export const Items = () => {
 
       // Updated path: /owners/{ownerId}/businesses/{businessId}/stock/materialStock
       const materialStockPath = `owners/${ownerId}/businesses/${businessId}/stock/materialStock/items`;
-      
+
       // Add document to nested collection
       await addDoc(collection(db, materialStockPath), itemData);
 

@@ -1,7 +1,12 @@
 // src/routes/routes.jsx
+import React from "react";
 import { Navigate } from "react-router-dom";
+
+// Auth components
 import Login from "../pages/auth/login";
 import Signup from "../pages/auth/Signup";
+
+// Home/Owner components
 import Home from "../pages/home/home";
 import { Settings } from "../pages/home/pages/Settings";
 import { Stock } from "../pages/home/pages/Stock";
@@ -20,20 +25,50 @@ import RoutesPlanning from "../pages/RoutesManager/RoutesPalning";
 import AssignRoutes from "../pages/RoutesManager/AssignRoutes";
 import Loading from "../components/loading/Loading";
 import Unloading from "../components/loading/Unloading";
-
-// Enhanced Private Route Component with Role-based Access
-import ProtectedRoute from "../components/auth/ProtectedRoute";
-import NavbarLayout from "../components/Navbar";
-import { BusinessProvider } from "../contexts/BusinessContext";
-
-// Role-based Dashboard Components
-import AdminDashboard from "../pages/admin/Dashboard";
-import ManagerDashboard from "../pages/manager/ManagerDashboard";
 import { Dashboard } from "../pages/home/pages/Dashboard";
-import Unauthorized from "../pages/Unauthorized";
 
-// Public routes configuration
-export const publicRoutes = [
+// Enhanced Private Route Components
+import ProtectedRoute from "../components/auth/ProtectedRoute";
+import { BusinessProvider } from "../contexts/BusinessContext";
+import NavbarLayout from "../components/Navbar";
+
+// Fallback components for admin/manager dashboards (if they don't exist)
+const AdminDashboard = React.lazy(() =>
+  import("../pages/admin/Dashboard").catch(() => ({
+    default: () => (
+      <div className="p-8 text-center">
+        <h1 className="text-2xl font-bold text-gray-900 mb-4">
+          Admin Dashboard
+        </h1>
+        <p className="text-gray-600">Admin dashboard coming soon...</p>
+      </div>
+    ),
+  }))
+);
+
+const ManagerDashboard = () => (
+  <div className="p-8 text-center">
+    <h1 className="text-2xl font-bold text-gray-900 mb-4">Manager Dashboard</h1>
+    <p className="text-gray-600">Manager dashboard coming soon...</p>
+  </div>
+);
+
+// Unauthorized component
+const Unauthorized = () => (
+  <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="text-center">
+      <h1 className="text-4xl font-bold text-gray-900 mb-4">403</h1>
+      <p className="text-xl text-gray-600 mb-8">Unauthorized Access</p>
+      <p className="text-gray-500">
+        You don't have permission to access this page.
+      </p>
+    </div>
+  </div>
+);
+
+// Combined routes array for App.jsx
+export const routes = [
+  // Public routes
   {
     path: "/",
     element: <Navigate to="/login" replace />,
@@ -50,34 +85,94 @@ export const publicRoutes = [
     path: "/unauthorized",
     element: <Unauthorized />,
   },
-];
 
-// Admin-only routes (no navbar)
-export const adminRoutes = [
+  // Admin routes
   {
     path: "/admin/dashboard",
     element: (
       <ProtectedRoute adminOnly>
-        <AdminDashboard />
+        <React.Suspense
+          fallback={
+            <div className="min-h-screen flex items-center justify-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-red-600"></div>
+            </div>
+          }
+        >
+          <AdminDashboard />
+        </React.Suspense>
       </ProtectedRoute>
     ),
   },
-];
+  {
+    path: "/admin/*",
+    element: (
+      <ProtectedRoute adminOnly>
+        <Navigate to="/admin/dashboard" replace />
+      </ProtectedRoute>
+    ),
+  },
 
-// Manager-only routes (with limited navbar)
-export const managerRoutes = [
+  // Manager routes
   {
     path: "/manager/dashboard",
     element: (
       <ProtectedRoute managerOnly>
-        <ManagerDashboard />
+        <NavbarLayout>
+          <ManagerDashboard />
+        </NavbarLayout>
       </ProtectedRoute>
     ),
   },
-];
+  {
+    path: "/manager/inventory",
+    element: (
+      <ProtectedRoute managerOnly requirePermissions={["view_inventory"]}>
+        <NavbarLayout>
+          <Stock />
+        </NavbarLayout>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/manager/customers",
+    element: (
+      <ProtectedRoute managerOnly requirePermissions={["view_customers"]}>
+        <NavbarLayout>
+          <Customers />
+        </NavbarLayout>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/manager/reports",
+    element: (
+      <ProtectedRoute managerOnly requirePermissions={["view_reports"]}>
+        <NavbarLayout>
+          <Reports />
+        </NavbarLayout>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/manager/*",
+    element: (
+      <ProtectedRoute managerOnly>
+        <Navigate to="/manager/dashboard" replace />
+      </ProtectedRoute>
+    ),
+  },
 
-// Owner routes with full access (existing /home structure)
-export const ownerRoutes = [
+  // Business selector for owners
+  {
+    path: "/business-select",
+    element: (
+      <ProtectedRoute ownerOnly>
+        <BusinessSelector />
+      </ProtectedRoute>
+    ),
+  },
+
+  // Owner routes with nested structure
   {
     path: "/home",
     element: (
@@ -93,154 +188,6 @@ export const ownerRoutes = [
         element: <Home />,
       },
       {
-        path: "inventory",
-        element: <Stock />,
-      },
-      {
-        path: "substock",
-        element: <SubStockPage />,
-      },
-      {
-        path: "customers",
-        element: <Customers />,
-      },
-      {
-        path: "employees",
-        element: <Employees />,
-      },
-      {
-        path: "logistics",
-        element: <Logistics />,
-      },
-      {
-        path: "mobile-stock",
-        element: <DayRoutine />,
-      },
-      {
-        path: "accounts",
-        element: <Accounts />,
-      },
-      {
-        path: "liabilities",
-        element: <Liabilities />,
-      },
-      {
-        path: "cashflows",
-        element: <CashflowPage />,
-      },
-      {
-        path: "reports",
-        element: <Reports />,
-      },
-      {
-        path: "settings",
-        element: <Settings />,
-      },
-      {
-        path: "help",
-        element: <ContactUs />,
-      },
-      {
-        path: "mobile-stock/routes-planning",
-        element: <RoutesPlanning />,
-      },
-      {
-        path: "mobile-stock/assign-routes",
-        element: <AssignRoutes />,
-      },
-      {
-        path: "mobile-stock/loading",
-        element: <Loading />,
-      },
-      {
-        path: "mobile-stock/unloading",
-        element: <Unloading />,
-      },
-    ],
-  },
-  {
-    path: "/business/:businessId",
-    element: (
-      <ProtectedRoute ownerOnly>
-        <BusinessProvider>
-          <NavbarLayout />
-        </BusinessProvider>
-      </ProtectedRoute>
-    ),
-    children: [
-      {
-        index: true,
-        element: <BusinessSelector />,
-      },
-      {
-        path: "inventory",
-        element: <Stock />,
-      },
-      {
-        path: "substock",
-        element: <SubStockPage />,
-      },
-      {
-        path: "customers",
-        element: <Customers />,
-      },
-      {
-        path: "employees",
-        element: <Employees />,
-      },
-      {
-        path: "logistics",
-        element: <Logistics />,
-      },
-      {
-        path: "mobile-stock",
-        element: <DayRoutine />,
-      },
-      {
-        path: "accounts",
-        element: <Accounts />,
-      },
-      {
-        path: "reports",
-        element: <Reports />,
-      },
-      {
-        path: "settings",
-        element: <Settings />,
-      },
-      {
-        path: "help",
-        element: <ContactUs />,
-      },
-      {
-        path: "mobile-stock/routes-planning",
-        element: <RoutesPlanning />,
-      },
-      {
-        path: "mobile-stock/assign-routes",
-        element: <AssignRoutes />,
-      },
-      {
-        path: "mobile-stock/loading",
-        element: <Loading />,
-      },
-    ],
-  },
-];
-
-// Alternative owner routes structure (/owner prefix)
-export const alternativeOwnerRoutes = [
-  {
-    path: "/owner/*",
-    element: (
-      <ProtectedRoute ownerOnly>
-        <BusinessProvider>
-          <NavbarLayout />
-        </BusinessProvider>
-      </ProtectedRoute>
-    ),
-    children: [
-      {
         path: "dashboard",
         element: <Dashboard />,
       },
@@ -253,6 +200,10 @@ export const alternativeOwnerRoutes = [
         element: <SubStockPage />,
       },
       {
+        path: "customers",
+        element: <Customers />,
+      },
+      {
         path: "employees",
         element: <Employees />,
       },
@@ -261,16 +212,8 @@ export const alternativeOwnerRoutes = [
         element: <Logistics />,
       },
       {
-        path: "customers",
-        element: <Customers />,
-      },
-      {
-        path: "mobile-stock/loading",
-        element: <Loading />,
-      },
-      {
-        path: "mobile-stock/unloading",
-        element: <Unloading />,
+        path: "mobile-stock",
+        element: <DayRoutine />,
       },
       {
         path: "mobile-stock/routes-planning",
@@ -281,16 +224,24 @@ export const alternativeOwnerRoutes = [
         element: <AssignRoutes />,
       },
       {
-        path: "accounts",
-        element: <Accounts />,
+        path: "mobile-stock/loading",
+        element: <Loading />,
+      },
+      {
+        path: "mobile-stock/unloading",
+        element: <Unloading />,
+      },
+      {
+        path: "cashflows",
+        element: <CashflowPage />,
       },
       {
         path: "liabilities",
         element: <Liabilities />,
       },
       {
-        path: "cashflows",
-        element: <CashflowPage />,
+        path: "accounts",
+        element: <Accounts />,
       },
       {
         path: "reports",
@@ -306,30 +257,25 @@ export const alternativeOwnerRoutes = [
       },
     ],
   },
-];
 
-// Legacy redirects configuration - redirect old paths to role-appropriate dashboards
-export const legacyRedirects = [
-  "/inventory",
-  "/substock",
-  "/customers",
-  "/employees",
-  "/logistics",
-  "/mobile-stock",
-  "/accounts",
-  "/reports",
-  "/settings",
-  "/help",
-  "/mobile-stock/routes-planning",
-  "/mobile-stock/assign-routes",
-  "/mobile-stock/loading",
-].map((path) => ({
-  path,
-  element: <Navigate to="/home" replace />,
-}));
+  // Shared route examples (if needed)
+  {
+    path: "/inventory",
+    element: (
+      <ProtectedRoute
+        allowedRoles={["owner", "manager"]}
+        requirePermissions={["view_inventory"]}
+      >
+        <BusinessProvider>
+          <NavbarLayout>
+            <Stock />
+          </NavbarLayout>
+        </BusinessProvider>
+      </ProtectedRoute>
+    ),
+  },
 
-// Role-based redirects
-export const roleRedirects = [
+  // Legacy redirects
   {
     path: "/admin",
     element: <Navigate to="/admin/dashboard" replace />,
@@ -338,188 +284,22 @@ export const roleRedirects = [
     path: "/manager",
     element: <Navigate to="/manager/dashboard" replace />,
   },
+
+  // Fallback routes
+  {
+    path: "/dashboard",
+    element: <Navigate to="/login" replace />,
+  },
+  {
+    path: "*",
+    element: <Navigate to="/login" replace />,
+  },
 ];
 
-// Fallback route
-export const fallbackRoute = {
-  path: "*",
-  element: <Navigate to="/login" replace />,
-};
+// Export individual route arrays for advanced usage (optional)
+export const publicRoutes = routes.slice(0, 4);
+export const adminRoutes = routes.slice(4, 7);
+export const managerRoutes = routes.slice(7, 12);
+export const ownerRoutes = routes.slice(13, 15);
 
-// Combined routes for easy export
-export const routes = [
-  ...publicRoutes,
-  ...adminRoutes,
-  ...managerRoutes,
-  ...ownerRoutes,
-  // ...alternativeOwnerRoutes, // Uncomment if you want /owner prefix
-  ...roleRedirects,
-  ...legacyRedirects,
-  fallbackRoute,
-];
-
-// Route metadata for navigation structure (enhanced with role permissions)
-export const routeMetadata = {
-  admin: {
-    allowedRoles: ["admin"],
-    routes: {
-      dashboard: {
-        path: "/admin/dashboard",
-        name: "Admin Dashboard",
-        icon: "Shield",
-      },
-    },
-  },
-  manager: {
-    allowedRoles: ["manager"],
-    routes: {
-      dashboard: {
-        path: "/manager/dashboard",
-        name: "Manager Dashboard",
-        icon: "Users",
-      },
-    },
-  },
-  owner: {
-    allowedRoles: ["owner"],
-    routes: {
-      dashboard: {
-        path: "/home",
-        name: "Dashboard",
-        icon: "LayoutDashboard",
-      },
-      inventory: {
-        name: "Inventory",
-        icon: "Package",
-        children: [
-          {
-            path: "/home/inventory",
-            name: "Main Inventory",
-            icon: "Package",
-          },
-          {
-            path: "/home/substock",
-            name: "Sub Inventory",
-            icon: "Warehouse",
-          },
-        ],
-      },
-      operations: {
-        name: "Operations",
-        icon: "Users",
-        children: [
-          {
-            path: "/home/employees",
-            name: "Employees",
-            icon: "Users",
-          },
-          {
-            path: "/home/logistics",
-            name: "Logistics",
-            icon: "Truck",
-          },
-          {
-            path: "/home/customers",
-            name: "Customers",
-            icon: "Users",
-          },
-        ],
-      },
-      dailyRoutine: {
-        name: "Daily Routine",
-        icon: "Calendar",
-        children: [
-          {
-            path: "/home/mobile-stock/loading",
-            name: "Loading",
-            icon: "Truck",
-          },
-          {
-            path: "/home/mobile-stock/unloading",
-            name: "Unloading",
-            icon: "Truck",
-          },
-          {
-            path: "/home/mobile-stock",
-            name: "Mobile Stock",
-            icon: "Truck",
-          },
-          {
-            path: "/home/mobile-stock/routes-planning",
-            name: "Routes Planning",
-            icon: "Truck",
-          },
-          {
-            path: "/home/mobile-stock/assign-routes",
-            name: "Assign Routes",
-            icon: "Truck",
-          },
-        ],
-      },
-      accounts: {
-        name: "Accounts",
-        icon: "Wallet",
-        children: [
-          {
-            path: "/home/accounts",
-            name: "Main Accounts",
-            icon: "Wallet",
-          },
-          {
-            path: "/home/liabilities",
-            name: "Liabilities",
-            icon: "CreditCard",
-          },
-          {
-            path: "/home/cashflows",
-            name: "Cash Flow",
-            icon: "TrendingUp",
-          },
-        ],
-      },
-      reports: {
-        path: "/home/reports",
-        name: "Reports",
-        icon: "FileText",
-      },
-      system: {
-        name: "System",
-        icon: "Wrench",
-        children: [
-          {
-            path: "/home/settings",
-            name: "Settings",
-            icon: "Settings",
-          },
-          {
-            path: "/home/help",
-            name: "Help & Support",
-            icon: "HelpCircle",
-          },
-        ],
-      },
-    },
-  },
-};
-
-// Helper function to get routes by role
-export const getRoutesByRole = (userRole) => {
-  return routeMetadata[userRole]?.routes || {};
-};
-
-// Helper function to check if user has access to a specific route
-export const hasRouteAccess = (userRole, routePath) => {
-  const roleMetadata = routeMetadata[userRole];
-  if (!roleMetadata) return false;
-
-  // Recursive function to check route access
-  const checkAccess = (routes) => {
-    for (const route of Object.values(routes)) {
-      if (route.path === routePath) return true;
-      if (route.children && checkAccess(route.children)) return true;
-    }
-    return false;
-  };
-
-  return checkAccess(roleMetadata.routes);
-};
+export default routes;

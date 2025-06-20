@@ -1,8 +1,8 @@
-// src/contexts/BusinessContext.jsx
+// src/contexts/BusinessContext.jsx - NO STORAGE VERSION
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { db } from "../services/firebase";
-import { doc, collection, getDocs, onSnapshot } from "firebase/firestore";
 import { useAuth } from "./AuthContext";
+import { collection, getDocs, doc, onSnapshot } from "firebase/firestore";
+import { db } from "../services/firebase";
 
 const BusinessContext = createContext();
 
@@ -15,34 +15,31 @@ export const useBusiness = () => {
 };
 
 export const BusinessProvider = ({ children }) => {
-  const { currentUser } = useAuth(); // Get current user from AuthContext
+  const { currentUser } = useAuth();
   const [userBusinesses, setUserBusinesses] = useState([]);
   const [currentBusiness, setCurrentBusiness] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Fetch user's businesses from subcollection
+  // Load user's businesses when user changes
   useEffect(() => {
-    if (!currentUser) {
+    if (!currentUser || currentUser.role !== "owner") {
       setUserBusinesses([]);
       setCurrentBusiness(null);
       setLoading(false);
       return;
     }
 
-    const fetchUserBusinesses = async () => {
+    const loadBusinesses = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        // Reference to the user's businesses subcollection
         const ownerDocRef = doc(db, "owners", currentUser.uid);
         const businessesCollectionRef = collection(ownerDocRef, "businesses");
-
-        // Get all businesses for this owner
         const querySnapshot = await getDocs(businessesCollectionRef);
-        const businesses = [];
 
+        const businesses = [];
         querySnapshot.forEach((doc) => {
           businesses.push({
             id: doc.id,
@@ -50,86 +47,97 @@ export const BusinessProvider = ({ children }) => {
           });
         });
 
-        console.log("Fetched businesses:", businesses);
         setUserBusinesses(businesses);
 
-        // Set current business from localStorage or use first business
-        const savedBusinessId = localStorage.getItem(
-          `currentBusinessId_${currentUser.uid}`
-        );
-        if (
-          savedBusinessId &&
-          businesses.some((b) => b.id === savedBusinessId)
-        ) {
-          const savedBusiness = businesses.find(
-            (b) => b.id === savedBusinessId
-          );
-          setCurrentBusiness(savedBusiness);
-          console.log("Set current business from localStorage:", savedBusiness);
-        } else if (businesses.length > 0) {
-          setCurrentBusiness(businesses[0]);
-          localStorage.setItem(
-            `currentBusinessId_${currentUser.uid}`,
-            businesses[0].id
-          );
-          console.log("Set current business to first:", businesses[0]);
-        } else {
-          setCurrentBusiness(null);
-          localStorage.removeItem(`currentBusinessId_${currentUser.uid}`);
+        // Try to restore business selection from sessionStorage first
+        const businessSession = sessionStorage.getItem("business_session");
+        if (businessSession) {
+          try {
+            const parsedSession = JSON.parse(businessSession);
+            const savedBusiness = businesses.find(
+              (b) => b.id === parsedSession.businessId
+            );
+
+            if (savedBusiness) {
+              setCurrentBusiness(savedBusiness);
+              console.log(
+                "Restored business selection from session:",
+                savedBusiness.businessName
+              );
+              setLoading(false);
+              return;
+            } else {
+              // Saved business no longer exists
+              sessionStorage.removeItem("business_session");
+            }
+          } catch (error) {
+            console.error("Error parsing business session:", error);
+            sessionStorage.removeItem("business_session");
+          }
         }
+
+        // Auto-select first business if only one exists (fresh start behavior)
+        if (businesses.length === 1) {
+          setCurrentBusiness(businesses[0]);
+          console.log(
+            "Auto-selected single business:",
+            businesses[0].businessName
+          );
+        } else if (businesses.length === 0) {
+          setCurrentBusiness(null);
+          setError("No businesses found. Please create a business first.");
+        } else {
+          // Multiple businesses - user must select
+          setCurrentBusiness(null);
+          console.log("Multiple businesses found, user must select");
+        }
+
+        console.log("Loaded businesses:", businesses);
       } catch (error) {
-        console.error("Error fetching businesses:", error);
+        console.error("Error loading businesses:", error);
         setError("Failed to load businesses. Please try again.");
+        setUserBusinesses([]);
+        setCurrentBusiness(null);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchUserBusinesses();
+    loadBusinesses();
   }, [currentUser]);
 
-  // Real-time listener for businesses (optional - for live updates)
+  // Real-time updates for current business
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || !currentBusiness?.id) {
+      return;
+    }
 
     const ownerDocRef = doc(db, "owners", currentUser.uid);
-    const businessesCollectionRef = collection(ownerDocRef, "businesses");
+    const businessDocRef = doc(ownerDocRef, "businesses", currentBusiness.id);
 
-    // Set up real-time listener
     const unsubscribe = onSnapshot(
-      businessesCollectionRef,
-      (snapshot) => {
-        const businesses = [];
-        snapshot.forEach((doc) => {
-          businesses.push({
+      businessDocRef,
+      (doc) => {
+        if (doc.exists()) {
+          const updatedBusiness = {
             id: doc.id,
             ...doc.data(),
-          });
-        });
-
-        console.log("Real-time update - businesses:", businesses);
-        setUserBusinesses(businesses);
-
-        // Update current business if it was modified
-        if (currentBusiness) {
-          const updatedCurrentBusiness = businesses.find(
-            (b) => b.id === currentBusiness.id
+          };
+          setCurrentBusiness(updatedBusiness);
+          console.log(
+            "Business updated in real-time:",
+            updatedBusiness.businessName
           );
-          if (updatedCurrentBusiness) {
-            setCurrentBusiness(updatedCurrentBusiness);
-          } else {
-            // Current business was deleted, select first available or null
-            if (businesses.length > 0) {
-              selectBusiness(businesses[0]);
-            } else {
-              setCurrentBusiness(null);
-              localStorage.removeItem(`currentBusinessId_${currentUser.uid}`);
-            }
-          }
+        } else {
+          console.error("Current business no longer exists");
+          setCurrentBusiness(null);
+          setError(
+            "Selected business no longer exists. Please select another business."
+          );
         }
       },
       (error) => {
-        console.error("Error in businesses listener:", error);
+        console.error("Error listening to business updates:", error);
         setError("Failed to sync business data. Please refresh the page.");
       }
     );
@@ -137,18 +145,34 @@ export const BusinessProvider = ({ children }) => {
     return () => unsubscribe();
   }, [currentUser, currentBusiness?.id]);
 
+  // Select business (SESSION STORAGE for refresh persistence)
   const selectBusiness = (business) => {
     if (!currentUser) return;
 
     setCurrentBusiness(business);
-    localStorage.setItem(`currentBusinessId_${currentUser.uid}`, business.id);
-    console.log("Selected business:", business);
+
+    // Store in sessionStorage for refresh persistence (cleared when tab closes)
+    sessionStorage.setItem(
+      "business_session",
+      JSON.stringify({
+        businessId: business.id,
+        businessData: business,
+        timestamp: Date.now(),
+      })
+    );
+
+    console.log(
+      "Selected business (session storage for refresh):",
+      business.businessName
+    );
   };
 
+  // Get current business ID
   const getCurrentBusinessId = () => {
     return currentBusiness?.id || null;
   };
 
+  // Refresh businesses from database
   const refreshBusinesses = async () => {
     if (!currentUser) return;
 
@@ -177,10 +201,14 @@ export const BusinessProvider = ({ children }) => {
         );
         if (updatedCurrentBusiness) {
           setCurrentBusiness(updatedCurrentBusiness);
+        } else {
+          // Current business no longer exists
+          setCurrentBusiness(null);
+          setError("Previously selected business no longer exists.");
         }
       }
 
-      console.log("Refreshed businesses:", businesses);
+      console.log("Refreshed businesses (session only):", businesses);
     } catch (error) {
       console.error("Error refreshing businesses:", error);
       setError("Failed to refresh businesses. Please try again.");
@@ -189,23 +217,33 @@ export const BusinessProvider = ({ children }) => {
     }
   };
 
+  // Check if user has businesses
   const hasBusinesses = () => {
     return userBusinesses.length > 0;
   };
 
+  // Get business by ID
   const getBusinessById = (businessId) => {
     return (
       userBusinesses.find((business) => business.id === businessId) || null
     );
   };
 
+  // Clear all business data (called on logout)
   const clearBusinessData = () => {
     setUserBusinesses([]);
     setCurrentBusiness(null);
-    if (currentUser) {
-      localStorage.removeItem(`currentBusinessId_${currentUser.uid}`);
-    }
+    setError(null);
+    sessionStorage.removeItem("business_session");
+    console.log("All business data cleared");
   };
+
+  // Auto-clear when user logs out
+  useEffect(() => {
+    if (!currentUser) {
+      clearBusinessData();
+    }
+  }, [currentUser]);
 
   const value = {
     userBusinesses,

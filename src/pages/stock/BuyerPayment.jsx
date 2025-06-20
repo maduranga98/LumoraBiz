@@ -225,7 +225,7 @@ export const BuyerPayment = ({
       // Save to buyer-specific payments collection
       const buyerPaymentsPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/buyers/${buyerData.id}/payments`;
       console.log("Saving to buyer payments:", buyerPaymentsPath);
-      
+
       const buyerPaymentRef = await addDoc(
         collection(db, buyerPaymentsPath),
         paymentData
@@ -234,7 +234,7 @@ export const BuyerPayment = ({
       // Save to all payments collection with reference to buyer payment
       const allPaymentsPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/allPayments`;
       console.log("Saving to all payments:", allPaymentsPath);
-      
+
       await addDoc(collection(db, allPaymentsPath), {
         ...paymentData,
         buyerPaymentId: buyerPaymentRef.id, // Reference to the payment in buyer's collection
@@ -253,8 +253,8 @@ export const BuyerPayment = ({
       console.error("Error saving payment:", error);
       console.error("Error code:", error.code);
       console.error("Error message:", error.message);
-      
-      if (error.code === 'permission-denied') {
+
+      if (error.code === "permission-denied") {
         toast.error("Permission denied. Check your Firestore rules.");
       } else {
         toast.error("Failed to record payment. Please try again.");
@@ -330,7 +330,7 @@ export const BuyerPayment = ({
               Total Amount Due
             </label>
             <div className="bg-white px-4 py-2 rounded-lg border font-semibold text-blue-600">
-              Rs. {buyerData.totalAmount.toLocaleString('en-IN')}
+              Rs. {buyerData.totalAmount.toLocaleString("en-IN")}
             </div>
           </div>
         </div>
@@ -340,7 +340,9 @@ export const BuyerPayment = ({
               Payment Category
             </label>
             <div className="bg-white px-4 py-2 rounded-lg border">
-              {category.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+              {category
+                .replace("_", " ")
+                .replace(/\b\w/g, (l) => l.toUpperCase())}
             </div>
           </div>
         )}
@@ -524,7 +526,7 @@ export const BuyerPayment = ({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white rounded-lg p-4 text-center">
             <div className="text-2xl font-bold text-blue-600">
-              Rs. {totalPaid.toLocaleString('en-IN')}
+              Rs. {totalPaid.toLocaleString("en-IN")}
             </div>
             <div className="text-sm text-gray-600">Total Paid</div>
           </div>
@@ -534,7 +536,7 @@ export const BuyerPayment = ({
                 remainingAmount < 0 ? "text-red-600" : "text-green-600"
               }`}
             >
-              Rs. {Math.abs(remainingAmount).toLocaleString('en-IN')}
+              Rs. {Math.abs(remainingAmount).toLocaleString("en-IN")}
             </div>
             <div className="text-sm text-gray-600">
               {remainingAmount < 0 ? "Overpaid" : "Remaining"}
@@ -542,7 +544,7 @@ export const BuyerPayment = ({
           </div>
           <div className="bg-white rounded-lg p-4 text-center">
             <div className="text-2xl font-bold text-gray-800">
-              Rs. {buyerData.totalAmount.toLocaleString('en-IN')}
+              Rs. {buyerData.totalAmount.toLocaleString("en-IN")}
             </div>
             <div className="text-sm text-gray-600">Total Due</div>
           </div>
