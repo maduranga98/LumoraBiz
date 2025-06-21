@@ -414,10 +414,12 @@ export const SubStock = () => {
       setStocks(calculatedStocks);
       setItems(itemList);
 
+      // Fixed: Use toast() instead of toast.info()
       if (calculatedStocks.length === 0 && allMovements.length === 0) {
-        toast.info(
-          "No inventory movements found. Add items to see stock levels."
-        );
+        toast("No inventory movements found. Add items to see stock levels.", {
+          icon: "ℹ️",
+          duration: 4000,
+        });
       }
     } catch (error) {
       console.error("Error fetching stock data:", error);

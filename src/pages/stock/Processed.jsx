@@ -16,13 +16,13 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { toast } from "react-hot-toast";
-import { useAuth } from '../../contexts/AuthContext';
-import { useBusiness } from '../../contexts/BusinessContext';
+import { useAuth } from "../../contexts/AuthContext";
+import { useBusiness } from "../../contexts/BusinessContext";
 
 const ProcessedProducts = () => {
   const { currentUser } = useAuth();
   const { currentBusiness } = useBusiness();
-  
+
   // States
   const [batches, setBatches] = useState([]);
   const [stockTotals, setStockTotals] = useState({});
@@ -39,30 +39,32 @@ const ProcessedProducts = () => {
   const [showBagSizeModal, setShowBagSizeModal] = useState(false);
   const [showBagCreationModal, setShowBagCreationModal] = useState(false);
   const [showSellModal, setShowSellModal] = useState(false);
-  const [showIndividualBagSellModal, setShowIndividualBagSellModal] = useState(false);
+  const [showIndividualBagSellModal, setShowIndividualBagSellModal] =
+    useState(false);
   const [showBagDetailsModal, setShowBagDetailsModal] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState(null);
   const [selectedBag, setSelectedBag] = useState(null);
-  const [selectedProductForBagging, setSelectedProductForBagging] = useState(null);
+  const [selectedProductForBagging, setSelectedProductForBagging] =
+    useState(null);
   const [bagCreationData, setBagCreationData] = useState({
-    sizeKg: '',
-    quantity: '',
-    productType: '',
-    batchId: '',
+    sizeKg: "",
+    quantity: "",
+    productType: "",
+    batchId: "",
   });
   const [sellData, setSellData] = useState({
     products: {},
-    customerName: '',
-    customerPhone: '',
-    notes: '',
+    customerName: "",
+    customerPhone: "",
+    notes: "",
   });
   const [individualBagSellData, setIndividualBagSellData] = useState({
-    customerName: '',
-    customerPhone: '',
+    customerName: "",
+    customerPhone: "",
     sellingPrice: 0,
-    notes: '',
+    notes: "",
   });
-  const [newBagSize, setNewBagSize] = useState('');
+  const [newBagSize, setNewBagSize] = useState("");
   const [isCreatingBags, setIsCreatingBags] = useState(false);
   const [isSelling, setIsSelling] = useState(false);
 
@@ -105,7 +107,10 @@ const ProcessedProducts = () => {
   const fetchProcessedBatches = async () => {
     try {
       const batchesQuery = query(
-        collection(db, `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/processedStock/stock`),
+        collection(
+          db,
+          `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/processedStock/stock`
+        ),
         where("status", "==", "available"),
         orderBy(sortField, sortDirection)
       );
@@ -136,12 +141,22 @@ const ProcessedProducts = () => {
   const fetchBaggedStocks = async () => {
     try {
       const baggedStocksData = {};
-      const productTypes = ['rice', 'hunuSahal', 'kadunuSahal', 'ricePolish', 'dahaiyya', 'flour'];
-      
+      const productTypes = [
+        "rice",
+        "hunuSahal",
+        "kadunuSahal",
+        "ricePolish",
+        "dahaiyya",
+        "flour",
+      ];
+
       for (const productType of productTypes) {
         const productCode = getProductTypeCode(productType);
         const baggedStockQuery = query(
-          collection(db, `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`),
+          collection(
+            db,
+            `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`
+          ),
           where("status", "==", "available"),
           orderBy("createdAt", "desc")
         );
@@ -179,21 +194,26 @@ const ProcessedProducts = () => {
     const codeMap = {
       rice: "rice",
       hunuSahal: "hunu_sahal",
-      kadunuSahal: "kadunu_sahal", 
+      kadunuSahal: "kadunu_sahal",
       ricePolish: "rice_polish",
       dahaiyya: "dahaiyya",
       flour: "flour",
     };
-    return codeMap[productType] || productType.toLowerCase().replace(/\s+/g, '_');
+    return (
+      codeMap[productType] || productType.toLowerCase().replace(/\s+/g, "_")
+    );
   };
 
-  // Fetch centralized stock totals
+  // Simplified fetchStockTotals - no auto-creation needed now
   const fetchStockTotals = async () => {
     try {
       const stockTotalsDoc = await getDoc(
-        doc(db, `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/stockTotals`)
+        doc(
+          db,
+          `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/stockTotals`
+        )
       );
-      
+
       if (stockTotalsDoc.exists()) {
         setStockTotals(stockTotalsDoc.data());
       } else {
@@ -201,32 +221,24 @@ const ProcessedProducts = () => {
       }
     } catch (error) {
       console.error("Error fetching stock totals:", error);
+      setStockTotals({});
     }
   };
 
-  // Fetch centralized bagged inventory
+  // Simplified fetchBaggedInventory - no auto-creation needed now
   const fetchBaggedInventory = async () => {
     try {
       const baggedInventoryDoc = await getDoc(
-        doc(db, `owners/${currentUser.uid}/businesses/${currentBusiness.id}/inventory/baggedInventory`)
+        doc(
+          db,
+          `owners/${currentUser.uid}/businesses/${currentBusiness.id}/inventory/baggedInventory`
+        )
       );
-      
+
       if (baggedInventoryDoc.exists()) {
         setBaggedInventory(baggedInventoryDoc.data());
       } else {
-        const initialInventory = {
-          businessId: currentBusiness.id,
-          ownerId: currentUser.uid,
-          lastUpdated: serverTimestamp(),
-          createdAt: serverTimestamp()
-        };
-        
-        setBaggedInventory(initialInventory);
-        
-        await setDoc(
-          doc(db, `owners/${currentUser.uid}/businesses/${currentBusiness.id}/inventory/baggedInventory`),
-          initialInventory
-        );
+        setBaggedInventory({});
       }
     } catch (error) {
       console.error("Error fetching bagged inventory:", error);
@@ -234,37 +246,31 @@ const ProcessedProducts = () => {
     }
   };
 
-  // Fetch bag sizes
+  // Updated fetchBagSizes function - removed automatic default bag sizes creation
   const fetchBagSizes = async () => {
     try {
       const bagSizesDoc = await getDoc(
-        doc(db, `owners/${currentUser.uid}/businesses/${currentBusiness.id}/settings/bagSizes`)
+        doc(
+          db,
+          `owners/${currentUser.uid}/businesses/${currentBusiness.id}/settings/bagSizes`
+        )
       );
-      
+      console.log(
+        `owners/${currentUser.uid}/businesses/${currentBusiness.id}/settings/bagSizes`
+      );
       if (bagSizesDoc.exists()) {
         setBagSizes(bagSizesDoc.data().sizes || []);
       } else {
-        const defaultSizes = [1, 2, 5, 10, 20, 25, 50];
-        setBagSizes(defaultSizes);
-        
-        await setDoc(
-          doc(db, `owners/${currentUser.uid}/businesses/${currentBusiness.id}/settings/bagSizes`),
-          {
-            sizes: defaultSizes,
-            businessId: currentBusiness.id,
-            ownerId: currentUser.uid,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          }
-        );
+        // Don't automatically create default sizes - let user add them manually
+        setBagSizes([]);
       }
     } catch (error) {
       console.error("Error fetching bag sizes:", error);
-      setBagSizes([1, 2, 5, 10, 20, 25, 50]);
+      setBagSizes([]);
     }
   };
 
-  // Add new bag size
+  // Updated addBagSize function with better error handling
   const addBagSize = async () => {
     if (!newBagSize || parseFloat(newBagSize) <= 0) {
       toast.error("Please enter a valid bag size");
@@ -272,7 +278,7 @@ const ProcessedProducts = () => {
     }
 
     const size = parseFloat(newBagSize);
-    
+
     if (bagSizes.includes(size)) {
       toast.error("This bag size already exists");
       return;
@@ -282,30 +288,52 @@ const ProcessedProducts = () => {
       const updatedSizes = [...bagSizes, size].sort((a, b) => a - b);
       setBagSizes(updatedSizes);
 
-      await updateDoc(
-        doc(db, `owners/${currentUser.uid}/businesses/${currentBusiness.id}/settings/bagSizes`),
-        {
-          sizes: updatedSizes,
-          updatedAt: serverTimestamp(),
-        }
+      // Check if document exists, if not create it
+      const bagSizesDocRef = doc(
+        db,
+        `owners/${currentUser.uid}/businesses/${currentBusiness.id}/settings/bagSizes`
       );
 
-      setNewBagSize('');
+      const bagSizesDoc = await getDoc(bagSizesDocRef);
+
+      if (bagSizesDoc.exists()) {
+        // Update existing document
+        await updateDoc(bagSizesDocRef, {
+          sizes: updatedSizes,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        // Create new document if it doesn't exist
+        await setDoc(bagSizesDocRef, {
+          sizes: updatedSizes,
+          businessId: currentBusiness.id,
+          ownerId: currentUser.uid,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+
+      setNewBagSize("");
       toast.success("Bag size added successfully");
     } catch (error) {
       console.error("Error adding bag size:", error);
       toast.error("Failed to add bag size");
+      // Revert the local state change if database update failed
+      setBagSizes(bagSizes);
     }
   };
 
   // Remove bag size
   const removeBagSize = async (sizeToRemove) => {
     try {
-      const updatedSizes = bagSizes.filter(size => size !== sizeToRemove);
+      const updatedSizes = bagSizes.filter((size) => size !== sizeToRemove);
       setBagSizes(updatedSizes);
 
       await updateDoc(
-        doc(db, `owners/${currentUser.uid}/businesses/${currentBusiness.id}/settings/bagSizes`),
+        doc(
+          db,
+          `owners/${currentUser.uid}/businesses/${currentBusiness.id}/settings/bagSizes`
+        ),
         {
           sizes: updatedSizes,
           updatedAt: serverTimestamp(),
@@ -319,7 +347,7 @@ const ProcessedProducts = () => {
     }
   };
 
-  // Create bags from batch products
+  // Enhanced createBags function with proper first-stock handling
   const createBags = async () => {
     const { sizeKg, quantity, productType, batchId } = bagCreationData;
 
@@ -334,7 +362,7 @@ const ProcessedProducts = () => {
     const bagSizeKey = `${sizeKgNum}kg`;
 
     // Find the batch and check available quantity
-    const batch = batches.find(b => b.id === batchId);
+    const batch = batches.find((b) => b.id === batchId);
     if (!batch) {
       toast.error("Batch not found");
       return;
@@ -342,22 +370,124 @@ const ProcessedProducts = () => {
 
     const availableQuantity = batch.products[productType] || 0;
     if (totalWeight > availableQuantity) {
-      toast.error(`Not enough ${productType} in batch. Available: ${availableQuantity} kg, Required: ${totalWeight} kg`);
+      toast.error(
+        `Not enough ${productType} in batch. Available: ${availableQuantity} kg, Required: ${totalWeight} kg`
+      );
       return;
     }
 
     setIsCreatingBags(true);
 
     try {
+      const productCode = getProductTypeCode(productType);
+
+      // Step 1: Check if documents exist and get current values
+      const stockTotalsRef = doc(
+        db,
+        `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/stockTotals`
+      );
+
+      const baggedInventoryRef = doc(
+        db,
+        `owners/${currentUser.uid}/businesses/${currentBusiness.id}/inventory/baggedInventory`
+      );
+
+      const [stockTotalsSnap, baggedInventorySnap] = await Promise.all([
+        getDoc(stockTotalsRef),
+        getDoc(baggedInventoryRef),
+      ]);
+
+      // Step 2: Calculate new values based on current state
+      let newStockTotals;
+      let newBaggedInventory;
+
+      if (stockTotalsSnap.exists()) {
+        // Document exists - update existing values
+        const currentData = stockTotalsSnap.data();
+        newStockTotals = {
+          ...currentData,
+          [productType]: (currentData[productType] || 0) - totalWeight,
+          [`${productType}_bagged_total`]:
+            (currentData[`${productType}_bagged_total`] || 0) + totalWeight,
+          [`${productType}_bags_count`]:
+            (currentData[`${productType}_bags_count`] || 0) + quantityNum,
+          lastUpdated: serverTimestamp(),
+        };
+      } else {
+        // Document doesn't exist - create with initial values
+        newStockTotals = {
+          businessId: currentBusiness.id,
+          ownerId: currentUser.uid,
+          createdAt: serverTimestamp(),
+          lastUpdated: serverTimestamp(),
+          // Initialize all product types to 0
+          rice: 0,
+          hunuSahal: 0,
+          kadunuSahal: 0,
+          ricePolish: 0,
+          dahaiyya: 0,
+          flour: 0,
+          // Initialize bagged totals
+          rice_bagged_total: 0,
+          hunuSahal_bagged_total: 0,
+          kadunuSahal_bagged_total: 0,
+          ricePolish_bagged_total: 0,
+          dahaiyya_bagged_total: 0,
+          flour_bagged_total: 0,
+          // Initialize bag counts
+          rice_bags_count: 0,
+          hunuSahal_bags_count: 0,
+          kadunuSahal_bags_count: 0,
+          ricePolish_bags_count: 0,
+          dahaiyya_bags_count: 0,
+          flour_bags_count: 0,
+          // Set actual values for this operation
+          [productType]: -totalWeight,
+          [`${productType}_bagged_total`]: totalWeight,
+          [`${productType}_bags_count`]: quantityNum,
+        };
+      }
+
+      if (baggedInventorySnap.exists()) {
+        // Document exists - update existing values
+        const currentData = baggedInventorySnap.data();
+        newBaggedInventory = {
+          ...currentData,
+          lastUpdated: serverTimestamp(),
+        };
+
+        // Handle nested bag size counting
+        if (!newBaggedInventory[productType]) {
+          newBaggedInventory[productType] = {};
+        }
+        newBaggedInventory[productType][bagSizeKey] =
+          (currentData[productType]?.[bagSizeKey] || 0) + quantityNum;
+      } else {
+        // Document doesn't exist - create with initial values
+        newBaggedInventory = {
+          businessId: currentBusiness.id,
+          ownerId: currentUser.uid,
+          lastUpdated: serverTimestamp(),
+          createdAt: serverTimestamp(),
+          [productType]: {
+            [bagSizeKey]: quantityNum,
+          },
+        };
+      }
+
+      // Step 3: Execute all operations in a batch
       const batch_write = writeBatch(db);
       const createdBagIds = [];
-      const productCode = getProductTypeCode(productType);
 
       // Create individual bag documents
       for (let i = 0; i < quantityNum; i++) {
         const bagId = `BAG_${Date.now()}_${i + 1}`;
-        const bagRef = doc(db, `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`, bagId);
-        
+        const bagRef = doc(
+          db,
+          `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`,
+          bagId
+        );
+
         batch_write.set(bagRef, {
           bagId: bagId,
           productType: productType,
@@ -368,8 +498,9 @@ const ProcessedProducts = () => {
           sourceBatchNumber: batch.batchNumber,
           originalPaddyType: batch.originalPaddyType,
           pricePerKg: batch.pricingData?.adjustedRicePrice || 0,
-          recommendedSellingPrice: batch.pricingData?.recommendedSellingPrice || 0,
-          status: 'available',
+          recommendedSellingPrice:
+            batch.pricingData?.recommendedSellingPrice || 0,
+          status: "available",
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
           createdBy: currentUser.uid,
@@ -377,54 +508,57 @@ const ProcessedProducts = () => {
           ownerId: currentUser.uid,
           batchInfo: {
             batchNumber: batch.batchNumber,
-            buyerName: batch.buyerName || '',
+            buyerName: batch.buyerName || "",
             originalQuantity: batch.originalQuantity,
-            originalPricePerKg: batch.originalPricePerKg
-          }
+            originalPricePerKg: batch.originalPricePerKg,
+          },
         });
 
         createdBagIds.push(bagId);
       }
 
-      // Update batch - reduce product quantity
-      const batchRef = doc(db, `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/processedStock/stock`, batchId);
+      // Update batch - reduce product quantity (this should exist)
+      const batchRef = doc(
+        db,
+        `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/processedStock/stock`,
+        batchId
+      );
       batch_write.update(batchRef, {
         [`products.${productType}`]: increment(-totalWeight),
         totalQuantity: increment(-totalWeight),
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
       });
 
-      // Update centralized bagged inventory - increment bag count
-      const baggedInventoryRef = doc(db, `owners/${currentUser.uid}/businesses/${currentBusiness.id}/inventory/baggedInventory`);
-      batch_write.update(baggedInventoryRef, {
-        [`${productType}.${bagSizeKey}`]: increment(quantityNum),
-        lastUpdated: serverTimestamp()
-      });
+      // Set/update stock totals (use set to handle both create and update)
+      batch_write.set(stockTotalsRef, newStockTotals);
 
-      // Update stock totals - reduce raw product, increase bagged totals
-      const stockTotalsRef = doc(db, `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/stockTotals`);
-      batch_write.update(stockTotalsRef, {
-        [productType]: increment(-totalWeight),
-        [`${productType}_bagged_total`]: increment(totalWeight),
-        [`${productType}_bags_count`]: increment(quantityNum),
-        lastUpdated: serverTimestamp()
-      });
+      // Set/update bagged inventory (use set to handle both create and update)
+      batch_write.set(baggedInventoryRef, newBaggedInventory);
 
-      // Execute all updates atomically
+      // Execute all operations atomically
       await batch_write.commit();
 
       // Refresh data
       await fetchAllData();
 
       // Reset form and close modal
-      setBagCreationData({ sizeKg: '', quantity: '', productType: '', batchId: '' });
+      setBagCreationData({
+        sizeKg: "",
+        quantity: "",
+        productType: "",
+        batchId: "",
+      });
       setShowBagCreationModal(false);
       setSelectedProductForBagging(null);
 
-      toast.success(`Successfully created ${quantityNum} bags of ${sizeKgNum}kg ${productType}. Bag IDs: ${createdBagIds.slice(0, 3).join(', ')}${quantityNum > 3 ? '...' : ''}`);
+      toast.success(
+        `Successfully created ${quantityNum} bags of ${sizeKgNum}kg ${productType}. Bag IDs: ${createdBagIds
+          .slice(0, 3)
+          .join(", ")}${quantityNum > 3 ? "..." : ""}`
+      );
     } catch (error) {
       console.error("Error creating bags:", error);
-      toast.error("Failed to create bags");
+      toast.error(`Failed to create bags: ${error.message}`);
     } finally {
       setIsCreatingBags(false);
     }
@@ -434,19 +568,20 @@ const ProcessedProducts = () => {
   const sellIndividualBag = (bag) => {
     setSelectedBag(bag);
     setIndividualBagSellData({
-      customerName: '',
-      customerPhone: '',
+      customerName: "",
+      customerPhone: "",
       sellingPrice: bag.recommendedSellingPrice || bag.pricePerKg,
-      notes: '',
+      notes: "",
     });
     setShowIndividualBagSellModal(true);
   };
 
-  // Handle individual bag sale
+  // Enhanced handleIndividualBagSale with same approach
   const handleIndividualBagSale = async () => {
     if (!selectedBag) return;
 
-    const { customerName, customerPhone, sellingPrice, notes } = individualBagSellData;
+    const { customerName, customerPhone, sellingPrice, notes } =
+      individualBagSellData;
 
     if (!customerName.trim()) {
       toast.error("Customer name is required");
@@ -462,26 +597,95 @@ const ProcessedProducts = () => {
     const totalAmount = finalPrice * selectedBag.weight;
 
     try {
-      const batch_write = writeBatch(db);
       const productCode = getProductTypeCode(selectedBag.productType);
 
+      // Step 1: Check if stock totals document exists
+      const stockTotalsRef = doc(
+        db,
+        `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/stockTotals`
+      );
+
+      const stockTotalsSnap = await getDoc(stockTotalsRef);
+
+      // Step 2: Calculate new values
+      let newStockTotals;
+
+      if (stockTotalsSnap.exists()) {
+        // Document exists - update existing values
+        const currentData = stockTotalsSnap.data();
+        newStockTotals = {
+          ...currentData,
+          [`${selectedBag.productType}_bagged_total`]: Math.max(
+            0,
+            (currentData[`${selectedBag.productType}_bagged_total`] || 0) -
+              selectedBag.weight
+          ),
+          [`${selectedBag.productType}_bags_count`]: Math.max(
+            0,
+            (currentData[`${selectedBag.productType}_bags_count`] || 0) - 1
+          ),
+          lastUpdated: serverTimestamp(),
+        };
+      } else {
+        // Document doesn't exist - create with initial values (this shouldn't happen for sales, but handle it)
+        newStockTotals = {
+          businessId: currentBusiness.id,
+          ownerId: currentUser.uid,
+          createdAt: serverTimestamp(),
+          lastUpdated: serverTimestamp(),
+          rice: 0,
+          hunuSahal: 0,
+          kadunuSahal: 0,
+          ricePolish: 0,
+          dahaiyya: 0,
+          flour: 0,
+          rice_bagged_total: 0,
+          hunuSahal_bagged_total: 0,
+          kadunuSahal_bagged_total: 0,
+          ricePolish_bagged_total: 0,
+          dahaiyya_bagged_total: 0,
+          flour_bagged_total: 0,
+          rice_bags_count: 0,
+          hunuSahal_bags_count: 0,
+          kadunuSahal_bags_count: 0,
+          ricePolish_bags_count: 0,
+          dahaiyya_bags_count: 0,
+          flour_bags_count: 0,
+          // This is unusual for a sale, but we'll handle it gracefully
+          [`${selectedBag.productType}_bagged_total`]: 0,
+          [`${selectedBag.productType}_bags_count`]: 0,
+        };
+      }
+
+      // Step 3: Execute operations in batch
+      const batch_write = writeBatch(db);
+
       // Update bag status to sold
-      const bagRef = doc(db, `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`, selectedBag.id);
+      const bagRef = doc(
+        db,
+        `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`,
+        selectedBag.id
+      );
       batch_write.update(bagRef, {
-        status: 'sold',
+        status: "sold",
         soldAt: serverTimestamp(),
         soldTo: customerName,
         customerPhone: customerPhone,
         sellingPrice: finalPrice,
         totalAmount: totalAmount,
         saleNotes: notes,
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
       });
 
       // Create sale record
-      const saleRef = doc(collection(db, `owners/${currentUser.uid}/businesses/${currentBusiness.id}/sales`));
+      const saleRef = doc(
+        collection(
+          db,
+          `owners/${currentUser.uid}/businesses/${currentBusiness.id}/sales`
+        )
+      );
       batch_write.set(saleRef, {
-        saleType: 'individual_bag',
+        saleType: "individual_bag",
         bagId: selectedBag.bagId,
         bagDocId: selectedBag.id,
         productType: selectedBag.productType,
@@ -503,16 +707,11 @@ const ProcessedProducts = () => {
         createdBy: currentUser.uid,
         businessId: currentBusiness.id,
         ownerId: currentUser.uid,
-        status: 'completed'
+        status: "completed",
       });
 
-      // Update stock totals
-      const stockTotalsRef = doc(db, `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/stockTotals`);
-      batch_write.update(stockTotalsRef, {
-        [`${selectedBag.productType}_bagged_total`]: increment(-selectedBag.weight),
-        [`${selectedBag.productType}_bags_count`]: increment(-1),
-        lastUpdated: serverTimestamp()
-      });
+      // Update stock totals using set (handles both create and update)
+      batch_write.set(stockTotalsRef, newStockTotals);
 
       await batch_write.commit();
       await fetchAllData();
@@ -520,16 +719,20 @@ const ProcessedProducts = () => {
       setShowIndividualBagSellModal(false);
       setSelectedBag(null);
       setIndividualBagSellData({
-        customerName: '',
-        customerPhone: '',
+        customerName: "",
+        customerPhone: "",
         sellingPrice: 0,
-        notes: '',
+        notes: "",
       });
 
-      toast.success(`Successfully sold ${selectedBag.weight}kg ${formatProductType(selectedBag.productType)} bag for ${formatCurrency(totalAmount)}`);
+      toast.success(
+        `Successfully sold ${selectedBag.weight}kg ${formatProductType(
+          selectedBag.productType
+        )} bag for ${formatCurrency(totalAmount)}`
+      );
     } catch (error) {
       console.error("Error selling individual bag:", error);
-      toast.error("Failed to sell bag");
+      toast.error(`Failed to sell bag: ${error.message}`);
     }
   };
 
@@ -542,11 +745,11 @@ const ProcessedProducts = () => {
   // Open bag creation modal
   const openBagCreationModal = (productType, batchId) => {
     setSelectedProductForBagging(productType);
-    setBagCreationData({ 
-      sizeKg: '', 
-      quantity: '', 
+    setBagCreationData({
+      sizeKg: "",
+      quantity: "",
       productType: productType,
-      batchId: batchId
+      batchId: batchId,
     });
     setShowBagCreationModal(true);
   };
@@ -554,24 +757,24 @@ const ProcessedProducts = () => {
   // Open sell modal
   const openSellModal = (batch) => {
     setSelectedBatch(batch);
-    
+
     // Initialize sell data with available products
     const products = {};
-    Object.keys(batch.products || {}).forEach(productType => {
+    Object.keys(batch.products || {}).forEach((productType) => {
       if (batch.products[productType] > 0) {
         products[productType] = {
           available: batch.products[productType],
           selling: 0,
-          pricePerKg: batch.pricingData?.adjustedRicePrice || 0
+          pricePerKg: batch.pricingData?.adjustedRicePrice || 0,
         };
       }
     });
-    
+
     setSellData({
       products: products,
-      customerName: '',
-      customerPhone: '',
-      notes: ''
+      customerName: "",
+      customerPhone: "",
+      notes: "",
     });
     setShowSellModal(true);
   };
@@ -581,7 +784,9 @@ const ProcessedProducts = () => {
     if (!selectedBatch) return;
 
     // Validate sell data
-    const sellingProducts = Object.entries(sellData.products).filter(([_, data]) => data.selling > 0);
+    const sellingProducts = Object.entries(sellData.products).filter(
+      ([_, data]) => data.selling > 0
+    );
     if (sellingProducts.length === 0) {
       toast.error("Please specify quantities to sell");
       return;
@@ -605,40 +810,52 @@ const ProcessedProducts = () => {
         if (data.selling > data.available) {
           throw new Error(`Cannot sell more ${productType} than available`);
         }
-        
+
         totalRevenue += data.selling * data.pricePerKg;
         totalWeight += data.selling;
 
         // Update batch
-        const batchRef = doc(db, `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/processedStock/stock`, selectedBatch.id);
+        const batchRef = doc(
+          db,
+          `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/processedStock/stock`,
+          selectedBatch.id
+        );
         batch_write.update(batchRef, {
           [`products.${productType}`]: increment(-data.selling),
           totalQuantity: increment(-data.selling),
-          updatedAt: serverTimestamp()
+          updatedAt: serverTimestamp(),
         });
 
         // Update stock totals
-        const stockTotalsRef = doc(db, `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/stockTotals`);
+        const stockTotalsRef = doc(
+          db,
+          `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/stockTotals`
+        );
         batch_write.update(stockTotalsRef, {
           [productType]: increment(-data.selling),
-          lastUpdated: serverTimestamp()
+          lastUpdated: serverTimestamp(),
         });
       });
 
       // Create sale record
-      const saleRef = doc(collection(db, `owners/${currentUser.uid}/businesses/${currentBusiness.id}/sales`));
+      const saleRef = doc(
+        collection(
+          db,
+          `owners/${currentUser.uid}/businesses/${currentBusiness.id}/sales`
+        )
+      );
       batch_write.set(saleRef, {
-        saleType: 'batch_products',
+        saleType: "batch_products",
         sourceBatchId: selectedBatch.id,
         sourceBatchNumber: selectedBatch.batchNumber,
         products: Object.fromEntries(
           sellingProducts.map(([productType, data]) => [
-            productType, 
+            productType,
             {
               quantity: data.selling,
               pricePerKg: data.pricePerKg,
-              total: data.selling * data.pricePerKg
-            }
+              total: data.selling * data.pricePerKg,
+            },
           ])
         ),
         customerName: sellData.customerName,
@@ -651,7 +868,7 @@ const ProcessedProducts = () => {
         createdBy: currentUser.uid,
         businessId: currentBusiness.id,
         ownerId: currentUser.uid,
-        status: 'completed'
+        status: "completed",
       });
 
       await batch_write.commit();
@@ -664,12 +881,14 @@ const ProcessedProducts = () => {
       setSelectedBatch(null);
       setSellData({
         products: {},
-        customerName: '',
-        customerPhone: '',
-        notes: ''
+        customerName: "",
+        customerPhone: "",
+        notes: "",
       });
 
-      toast.success(`Sale completed! Revenue: Rs. ${totalRevenue.toLocaleString()}`);
+      toast.success(
+        `Sale completed! Revenue: Rs. ${totalRevenue.toLocaleString()}`
+      );
     } catch (error) {
       console.error("Error processing sale:", error);
       toast.error(error.message || "Failed to process sale");
@@ -706,8 +925,6 @@ const ProcessedProducts = () => {
   const getFilteredBatches = () => {
     return batches;
   };
-
-
 
   // Format number safely
   const formatNumber = (value, decimals = 2) => {
@@ -754,13 +971,11 @@ const ProcessedProducts = () => {
     return true; // All products can be bagged
   };
 
-
-
   // Group bags by batch and size for compact display
   const groupBagsByBatchAndSize = (bags) => {
     const grouped = {};
-    
-    bags.forEach(bag => {
+
+    bags.forEach((bag) => {
       const key = `${bag.sourceBatchNumber}-${bag.bagSize}`;
       if (!grouped[key]) {
         grouped[key] = {
@@ -776,20 +991,20 @@ const ProcessedProducts = () => {
           bags: [],
           availableCount: 0,
           soldCount: 0,
-          totalWeight: 0
+          totalWeight: 0,
         };
       }
-      
+
       grouped[key].bags.push(bag);
       grouped[key].totalWeight += bag.weight;
-      
-      if (bag.status === 'available') {
+
+      if (bag.status === "available") {
         grouped[key].availableCount++;
-      } else if (bag.status === 'sold') {
+      } else if (bag.status === "sold") {
         grouped[key].soldCount++;
       }
     });
-    
+
     return Object.values(grouped);
   };
 
@@ -804,7 +1019,8 @@ const ProcessedProducts = () => {
             Individual Bagged Stocks
           </h3>
           <div className="text-center py-6 text-gray-500">
-            No bagged stocks available. Start by creating some bags from batches!
+            No bagged stocks available. Start by creating some bags from
+            batches!
           </div>
         </div>
       );
@@ -815,10 +1031,10 @@ const ProcessedProducts = () => {
         <h3 className="text-lg font-semibold text-gray-900 mb-3">
           Individual Bagged Stocks
         </h3>
-        
+
         {Object.entries(baggedStocks).map(([productType, bags]) => {
           const groupedBags = groupBagsByBatchAndSize(bags);
-          
+
           return (
             <div key={productType} className="mb-4 last:mb-0">
               <div className="flex justify-between items-center mb-2">
@@ -826,10 +1042,14 @@ const ProcessedProducts = () => {
                   {formatProductType(productType)}
                 </h4>
                 <span className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                  {bags.length} bags ({formatNumber(bags.reduce((sum, bag) => sum + (bag.weight || 0), 0))} kg total)
+                  {bags.length} bags (
+                  {formatNumber(
+                    bags.reduce((sum, bag) => sum + (bag.weight || 0), 0)
+                  )}{" "}
+                  kg total)
                 </span>
               </div>
-              
+
               <div className="overflow-x-auto">
                 <table className="min-w-full">
                   <thead className="bg-gray-50">
@@ -872,7 +1092,7 @@ const ProcessedProducts = () => {
                           {formatCurrency(group.pricePerKg)}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-600">
-                          {group.originalPaddyType || '—'}
+                          {group.originalPaddyType || "—"}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-600">
                           {formatDate(group.createdAt)}
@@ -889,8 +1109,6 @@ const ProcessedProducts = () => {
     );
   };
 
-
-
   const filteredBatches = getFilteredBatches();
 
   // No business selected state
@@ -898,8 +1116,18 @@ const ProcessedProducts = () => {
     return (
       <div className="h-full flex items-center justify-center p-6">
         <div className="bg-yellow-50 border border-yellow-200 p-6 rounded-lg max-w-md text-center">
-          <svg className="mx-auto h-8 w-8 text-yellow-600 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <svg
+            className="mx-auto h-8 w-8 text-yellow-600 mb-3"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
           </svg>
           <h3 className="text-lg font-medium text-gray-900 mb-2">
             No business selected or user not authenticated
@@ -933,9 +1161,24 @@ const ProcessedProducts = () => {
               onClick={() => setShowBagSizeModal(true)}
               className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm flex items-center transition-colors"
             >
-              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <svg
+                className="w-4 h-4 mr-1"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                />
               </svg>
               Manage Bags
             </button>
@@ -943,15 +1186,23 @@ const ProcessedProducts = () => {
               onClick={refreshData}
               className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm flex items-center transition-colors"
             >
-              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              <svg
+                className="w-4 h-4 mr-1"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
               </svg>
               Refresh
             </button>
           </div>
         </div>
-
-
       </div>
 
       {/* Scrollable Content Area */}
@@ -964,12 +1215,8 @@ const ProcessedProducts = () => {
           </div>
         )}
 
-
-
         {/* Bagged Inventory Section */}
-        <div className="px-4">
-          {renderBaggedInventory()}
-        </div>
+        <div className="px-4">{renderBaggedInventory()}</div>
 
         {/* Batches List */}
         <div className="p-4">
@@ -979,8 +1226,18 @@ const ProcessedProducts = () => {
             </div>
           ) : batches.length === 0 ? (
             <div className="bg-white rounded-lg p-8 text-center border border-gray-200">
-              <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              <svg
+                className="mx-auto h-12 w-12 text-gray-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                />
               </svg>
               <h3 className="mt-2 text-lg font-medium text-gray-900">
                 No processed batches found
@@ -1004,11 +1261,23 @@ const ProcessedProducts = () => {
                         <div className="flex items-center">
                           Batch Number
                           {sortField === "batchNumber" && (
-                            <svg className="ml-1 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                            <svg
+                              className="ml-1 h-4 w-4"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
                               {sortDirection === "asc" ? (
-                                <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
+                                <path
+                                  fillRule="evenodd"
+                                  d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"
+                                  clipRule="evenodd"
+                                />
                               ) : (
-                                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                                <path
+                                  fillRule="evenodd"
+                                  d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                  clipRule="evenodd"
+                                />
                               )}
                             </svg>
                           )}
@@ -1022,23 +1291,44 @@ const ProcessedProducts = () => {
                         <div className="flex items-center">
                           Date
                           {sortField === "createdAt" && (
-                            <svg className="ml-1 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                            <svg
+                              className="ml-1 h-4 w-4"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
                               {sortDirection === "asc" ? (
-                                <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
+                                <path
+                                  fillRule="evenodd"
+                                  d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"
+                                  clipRule="evenodd"
+                                />
                               ) : (
-                                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                                <path
+                                  fillRule="evenodd"
+                                  d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                  clipRule="evenodd"
+                                />
                               )}
                             </svg>
                           )}
                         </div>
                       </th>
-                      <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th
+                        scope="col"
+                        className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                      >
                         Paddy Type
                       </th>
-                      <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th
+                        scope="col"
+                        className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                      >
                         Total Quantity
                       </th>
-                      <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th
+                        scope="col"
+                        className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                      >
                         Price/kg
                       </th>
                     </tr>
@@ -1053,12 +1343,28 @@ const ProcessedProducts = () => {
                               className="text-gray-400 hover:text-gray-600 focus:outline-none transition-colors"
                             >
                               {expandedRows[batch.id] ? (
-                                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                                <svg
+                                  className="h-4 w-4"
+                                  fill="currentColor"
+                                  viewBox="0 0 20 20"
+                                >
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                    clipRule="evenodd"
+                                  />
                                 </svg>
                               ) : (
-                                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                                <svg
+                                  className="h-4 w-4"
+                                  fill="currentColor"
+                                  viewBox="0 0 20 20"
+                                >
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                                    clipRule="evenodd"
+                                  />
                                 </svg>
                               )}
                             </button>
@@ -1080,7 +1386,7 @@ const ProcessedProducts = () => {
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
                             <div className="text-sm text-gray-900">
-                              {batch.originalPaddyType || '—'}
+                              {batch.originalPaddyType || "—"}
                             </div>
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
@@ -1090,12 +1396,18 @@ const ProcessedProducts = () => {
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
                             <div className="text-sm text-gray-900 font-semibold">
-                              {batch.pricingData?.adjustedRicePrice ? 
-                                formatCurrency(batch.pricingData.adjustedRicePrice) : '—'}
+                              {batch.pricingData?.adjustedRicePrice
+                                ? formatCurrency(
+                                    batch.pricingData.adjustedRicePrice
+                                  )
+                                : "—"}
                             </div>
                             {batch.pricingData?.recommendedSellingPrice && (
                               <div className="text-xs text-green-600">
-                                Sell: {formatCurrency(batch.pricingData.recommendedSellingPrice)}
+                                Sell:{" "}
+                                {formatCurrency(
+                                  batch.pricingData.recommendedSellingPrice
+                                )}
                               </div>
                             )}
                           </td>
@@ -1111,29 +1423,42 @@ const ProcessedProducts = () => {
                                     Products in this Batch
                                   </h4>
                                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                                    {batch.products && Object.entries(batch.products).map(([productType, quantity]) => {
-                                      if (quantity <= 0) return null;
-                                      return (
-                                        <div key={productType} className="bg-white p-2 rounded border border-gray-200">
-                                          <div className="flex justify-between items-center mb-1">
-                                            <span className="text-sm font-medium text-gray-900">
-                                              {formatProductType(productType)}
-                                            </span>
-                                            <span className="text-sm font-bold text-blue-600">
-                                              {formatNumber(quantity)} kg
-                                            </span>
-                                          </div>
-                                          {canCreateBags(productType) && (
-                                            <button
-                                              onClick={() => openBagCreationModal(productType, batch.id)}
-                                              className="w-full text-xs text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 py-1 rounded transition-colors"
+                                    {batch.products &&
+                                      Object.entries(batch.products).map(
+                                        ([productType, quantity]) => {
+                                          if (quantity <= 0) return null;
+                                          return (
+                                            <div
+                                              key={productType}
+                                              className="bg-white p-2 rounded border border-gray-200"
                                             >
-                                              📦 Create Bags
-                                            </button>
-                                          )}
-                                        </div>
-                                      );
-                                    })}
+                                              <div className="flex justify-between items-center mb-1">
+                                                <span className="text-sm font-medium text-gray-900">
+                                                  {formatProductType(
+                                                    productType
+                                                  )}
+                                                </span>
+                                                <span className="text-sm font-bold text-blue-600">
+                                                  {formatNumber(quantity)} kg
+                                                </span>
+                                              </div>
+                                              {canCreateBags(productType) && (
+                                                <button
+                                                  onClick={() =>
+                                                    openBagCreationModal(
+                                                      productType,
+                                                      batch.id
+                                                    )
+                                                  }
+                                                  className="w-full text-xs text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 py-1 rounded transition-colors"
+                                                >
+                                                  📦 Create Bags
+                                                </button>
+                                              )}
+                                            </div>
+                                          );
+                                        }
+                                      )}
                                   </div>
                                 </div>
 
@@ -1145,27 +1470,45 @@ const ProcessedProducts = () => {
                                     </h4>
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                                       <div>
-                                        <span className="text-gray-500">Cost per kg:</span>
+                                        <span className="text-gray-500">
+                                          Cost per kg:
+                                        </span>
                                         <p className="font-semibold text-gray-900">
-                                          {formatCurrency(batch.pricingData.adjustedRicePrice)}
+                                          {formatCurrency(
+                                            batch.pricingData.adjustedRicePrice
+                                          )}
                                         </p>
                                       </div>
                                       <div>
-                                        <span className="text-gray-500">Recommended selling:</span>
+                                        <span className="text-gray-500">
+                                          Recommended selling:
+                                        </span>
                                         <p className="font-semibold text-green-600">
-                                          {formatCurrency(batch.pricingData.recommendedSellingPrice)}
+                                          {formatCurrency(
+                                            batch.pricingData
+                                              .recommendedSellingPrice
+                                          )}
                                         </p>
                                       </div>
                                       <div>
-                                        <span className="text-gray-500">Profit margin:</span>
+                                        <span className="text-gray-500">
+                                          Profit margin:
+                                        </span>
                                         <p className="font-semibold text-blue-600">
-                                          {batch.pricingData.profitPercentage || 0}%
+                                          {batch.pricingData.profitPercentage ||
+                                            0}
+                                          %
                                         </p>
                                       </div>
                                       <div>
-                                        <span className="text-gray-500">Byproduct revenue:</span>
+                                        <span className="text-gray-500">
+                                          Byproduct revenue:
+                                        </span>
                                         <p className="font-semibold text-purple-600">
-                                          {formatCurrency(batch.pricingData.profitFromByproducts)}
+                                          {formatCurrency(
+                                            batch.pricingData
+                                              .profitFromByproducts
+                                          )}
                                         </p>
                                       </div>
                                     </div>
@@ -1185,8 +1528,7 @@ const ProcessedProducts = () => {
         </div>
       </div>
 
-      {/* All Modals remain the same but with reduced padding */}
-      {/* Bag Size Management Modal */}
+      {/* Enhanced Bag Size Management Modal */}
       {showBagSizeModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
@@ -1199,66 +1541,156 @@ const ProcessedProducts = () => {
                   onClick={() => setShowBagSizeModal(false)}
                   className="text-gray-400 hover:text-gray-600"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
                   </svg>
                 </button>
               </div>
 
               {/* Add new bag size */}
-              <div className="mb-3">
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Add New Bag Size
+                </label>
                 <div className="flex space-x-2">
                   <input
                     type="number"
+                    step="0.1"
+                    min="0.1"
                     placeholder="Bag size (kg)"
                     value={newBagSize}
                     onChange={(e) => setNewBagSize(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === "Enter") {
+                        addBagSize();
+                      }
+                    }}
                     className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                   />
                   <button
                     onClick={addBagSize}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm"
+                    disabled={!newBagSize || parseFloat(newBagSize) <= 0}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm transition-colors"
                   >
                     Add
                   </button>
                 </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Enter bag size in kilograms (e.g., 1, 2.5, 10, 25, 50)
+                </p>
               </div>
 
               {/* Current bag sizes */}
               <div>
                 <h3 className="text-sm font-medium text-gray-700 mb-2">
-                  Current Bag Sizes
+                  Current Bag Sizes ({bagSizes.length})
                 </h3>
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {bagSizes.map((size) => (
-                    <div
-                      key={size}
-                      className="flex justify-between items-center p-2 bg-gray-50 rounded"
+
+                {bagSizes.length === 0 ? (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
+                    <svg
+                      className="mx-auto h-8 w-8 text-gray-400 mb-2"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
                     >
-                      <span className="text-sm font-medium text-gray-900">
-                        {size} kg
-                      </span>
-                      <button
-                        onClick={() => removeBagSize(size)}
-                        className="text-red-600 hover:text-red-700"
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                      />
+                    </svg>
+                    <p className="text-sm text-gray-500 mb-1">
+                      No bag sizes added yet
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      Add your first bag size above to start creating bags
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {bagSizes.map((size) => (
+                      <div
+                        key={size}
+                        className="flex justify-between items-center p-2 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 transition-colors"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
+                        <span className="text-sm font-medium text-gray-900">
+                          {size} kg
+                        </span>
+                        <button
+                          onClick={() => removeBagSize(size)}
+                          className="text-red-600 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
+                          title="Remove this bag size"
+                        >
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Common bag sizes suggestion */}
+              {bagSizes.length === 0 && (
+                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-xs font-medium text-blue-800 mb-2">
+                    Suggested common bag sizes:
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {[1, 2, 5, 10, 20, 25, 50].map((size) => (
+                      <button
+                        key={size}
+                        onClick={() => {
+                          setNewBagSize(size.toString());
+                          addBagSize();
+                        }}
+                        className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded transition-colors"
+                      >
+                        {size}kg
                       </button>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
+              )}
+
+              {/* Footer */}
+              <div className="mt-4 pt-3 border-t border-gray-200">
+                <button
+                  onClick={() => setShowBagSizeModal(false)}
+                  className="w-full px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  Done
+                </button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Other modals with similar compact styling... */}
-      {/* I'll include a few key modals but with reduced spacing */}
-      
-      {/* Bag Creation Modal */}
+      {/* Enhanced Bag Creation Modal */}
       {showBagCreationModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
@@ -1270,24 +1702,43 @@ const ProcessedProducts = () => {
                 <button
                   onClick={() => {
                     setShowBagCreationModal(false);
-                    setBagCreationData({ sizeKg: '', quantity: '', productType: '', batchId: '' });
+                    setBagCreationData({
+                      sizeKg: "",
+                      quantity: "",
+                      productType: "",
+                      batchId: "",
+                    });
                   }}
                   className="text-gray-400 hover:text-gray-600"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
                   </svg>
                 </button>
               </div>
 
               {/* Available stock info */}
               {(() => {
-                const batch = batches.find(b => b.id === bagCreationData.batchId);
-                const availableQuantity = batch?.products[bagCreationData.productType] || 0;
+                const batch = batches.find(
+                  (b) => b.id === bagCreationData.batchId
+                );
+                const availableQuantity =
+                  batch?.products[bagCreationData.productType] || 0;
                 return (
                   <div className="bg-blue-50 border border-blue-200 rounded p-2 mb-3">
                     <p className="text-sm text-blue-800">
-                      Available {formatProductType(bagCreationData.productType)} in batch: {' '}
+                      Available {formatProductType(bagCreationData.productType)}{" "}
+                      in batch:{" "}
                       <span className="font-semibold">
                         {formatNumber(availableQuantity)} kg
                       </span>
@@ -1300,48 +1751,116 @@ const ProcessedProducts = () => {
               })()}
 
               <div className="space-y-3">
-                {/* Bag size selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Bag Size *
-                  </label>
-                  <select
-                    value={bagCreationData.sizeKg}
-                    onChange={(e) => setBagCreationData(prev => ({ ...prev, sizeKg: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  >
-                    <option value="">Select bag size</option>
-                    {bagSizes.map(size => (
-                      <option key={size} value={size}>{size} kg</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Quantity */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Number of Bags *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={bagCreationData.quantity}
-                    onChange={(e) => setBagCreationData(prev => ({ ...prev, quantity: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                    placeholder="Enter number of bags"
-                  />
-                </div>
-
-                {/* Total weight calculation */}
-                {bagCreationData.sizeKg && bagCreationData.quantity && (
-                  <div className="bg-green-50 border border-green-200 rounded p-2">
-                    <p className="text-sm text-green-800">
-                      Total weight: {' '}
-                      <span className="font-semibold">
-                        {formatNumber(parseFloat(bagCreationData.sizeKg) * parseInt(bagCreationData.quantity))} kg
-                      </span>
-                    </p>
+                {/* Check if bag sizes exist */}
+                {bagSizes.length === 0 ? (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded p-3 mb-3">
+                    <div className="flex items-start">
+                      <svg
+                        className="w-5 h-5 text-yellow-600 mt-0.5 mr-2 flex-shrink-0"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 15c-.77.833.192 2.5 1.732 2.5z"
+                        />
+                      </svg>
+                      <div>
+                        <p className="text-sm font-medium text-yellow-800">
+                          No Bag Sizes Available
+                        </p>
+                        <p className="text-xs text-yellow-700 mt-1">
+                          You need to add bag sizes first before creating bags.
+                        </p>
+                        <button
+                          onClick={() => {
+                            setShowBagCreationModal(false);
+                            setShowBagSizeModal(true);
+                          }}
+                          className="mt-2 text-xs bg-yellow-600 hover:bg-yellow-700 text-white px-2 py-1 rounded transition-colors"
+                        >
+                          Add Bag Sizes
+                        </button>
+                      </div>
+                    </div>
                   </div>
+                ) : (
+                  <>
+                    {/* Bag size selection */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Bag Size *
+                      </label>
+                      <select
+                        value={bagCreationData.sizeKg}
+                        onChange={(e) =>
+                          setBagCreationData((prev) => ({
+                            ...prev,
+                            sizeKg: e.target.value,
+                          }))
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      >
+                        <option value="">Select bag size</option>
+                        {bagSizes.map((size) => (
+                          <option key={size} value={size}>
+                            {size} kg
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Don't see your size?{" "}
+                        <button
+                          onClick={() => {
+                            setShowBagCreationModal(false);
+                            setShowBagSizeModal(true);
+                          }}
+                          className="text-blue-600 hover:text-blue-700 underline"
+                        >
+                          Add new size
+                        </button>
+                      </p>
+                    </div>
+
+                    {/* Quantity */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Number of Bags *
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={bagCreationData.quantity}
+                        onChange={(e) =>
+                          setBagCreationData((prev) => ({
+                            ...prev,
+                            quantity: e.target.value,
+                          }))
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                        placeholder="Enter number of bags"
+                      />
+                    </div>
+
+                    {/* Total weight calculation */}
+                    {bagCreationData.sizeKg && bagCreationData.quantity && (
+                      <div className="bg-green-50 border border-green-200 rounded p-2">
+                        <p className="text-sm text-green-800">
+                          Total weight:{" "}
+                          <span className="font-semibold">
+                            {formatNumber(
+                              parseFloat(bagCreationData.sizeKg) *
+                                parseInt(bagCreationData.quantity)
+                            )}{" "}
+                            kg
+                          </span>
+                        </p>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {/* Action buttons */}
@@ -1349,7 +1868,12 @@ const ProcessedProducts = () => {
                   <button
                     onClick={() => {
                       setShowBagCreationModal(false);
-                      setBagCreationData({ sizeKg: '', quantity: '', productType: '', batchId: '' });
+                      setBagCreationData({
+                        sizeKg: "",
+                        quantity: "",
+                        productType: "",
+                        batchId: "",
+                      });
                     }}
                     className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
                   >
@@ -1357,10 +1881,15 @@ const ProcessedProducts = () => {
                   </button>
                   <button
                     onClick={createBags}
-                    disabled={isCreatingBags || !bagCreationData.sizeKg || !bagCreationData.quantity}
+                    disabled={
+                      isCreatingBags ||
+                      !bagCreationData.sizeKg ||
+                      !bagCreationData.quantity ||
+                      bagSizes.length === 0
+                    }
                     className="flex-1 px-3 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isCreatingBags ? 'Creating...' : 'Create Bags'}
+                    {isCreatingBags ? "Creating..." : "Create Bags"}
                   </button>
                 </div>
               </div>
@@ -1369,8 +1898,184 @@ const ProcessedProducts = () => {
         </div>
       )}
 
-      {/* Continue with other modals using similar compact styling... */}
-      {/* For brevity, I'm including the structure but you can apply the same pattern to all modals */}
+      {/* Individual Bag Sell Modal */}
+      {showIndividualBagSellModal && selectedBag && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="p-4">
+              <div className="flex justify-between items-center mb-3">
+                <h2 className="text-lg font-bold text-gray-900">
+                  Sell {formatProductType(selectedBag.productType)} Bag
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowIndividualBagSellModal(false);
+                    setSelectedBag(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Bag info */}
+              <div className="bg-blue-50 border border-blue-200 rounded p-2 mb-3">
+                <p className="text-sm text-blue-800">
+                  <span className="font-semibold">Bag ID:</span>{" "}
+                  {selectedBag.bagId}
+                </p>
+                <p className="text-sm text-blue-800">
+                  <span className="font-semibold">Weight:</span>{" "}
+                  {selectedBag.weight} kg
+                </p>
+                <p className="text-sm text-blue-800">
+                  <span className="font-semibold">Cost/kg:</span>{" "}
+                  {formatCurrency(selectedBag.pricePerKg)}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                {/* Customer name */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Customer Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={individualBagSellData.customerName}
+                    onChange={(e) =>
+                      setIndividualBagSellData((prev) => ({
+                        ...prev,
+                        customerName: e.target.value,
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    placeholder="Enter customer name"
+                  />
+                </div>
+
+                {/* Customer phone */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Customer Phone
+                  </label>
+                  <input
+                    type="tel"
+                    value={individualBagSellData.customerPhone}
+                    onChange={(e) =>
+                      setIndividualBagSellData((prev) => ({
+                        ...prev,
+                        customerPhone: e.target.value,
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    placeholder="Enter phone number"
+                  />
+                </div>
+
+                {/* Selling price */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Selling Price per kg *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={individualBagSellData.sellingPrice}
+                    onChange={(e) =>
+                      setIndividualBagSellData((prev) => ({
+                        ...prev,
+                        sellingPrice: parseFloat(e.target.value) || 0,
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    placeholder="Enter selling price"
+                  />
+                </div>
+
+                {/* Total amount calculation */}
+                {individualBagSellData.sellingPrice > 0 && (
+                  <div className="bg-green-50 border border-green-200 rounded p-2">
+                    <p className="text-sm text-green-800">
+                      Total amount:{" "}
+                      <span className="font-semibold">
+                        {formatCurrency(
+                          individualBagSellData.sellingPrice *
+                            selectedBag.weight
+                        )}
+                      </span>
+                    </p>
+                    <p className="text-xs text-green-600 mt-1">
+                      Profit:{" "}
+                      {formatCurrency(
+                        (individualBagSellData.sellingPrice -
+                          selectedBag.pricePerKg) *
+                          selectedBag.weight
+                      )}
+                    </p>
+                  </div>
+                )}
+
+                {/* Notes */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Notes
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={individualBagSellData.notes}
+                    onChange={(e) =>
+                      setIndividualBagSellData((prev) => ({
+                        ...prev,
+                        notes: e.target.value,
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    placeholder="Additional notes (optional)"
+                  />
+                </div>
+
+                {/* Action buttons */}
+                <div className="flex space-x-2 pt-3">
+                  <button
+                    onClick={() => {
+                      setShowIndividualBagSellModal(false);
+                      setSelectedBag(null);
+                    }}
+                    className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleIndividualBagSale}
+                    disabled={
+                      !individualBagSellData.customerName.trim() ||
+                      !individualBagSellData.sellingPrice ||
+                      individualBagSellData.sellingPrice <= 0
+                    }
+                    className="flex-1 px-3 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Sell Bag
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

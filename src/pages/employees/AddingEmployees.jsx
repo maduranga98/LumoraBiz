@@ -1,12 +1,21 @@
 import React, { useState, useRef } from "react";
-import { db, auth, storage } from "../../services/firebase";
-import { doc, setDoc, collection } from "firebase/firestore";
+import { db, storage } from "../../services/firebase";
+import {
+  doc,
+  setDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+} from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { toast } from "react-hot-toast";
 import { useBusiness } from "../../contexts/BusinessContext";
+import { useAuth } from "../../contexts/AuthContext";
 
 const AddingEmployees = () => {
   const { currentBusiness } = useBusiness();
+  const { currentUser } = useAuth(); // Use the auth context
 
   // Form state
   const [formData, setFormData] = useState({
@@ -18,7 +27,8 @@ const AddingEmployees = () => {
     role: "",
     salaryType: "",
     payRate: "",
-    email: "", // Added email field for sales reps
+    email: "", // For sales reps and managers
+    permissions: [], // For managers
   });
 
   // Image states
@@ -47,6 +57,10 @@ const AddingEmployees = () => {
   const [loading, setLoading] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
 
+  // Credentials modal state
+  const [showCredentialsModal, setShowCredentialsModal] = useState(false);
+  const [generatedCredentials, setGeneratedCredentials] = useState(null);
+
   // Refs
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -58,11 +72,12 @@ const AddingEmployees = () => {
     licenseBack: useRef(null),
   };
 
-  // Role options
+  // Role options - Added manager role
   const roles = [
     { value: "driver", label: "Driver" },
     { value: "employee", label: "Employee" },
     { value: "sales_rep", label: "Sales Representative" },
+    { value: "manager", label: "Manager" },
     { value: "operator", label: "Operator" },
   ];
 
@@ -72,12 +87,78 @@ const AddingEmployees = () => {
     { value: "monthly", label: "Monthly" },
   ];
 
+  // Manager permissions options
+  const managerPermissions = [
+    { value: "view_dashboard", label: "View Dashboard" },
+    { value: "manage_inventory", label: "Manage Inventory" },
+    { value: "manage_sales", label: "Manage Sales" },
+    { value: "manage_employees", label: "Manage Employees" },
+    { value: "view_reports", label: "View Reports" },
+    { value: "manage_customers", label: "Manage Customers" },
+    { value: "manage_suppliers", label: "Manage Suppliers" },
+  ];
+
+  // Generate unique username
+  const generateUsername = async (name, ownerId, role) => {
+    const baseUsername = name.toLowerCase().replace(/\s+/g, "");
+    let username = baseUsername;
+    let counter = 1;
+
+    while (true) {
+      // Check in managers collection
+      const managersQuery = query(
+        collection(db, "managers"),
+        where("username", "==", username),
+        where("ownerId", "==", ownerId)
+      );
+      const managersSnapshot = await getDocs(managersQuery);
+
+      // Check in sales_reps collection
+      const salesRepsQuery = query(
+        collection(
+          db,
+          `owners/${ownerId}/businesses/${currentBusiness.id}/salesReps`
+        ),
+        where("username", "==", username)
+      );
+      const salesRepsSnapshot = await getDocs(salesRepsQuery);
+
+      if (managersSnapshot.empty && salesRepsSnapshot.empty) {
+        return username;
+      }
+
+      username = `${baseUsername}${counter}`;
+      counter++;
+    }
+  };
+
+  // Generate secure password
+  const generatePassword = () => {
+    const chars =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let password = "";
+    for (let i = 0; i < 8; i++) {
+      password += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return password;
+  };
+
   // Handle input changes
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
       [name]: value,
+    }));
+  };
+
+  // Handle permission changes for managers
+  const handlePermissionChange = (permission) => {
+    setFormData((prev) => ({
+      ...prev,
+      permissions: prev.permissions.includes(permission)
+        ? prev.permissions.filter((p) => p !== permission)
+        : [...prev.permissions, permission],
     }));
   };
 
@@ -223,6 +304,15 @@ const AddingEmployees = () => {
     return await getDownloadURL(snapshot.ref);
   };
 
+  // Copy credentials to clipboard
+  const copyCredentials = () => {
+    if (generatedCredentials) {
+      const credentialsText = `Username: ${generatedCredentials.username}\nPassword: ${generatedCredentials.password}`;
+      navigator.clipboard.writeText(credentialsText);
+      toast.success("Credentials copied to clipboard!");
+    }
+  };
+
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -241,9 +331,18 @@ const AddingEmployees = () => {
       return;
     }
 
-    // Additional validation for sales reps
-    if (formData.role === "sales_rep" && !formData.email) {
-      toast.error("Email is required for Sales Representatives");
+    // Additional validation for sales reps and managers
+    if (
+      (formData.role === "sales_rep" || formData.role === "manager") &&
+      !formData.email
+    ) {
+      toast.error("Email is required for Sales Representatives and Managers");
+      return;
+    }
+
+    // Validation for managers - ensure permissions are selected
+    if (formData.role === "manager" && formData.permissions.length === 0) {
+      toast.error("Please select at least one permission for the manager");
       return;
     }
 
@@ -270,8 +369,21 @@ const AddingEmployees = () => {
     setLoading(true);
 
     try {
-      const uid = auth.currentUser?.uid;
+      // Use currentUser from auth context instead of auth.currentUser
+      let uid = currentUser?.uid;
+
+      // Fallback for different authentication methods
+      if (!uid && currentUser?.id) {
+        uid = currentUser.id; // Some auth systems use 'id' instead of 'uid'
+      }
+
+      // Add debugging
+      console.log("Current User:", currentUser);
+      console.log("User ID:", uid);
+      console.log("Current Business:", currentBusiness);
+
       if (!uid) {
+        console.error("Authentication issue - no user ID found");
         toast.error("You must be logged in to add employees");
         return;
       }
@@ -310,6 +422,19 @@ const AddingEmployees = () => {
         }
       }
 
+      // Generate username and password for sales_rep and manager roles
+      let credentials = null;
+      if (formData.role === "sales_rep" || formData.role === "manager") {
+        const username = await generateUsername(
+          formData.employeeName,
+          uid,
+          formData.role
+        );
+        const password = generatePassword();
+
+        credentials = { username, password };
+      }
+
       // Prepare employee data
       const employeeData = {
         name: formData.employeeName,
@@ -328,6 +453,15 @@ const AddingEmployees = () => {
         createdAt: new Date(),
         updatedAt: new Date(),
         status: "active",
+        // Add credentials if role requires system access
+        ...(credentials && {
+          username: credentials.username,
+          hasSystemAccess: true,
+        }),
+        // Add permissions for managers
+        ...(formData.role === "manager" && {
+          permissions: formData.permissions,
+        }),
       };
 
       // Save to employees collection
@@ -350,10 +484,13 @@ const AddingEmployees = () => {
           name: formData.employeeName,
           phone: formData.mobile1,
           email: formData.email,
+          username: credentials.username,
+          password: credentials.password, // Store for system access
           imageUrl: imageUrls.employeePhoto || null,
           employeeId,
           businessId,
           ownerId: uid,
+          role: "sales_rep",
           createdAt: new Date(),
           updatedAt: new Date(),
           status: "active",
@@ -363,7 +500,38 @@ const AddingEmployees = () => {
         console.log("Sales rep saved with ID:", employeeId);
       }
 
+      // If role is Manager, save to managers collection (global)
+      if (formData.role === "manager") {
+        const managerDocRef = doc(db, "managers", employeeId);
+
+        const managerData = {
+          name: formData.employeeName,
+          email: formData.email,
+          phone: formData.mobile1,
+          username: credentials.username,
+          password: credentials.password, // Store for system access
+          imageUrl: imageUrls.employeePhoto || null,
+          permissions: formData.permissions,
+          employeeId,
+          businessId,
+          ownerId: uid,
+          role: "manager",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          status: "active",
+        };
+
+        await setDoc(managerDocRef, managerData);
+        console.log("Manager saved with ID:", employeeId);
+      }
+
       toast.success("Employee registered successfully");
+
+      // Show credentials modal if system access was created
+      if (credentials) {
+        setGeneratedCredentials(credentials);
+        setShowCredentialsModal(true);
+      }
 
       // Reset form
       setFormData({
@@ -376,6 +544,7 @@ const AddingEmployees = () => {
         salaryType: "",
         payRate: "",
         email: "",
+        permissions: [],
       });
       setImages({
         employeePhoto: null,
@@ -673,8 +842,8 @@ const AddingEmployees = () => {
               </select>
             </div>
 
-            {/* Conditional Email Field for Sales Reps */}
-            {formData.role === "sales_rep" && (
+            {/* Conditional Email Field for Sales Reps and Managers */}
+            {(formData.role === "sales_rep" || formData.role === "manager") && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Email Address <span className="text-red-500">*</span>
@@ -750,6 +919,68 @@ const AddingEmployees = () => {
             </div>
           </div>
 
+          {/* Manager Permissions Section */}
+          {formData.role === "manager" && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium text-gray-800 border-b border-gray-200 pb-2">
+                Manager Permissions <span className="text-red-500">*</span>
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {managerPermissions.map((permission) => (
+                  <label
+                    key={permission.value}
+                    className="flex items-center space-x-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={formData.permissions.includes(permission.value)}
+                      onChange={() => handlePermissionChange(permission.value)}
+                      className="w-4 h-4 text-primary focus:ring-primary border-gray-300 rounded"
+                    />
+                    <span className="text-sm font-medium text-gray-700">
+                      {permission.label}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500">
+                Select the permissions this manager should have in the system.
+              </p>
+            </div>
+          )}
+
+          {/* System Access Notice */}
+          {(formData.role === "sales_rep" || formData.role === "manager") && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-start">
+                <svg
+                  className="w-5 h-5 text-blue-600 mt-0.5 mr-3"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <div>
+                  <h4 className="text-sm font-medium text-blue-800 mb-1">
+                    System Access Will Be Created
+                  </h4>
+                  <p className="text-sm text-blue-700">
+                    {formData.role === "sales_rep"
+                      ? "A username and password will be generated for billing app access."
+                      : "A username and password will be generated for system management access."}{" "}
+                    Credentials will be displayed after registration.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Image Uploads */}
           <div className="space-y-8">
             <h3 className="text-lg font-medium text-gray-800 border-b border-gray-200 pb-2">
@@ -815,6 +1046,113 @@ const AddingEmployees = () => {
             </button>
           </div>
         </form>
+
+        {/* Credentials Modal */}
+        {showCredentialsModal && generatedCredentials && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+              <div className="text-center mb-4">
+                <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-3">
+                  <svg
+                    className="w-6 h-6 text-green-600"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15 7a2 2 0 012 2m0 0a2 2 0 012 2m-2-2a2 2 0 00-2 2m2-2a2 2 0 00-2-2M9 5a2 2 0 012 2v6a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2h2zm11 0a2 2 0 012 2v6a2 2 0 01-2 2h-2a2 2 0 01-2-2V7a2 2 0 012-2h2z"
+                    />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  System Access Created
+                </h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Save these credentials safely. They will be needed for system
+                  login.
+                </p>
+              </div>
+
+              <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Username:
+                    </label>
+                    <div className="bg-white p-3 rounded border border-gray-200 font-mono text-lg">
+                      {generatedCredentials.username}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Password:
+                    </label>
+                    <div className="bg-white p-3 rounded border border-gray-200 font-mono text-lg">
+                      {generatedCredentials.password}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+                <div className="flex items-start">
+                  <svg
+                    className="w-5 h-5 text-yellow-600 mt-0.5 mr-2"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 15c-.77.833.192 2.5 1.732 2.5z"
+                    />
+                  </svg>
+                  <p className="text-sm text-yellow-700">
+                    <strong>Important:</strong> Make sure to copy and save these
+                    credentials. They cannot be retrieved again once this dialog
+                    is closed.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={copyCredentials}
+                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 transition-colors"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                    />
+                  </svg>
+                  Copy Credentials
+                </button>
+                <button
+                  onClick={() => {
+                    setShowCredentialsModal(false);
+                    setGeneratedCredentials(null);
+                  }}
+                  className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
