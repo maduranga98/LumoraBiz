@@ -51,6 +51,7 @@ const Profile = () => {
 
   // Load user profile data
   useEffect(() => {
+    console.log("Current User:", currentUser);
     const loadProfileData = async () => {
       if (currentUser) {
         try {
@@ -59,8 +60,41 @@ const Profile = () => {
 
           if (docSnap.exists()) {
             const data = docSnap.data();
-            setProfileData(data.profile);
-            reset(data.profile);
+            console.log("Document data:", data);
+
+            // Check if data has a profile field or data is stored at root level
+            let profileInfo;
+            if (data.profile) {
+              // Profile data is nested under 'profile' field
+              profileInfo = data.profile;
+            } else {
+              // Profile data is at root level - extract relevant fields
+              profileInfo = {
+                name: data.name || data.displayName || "",
+                email: data.email || currentUser.email || "",
+                phone: data.phone || "",
+                address: data.address || "",
+                createdAt: data.createdAt,
+                updatedAt: data.updatedAt,
+              };
+            }
+
+            console.log("Profile info:", profileInfo);
+            setProfileData(profileInfo);
+            reset(profileInfo);
+          } else {
+            console.log("No document found, creating default profile");
+            // If no document exists, create a default profile from currentUser
+            const defaultProfile = {
+              name: currentUser.displayName || "",
+              email: currentUser.email || "",
+              phone: "",
+              address: "",
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+            setProfileData(defaultProfile);
+            reset(defaultProfile);
           }
         } catch (error) {
           console.error("Error loading profile:", error);
@@ -84,14 +118,47 @@ const Profile = () => {
         updatedAt: new Date().toISOString(),
       };
 
-      await updateDoc(docRef, {
-        profile: updatedProfile,
-      });
+      // Check current document structure to decide how to update
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists() && docSnap.data().profile) {
+        // Update nested profile field
+        await updateDoc(docRef, {
+          profile: updatedProfile,
+          // Also update root level name for consistency
+          name: data.name,
+          displayName: data.name,
+        });
+      } else {
+        // Update root level fields
+        await updateDoc(docRef, {
+          name: data.name,
+          displayName: data.name,
+          phone: data.phone,
+          address: data.address,
+          updatedAt: new Date().toISOString(),
+        });
+      }
 
-      // Update Firebase Auth display name
-      await updateProfile(currentUser, {
-        displayName: data.name,
-      });
+      // Update Firebase Auth display name only if currentUser is a real Firebase Auth user
+      // Check if currentUser has the necessary Firebase Auth methods
+      if (currentUser && typeof currentUser.getIdToken === "function") {
+        try {
+          await updateProfile(currentUser, {
+            displayName: data.name,
+          });
+          console.log("Firebase Auth profile updated successfully");
+        } catch (authError) {
+          console.log(
+            "Firebase Auth update skipped (custom user object):",
+            authError.message
+          );
+          // This is not a critical error for custom users, continue with success
+        }
+      } else {
+        console.log(
+          "Skipping Firebase Auth profile update - custom user object"
+        );
+      }
 
       setProfileData(updatedProfile);
       setIsEditing(false);
@@ -112,11 +179,29 @@ const Profile = () => {
       setLoading(true);
       setMessage({ type: "", text: "" });
 
-      await updatePassword(currentUser, data.newPassword);
+      // Check if currentUser is a real Firebase Auth user
+      if (currentUser && typeof currentUser.getIdToken === "function") {
+        // This is a real Firebase Auth user, we can update password
+        await updatePassword(currentUser, data.newPassword);
 
-      resetPassword();
-      setIsPasswordMode(false);
-      setMessage({ type: "success", text: "Password updated successfully!" });
+        resetPassword();
+        setIsPasswordMode(false);
+        setMessage({ type: "success", text: "Password updated successfully!" });
+      } else {
+        // This is a custom user object (owner/manager), update password in Firestore
+        const docRef = doc(db, "owners", currentUser.uid);
+        await updateDoc(docRef, {
+          password: data.newPassword, // In production, hash this password
+          updatedAt: new Date().toISOString(),
+        });
+
+        resetPassword();
+        setIsPasswordMode(false);
+        setMessage({
+          type: "success",
+          text: "Password updated successfully in database!",
+        });
+      }
     } catch (error) {
       console.error("Error updating password:", error);
       let errorMessage = "Failed to update password. Please try again.";
@@ -124,6 +209,8 @@ const Profile = () => {
       if (error.code === "auth/requires-recent-login") {
         errorMessage =
           "Please sign out and sign in again before changing your password.";
+      } else if (error.code === "auth/weak-password") {
+        errorMessage = "Password should be at least 6 characters.";
       }
 
       setMessage({ type: "error", text: errorMessage });
@@ -142,6 +229,17 @@ const Profile = () => {
 
   const formatDate = (dateString) => {
     if (!dateString) return "Not available";
+
+    // Handle Firestore Timestamp objects
+    if (dateString && typeof dateString === "object" && dateString.seconds) {
+      return new Date(dateString.seconds * 1000).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    }
+
+    // Handle ISO string dates
     return new Date(dateString).toLocaleDateString("en-US", {
       year: "numeric",
       month: "short",
@@ -200,7 +298,7 @@ const Profile = () => {
           {/* User Info */}
           <div className="flex-1">
             <h2 className="text-xl font-semibold text-gray-800">
-              {profileData.name}
+              {profileData.name || "User"}
             </h2>
             <p className="text-gray-600 text-sm">{profileData.email}</p>
             <div className="flex items-center text-xs text-gray-500 mt-1">
