@@ -159,7 +159,7 @@ const Advanced = () => {
         amount: "",
         reason: "",
         repaymentMethod: "deduct_from_salary",
-        approvalStatus: "pending",
+        approvalStatus: "approved",
       }));
     }
   };
@@ -214,6 +214,17 @@ const Advanced = () => {
       return;
     }
 
+    // Check if user is authenticated and business is selected
+    if (!currentUser?.uid) {
+      toast.error("Authentication error. Please sign in again.");
+      return;
+    }
+
+    if (!currentBusiness?.id) {
+      toast.error("Please select a business first.");
+      return;
+    }
+
     // Validation for advance payments only
     if (paymentType === "advance") {
       const maxAdvance = calculateMaxAdvance();
@@ -244,7 +255,6 @@ const Advanced = () => {
     setLoading(true);
 
     try {
-      const currentUserAuth = auth.currentUser;
       const paymentId = `${selectedEmployee.id}_${paymentType}_${Date.now()}`;
 
       const paymentRecord = {
@@ -261,10 +271,11 @@ const Advanced = () => {
         installments: parseInt(paymentData.installments) || 1,
         approvalStatus: paymentData.approvalStatus,
         status: paymentType === "daily_wage" ? "completed" : "active",
-        businessId: businessId,
-        ownerId: currentUserAuth.uid,
-        createdBy: currentUserAuth.uid,
-        createdByName: currentUserAuth.displayName || "Unknown",
+        businessId: currentBusiness.id, // Use currentBusiness.id
+        ownerId: currentUser.uid, // Use currentUser.uid from useAuth context
+        createdBy: currentUser.uid, // Use currentUser.uid from useAuth context
+        createdByName:
+          currentUser.displayName || currentUser.email || "Unknown",
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -273,14 +284,17 @@ const Advanced = () => {
       await addDoc(
         collection(
           db,
-          `owners/${ownerId}/businesses/${businessId}/employees/${selectedEmployee.id}/advances`
+          `owners/${currentUser.uid}/businesses/${currentBusiness.id}/employees/${selectedEmployee.id}/advances`
         ),
         paymentRecord
       );
 
       // Save copy in business advances collection
       await addDoc(
-        collection(db, `owners/${ownerId}/businesses/${businessId}/advances`),
+        collection(
+          db,
+          `owners/${currentUser.uid}/businesses/${currentBusiness.id}/advances`
+        ),
         { ...paymentRecord, paymentId }
       );
 
@@ -295,7 +309,7 @@ const Advanced = () => {
         if (paymentType === "advance") {
           const advancesRef = collection(
             db,
-            `owners/${ownerId}/businesses/${businessId}/employees/${selectedEmployee.id}/advances`
+            `owners/${currentUser.uid}/businesses/${currentBusiness.id}/employees/${selectedEmployee.id}/advances`
           );
           const q = query(advancesRef, orderBy("createdAt", "desc"), limit(5));
           const snapshot = await getDocs(q);
@@ -310,7 +324,7 @@ const Advanced = () => {
           // For daily wages, we might want to show recent salary records
           const salaryRef = collection(
             db,
-            `owners/${ownerId}/businesses/${businessId}/employees/${selectedEmployee.id}/salary`
+            `owners/${currentUser.uid}/businesses/${currentBusiness.id}/employees/${selectedEmployee.id}/salary`
           );
           const q = query(salaryRef, orderBy("createdAt", "desc"), limit(5));
           const snapshot = await getDocs(q);
@@ -338,11 +352,11 @@ const Advanced = () => {
         repaymentMethod:
           paymentType === "daily_wage" ? "immediate" : "deduct_from_salary",
         installments: "1",
-        approvalStatus: paymentType === "daily_wage" ? "approved" : "pending",
+        approvalStatus: paymentType === "daily_wage" ? "approved" : "approved",
       });
     } catch (error) {
       console.error("Error creating payment record:", error);
-      toast.error("Failed to create payment record");
+      toast.error("Failed to create payment record. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -361,7 +375,7 @@ const Advanced = () => {
       notes: "",
       repaymentMethod: "deduct_from_salary",
       installments: "1",
-      approvalStatus: "pending",
+      approvalStatus: "approved",
     });
   };
 
@@ -765,7 +779,7 @@ const Advanced = () => {
                             : "text-yellow-600"
                         }`}
                       >
-                        {advance.approvalStatus || "Pending"}
+                        {advance.approvalStatus || "approved"}
                       </p>
                       <p className="text-xs text-gray-500">
                         {advance.createdAt?.toDate?.()?.toLocaleDateString() ||

@@ -1,4 +1,3 @@
-// src/contexts/BusinessContext.jsx - NO STORAGE VERSION
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useAuth } from "./AuthContext";
 import { collection, getDocs, doc, onSnapshot } from "firebase/firestore";
@@ -76,20 +75,44 @@ export const BusinessProvider = ({ children }) => {
           }
         }
 
-        // Auto-select first business if only one exists (fresh start behavior)
+        // Auto-select business logic
         if (businesses.length === 1) {
+          // Single business: auto-select it
           setCurrentBusiness(businesses[0]);
+          // Store in sessionStorage for persistence
+          sessionStorage.setItem(
+            "business_session",
+            JSON.stringify({
+              businessId: businesses[0].id,
+              businessData: businesses[0],
+              timestamp: Date.now(),
+            })
+          );
           console.log(
             "Auto-selected single business:",
             businesses[0].businessName
           );
-        } else if (businesses.length === 0) {
+        } else if (businesses.length > 1) {
+          // Multiple businesses: auto-select the first one
+          setCurrentBusiness(businesses[0]);
+          // Store in sessionStorage for persistence
+          sessionStorage.setItem(
+            "business_session",
+            JSON.stringify({
+              businessId: businesses[0].id,
+              businessData: businesses[0],
+              timestamp: Date.now(),
+            })
+          );
+          console.log(
+            "Auto-selected first business from multiple:",
+            businesses[0].businessName
+          );
+        } else {
+          // No businesses: set to null
           setCurrentBusiness(null);
           setError("No businesses found. Please create a business first.");
-        } else {
-          // Multiple businesses - user must select
-          setCurrentBusiness(null);
-          console.log("Multiple businesses found, user must select");
+          console.log("No businesses found");
         }
 
         console.log("Loaded businesses:", businesses);
@@ -202,9 +225,42 @@ export const BusinessProvider = ({ children }) => {
         if (updatedCurrentBusiness) {
           setCurrentBusiness(updatedCurrentBusiness);
         } else {
-          // Current business no longer exists
-          setCurrentBusiness(null);
-          setError("Previously selected business no longer exists.");
+          // Current business no longer exists, auto-select first available
+          if (businesses.length > 0) {
+            setCurrentBusiness(businesses[0]);
+            sessionStorage.setItem(
+              "business_session",
+              JSON.stringify({
+                businessId: businesses[0].id,
+                businessData: businesses[0],
+                timestamp: Date.now(),
+              })
+            );
+            console.log(
+              "Auto-selected first business after refresh:",
+              businesses[0].businessName
+            );
+          } else {
+            setCurrentBusiness(null);
+            setError("No businesses found. Please create a business first.");
+          }
+        }
+      } else {
+        // No current business, auto-select first if available
+        if (businesses.length > 0) {
+          setCurrentBusiness(businesses[0]);
+          sessionStorage.setItem(
+            "business_session",
+            JSON.stringify({
+              businessId: businesses[0].id,
+              businessData: businesses[0],
+              timestamp: Date.now(),
+            })
+          );
+          console.log(
+            "Auto-selected first business during refresh:",
+            businesses[0].businessName
+          );
         }
       }
 
@@ -264,3 +320,5 @@ export const BusinessProvider = ({ children }) => {
     </BusinessContext.Provider>
   );
 };
+
+export default BusinessProvider;
