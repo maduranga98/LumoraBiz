@@ -1,6 +1,7 @@
 // src/pages/admin/Dashboard.jsx
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../../contexts/AuthContext";
+import AddOwnerForm from "./AddOwnerForm";
 import {
   collection,
   getDocs,
@@ -36,11 +37,13 @@ import {
   UserX,
   Mail,
   Phone,
+  X,
 } from "lucide-react";
 
 const AdminDashboard = () => {
   const { currentUser, logout, userProfile } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [showAddOwnerModal, setShowAddOwnerModal] = useState(false);
   const [stats, setStats] = useState({
     totalOwners: 0,
     totalManagers: 0,
@@ -179,6 +182,11 @@ const AdminDashboard = () => {
     } catch (error) {
       console.error("Error deleting user:", error);
     }
+  };
+
+  const handleAddOwnerSuccess = () => {
+    setShowAddOwnerModal(false);
+    loadDashboardData(); // Reload data to show the new owner
   };
 
   const filteredOwners = owners.filter((owner) => {
@@ -404,30 +412,41 @@ const AdminDashboard = () => {
 
         {activeTab === "owners" && (
           <div className="space-y-6">
-            {/* Search and Filter */}
+            {/* Search, Filter, and Add Owner Button */}
             <div className="bg-white p-6 rounded-lg shadow">
-              <div className="flex flex-col sm:flex-row gap-4">
-                <div className="flex-1">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                    <input
-                      type="text"
-                      placeholder="Search owners..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent w-full"
-                    />
+              <div className="flex flex-col sm:flex-row gap-4 justify-between">
+                <div className="flex flex-col sm:flex-row gap-4 flex-1">
+                  <div className="flex-1">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <input
+                        type="text"
+                        placeholder="Search owners..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent w-full"
+                      />
+                    </div>
                   </div>
+                  <select
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value)}
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
                 </div>
-                <select
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+
+                {/* Add Owner Button */}
+                <button
+                  onClick={() => setShowAddOwnerModal(true)}
+                  className="inline-flex items-center px-4 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors"
                 >
-                  <option value="all">All Status</option>
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Owner
+                </button>
               </div>
             </div>
 
@@ -689,6 +708,30 @@ const AdminDashboard = () => {
           </div>
         )}
       </main>
+
+      {/* Add Owner Modal */}
+      {showAddOwnerModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-2xl shadow-lg rounded-md bg-white">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Add New Business Owner
+              </h3>
+              <button
+                onClick={() => setShowAddOwnerModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <AddOwnerForm
+              onCancel={() => setShowAddOwnerModal(false)}
+              onSuccess={handleAddOwnerSuccess}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

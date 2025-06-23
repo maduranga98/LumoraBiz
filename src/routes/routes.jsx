@@ -31,6 +31,7 @@ import { Dashboard } from "../pages/home/pages/Dashboard";
 import ProtectedRoute from "../components/auth/ProtectedRoute";
 import { BusinessProvider } from "../contexts/BusinessContext";
 import NavbarLayout from "../components/Navbar";
+import ManagerNavbarLayout from "../pages/manager/ManagerNavbarLayout";
 
 // Fallback components for admin/manager dashboards (if they don't exist)
 const AdminDashboard = React.lazy(() =>
@@ -50,6 +51,26 @@ const ManagerDashboard = () => (
   <div className="p-8 text-center">
     <h1 className="text-2xl font-bold text-gray-900 mb-4">Manager Dashboard</h1>
     <p className="text-gray-600">Manager dashboard coming soon...</p>
+    <div className="mt-4 text-sm text-gray-500">
+      <p>
+        Welcome to the manager portal. Use the navigation above to access
+        different sections.
+      </p>
+    </div>
+  </div>
+);
+
+// Help page for managers
+const ManagerHelp = () => (
+  <div className="p-8">
+    <h1 className="text-2xl font-bold text-gray-900 mb-4">Help & Support</h1>
+    <p className="text-gray-600 mb-4">Manager help and support information.</p>
+    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+      <h3 className="font-semibold text-blue-900 mb-2">Contact Support</h3>
+      <p className="text-blue-700">
+        For technical assistance, please contact your system administrator.
+      </p>
+    </div>
   </div>
 );
 
@@ -112,14 +133,14 @@ export const routes = [
     ),
   },
 
-  // Manager routes
+  // Manager routes - FIXED TO USE ManagerNavbarLayout
   {
     path: "/manager/dashboard",
     element: (
       <ProtectedRoute managerOnly>
-        <NavbarLayout>
+        <ManagerNavbarLayout>
           <ManagerDashboard />
-        </NavbarLayout>
+        </ManagerNavbarLayout>
       </ProtectedRoute>
     ),
   },
@@ -127,9 +148,9 @@ export const routes = [
     path: "/manager/inventory",
     element: (
       <ProtectedRoute managerOnly requirePermissions={["view_inventory"]}>
-        <NavbarLayout>
+        <ManagerNavbarLayout>
           <Stock />
-        </NavbarLayout>
+        </ManagerNavbarLayout>
       </ProtectedRoute>
     ),
   },
@@ -137,9 +158,19 @@ export const routes = [
     path: "/manager/customers",
     element: (
       <ProtectedRoute managerOnly requirePermissions={["view_customers"]}>
-        <NavbarLayout>
+        <ManagerNavbarLayout>
           <Customers />
-        </NavbarLayout>
+        </ManagerNavbarLayout>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/manager/employees",
+    element: (
+      <ProtectedRoute managerOnly requirePermissions={["manage_employees"]}>
+        <ManagerNavbarLayout>
+          <Employees />
+        </ManagerNavbarLayout>
       </ProtectedRoute>
     ),
   },
@@ -147,9 +178,19 @@ export const routes = [
     path: "/manager/reports",
     element: (
       <ProtectedRoute managerOnly requirePermissions={["view_reports"]}>
-        <NavbarLayout>
+        <ManagerNavbarLayout>
           <Reports />
-        </NavbarLayout>
+        </ManagerNavbarLayout>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/manager/help",
+    element: (
+      <ProtectedRoute managerOnly>
+        <ManagerNavbarLayout>
+          <ManagerHelp />
+        </ManagerNavbarLayout>
       </ProtectedRoute>
     ),
   },
@@ -299,7 +340,7 @@ export const routes = [
 // Export individual route arrays for advanced usage (optional)
 export const publicRoutes = routes.slice(0, 4);
 export const adminRoutes = routes.slice(4, 7);
-export const managerRoutes = routes.slice(7, 12);
-export const ownerRoutes = routes.slice(13, 15);
+export const managerRoutes = routes.slice(7, 13); // Updated slice to include new manager routes
+export const ownerRoutes = routes.slice(14, 16); // Updated slice indices
 
 export default routes;

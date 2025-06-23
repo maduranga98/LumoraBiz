@@ -53,6 +53,25 @@ const Loading = () => {
     }
   }, [selectedSalesRep, allRoutes]);
 
+  // Initialize selected products when grouped products change
+  useEffect(() => {
+    if (Object.keys(groupedProducts).length > 0) {
+      const initialSelections = {};
+      Object.keys(groupedProducts).forEach((productType) => {
+        const productData = groupedProducts[productType];
+        initialSelections[productType] = {
+          selectedPriceIndex: productData.priceOptions.length === 1 ? 0 : null,
+          quantity: "",
+          maxAvailable:
+            productData.priceOptions.length === 1
+              ? productData.priceOptions[0].totalWeight
+              : 0,
+        };
+      });
+      setSelectedProducts(initialSelections);
+    }
+  }, [groupedProducts]);
+
   // Fetch sales representatives
   const fetchSalesReps = async () => {
     try {
@@ -336,35 +355,91 @@ const Loading = () => {
     setGroupedProducts(grouped);
   };
 
-  // Handle product selection change
+  // FIXED: Enhanced product selection handling
   const handleProductChange = (productType, field, value) => {
-    setSelectedProducts((prev) => ({
-      ...prev,
-      [productType]: {
-        ...prev[productType],
-        [field]: value,
-        // Reset quantity when price changes
-        ...(field === "selectedPriceIndex" ? { quantity: 0 } : {}),
-      },
-    }));
+    setSelectedProducts((prev) => {
+      const updated = { ...prev };
+
+      if (!updated[productType]) {
+        updated[productType] = {
+          selectedPriceIndex: null,
+          quantity: "",
+          maxAvailable: 0,
+        };
+      }
+
+      if (field === "selectedPriceIndex") {
+        const priceIndex = parseInt(value);
+        const priceOption =
+          groupedProducts[productType]?.priceOptions[priceIndex];
+
+        updated[productType] = {
+          ...updated[productType],
+          selectedPriceIndex: priceIndex,
+          maxAvailable: priceOption?.totalWeight || 0,
+          // Don't reset quantity automatically - let user keep their input
+        };
+      } else if (field === "quantity") {
+        // Handle quantity input more carefully
+        const numValue = value === "" ? "" : Number(value);
+        updated[productType] = {
+          ...updated[productType],
+          quantity: numValue,
+        };
+      }
+
+      return updated;
+    });
   };
 
-  // Calculate total for a product
-  const calculateProductTotal = (productType) => {
+  // FIXED: Get max available quantity for a product
+  const getMaxAvailable = (productType) => {
     const selection = selectedProducts[productType];
-    if (
-      !selection ||
-      !selection.quantity ||
-      selection.selectedPriceIndex === undefined
-    ) {
+    if (!selection || selection.selectedPriceIndex === null) {
+      const productData = groupedProducts[productType];
+      if (productData?.priceOptions.length === 1) {
+        return productData.priceOptions[0].totalWeight;
+      }
       return 0;
     }
 
     const priceOption =
       groupedProducts[productType]?.priceOptions[selection.selectedPriceIndex];
-    if (!priceOption) return 0;
+    return priceOption?.totalWeight || 0;
+  };
 
-    return selection.quantity * priceOption.price;
+  // FIXED: Get current price for a product
+  const getCurrentPrice = (productType) => {
+    const selection = selectedProducts[productType];
+    const productData = groupedProducts[productType];
+
+    if (!productData) return 0;
+
+    if (productData.priceOptions.length === 1) {
+      return productData.priceOptions[0].price;
+    }
+
+    if (
+      selection?.selectedPriceIndex !== null &&
+      selection?.selectedPriceIndex !== undefined
+    ) {
+      return productData.priceOptions[selection.selectedPriceIndex]?.price || 0;
+    }
+
+    return 0;
+  };
+
+  // Calculate total for a product
+  const calculateProductTotal = (productType) => {
+    const selection = selectedProducts[productType];
+    if (!selection || !selection.quantity) {
+      return 0;
+    }
+
+    const price = getCurrentPrice(productType);
+    const quantity = Number(selection.quantity) || 0;
+
+    return quantity * price;
   };
 
   // Calculate grand total
@@ -377,20 +452,36 @@ const Loading = () => {
   // Get total selected quantity
   const getTotalSelectedQuantity = () => {
     return Object.values(selectedProducts).reduce((total, selection) => {
-      return total + (selection?.quantity || 0);
+      return total + (Number(selection?.quantity) || 0);
     }, 0);
+  };
+
+  // FIXED: Validate quantity input
+  const isQuantityValid = (productType) => {
+    const selection = selectedProducts[productType];
+    if (!selection || !selection.quantity) return true;
+
+    const quantity = Number(selection.quantity);
+    const maxAvailable = getMaxAvailable(productType);
+
+    return quantity > 0 && quantity <= maxAvailable;
   };
 
   // Handle loading creation
   const createLoading = async () => {
     // Validate selections
     const validSelections = Object.entries(selectedProducts).filter(
-      ([_, selection]) =>
-        selection?.quantity > 0 && selection?.selectedPriceIndex !== undefined
+      ([productType, selection]) => {
+        const quantity = Number(selection?.quantity) || 0;
+        const hasPrice = getCurrentPrice(productType) > 0;
+        return quantity > 0 && hasPrice && isQuantityValid(productType);
+      }
     );
 
     if (validSelections.length === 0) {
-      toast.error("Please select at least one product to add to loading");
+      toast.error(
+        "Please select at least one product with valid quantity and price"
+      );
       return;
     }
 
@@ -398,29 +489,6 @@ const Loading = () => {
     if (!selectedSalesRep) {
       toast.error("Please select a sales representative");
       return;
-    }
-
-    // Validate quantities
-    for (const [productType, selection] of validSelections) {
-      const priceOption =
-        groupedProducts[productType]?.priceOptions[
-          selection.selectedPriceIndex
-        ];
-      if (!priceOption) {
-        toast.error(
-          `Invalid price selection for ${formatProductType(productType)}`
-        );
-        return;
-      }
-
-      if (selection.quantity > priceOption.totalWeight) {
-        toast.error(
-          `Not enough ${formatProductType(productType)} available. Max: ${
-            priceOption.totalWeight
-          } kg`
-        );
-        return;
-      }
     }
 
     setIsProcessingLoading(true);
@@ -438,13 +506,22 @@ const Loading = () => {
 
       // Process each selected product
       for (const [productType, selection] of validSelections) {
-        const priceOption =
-          groupedProducts[productType].priceOptions[
-            selection.selectedPriceIndex
-          ];
+        const quantity = Number(selection.quantity);
+        const price = getCurrentPrice(productType);
         const productCode = getProductTypeCode(productType);
 
-        let remainingQuantity = selection.quantity;
+        // Get the appropriate price option
+        let priceOption;
+        if (groupedProducts[productType].priceOptions.length === 1) {
+          priceOption = groupedProducts[productType].priceOptions[0];
+        } else {
+          priceOption =
+            groupedProducts[productType].priceOptions[
+              selection.selectedPriceIndex
+            ];
+        }
+
+        let remainingQuantity = quantity;
         const usedBags = [];
 
         // Allocate bags for this quantity (FIFO - first in, first out)
@@ -458,7 +535,7 @@ const Loading = () => {
               bagId: bag.bagId,
               bagDocId: bag.id,
               weight: bagWeight,
-              pricePerKg: priceOption.price,
+              pricePerKg: price,
             });
             remainingQuantity -= bagWeight;
 
@@ -481,7 +558,7 @@ const Loading = () => {
               bagId: bag.bagId,
               bagDocId: bag.id,
               weight: remainingQuantity,
-              pricePerKg: priceOption.price,
+              pricePerKg: price,
             });
             remainingQuantity = 0;
 
@@ -501,19 +578,19 @@ const Loading = () => {
           }
         }
 
-        const productTotal = selection.quantity * priceOption.price;
+        const productTotal = quantity * price;
         loadingItems.push({
           productType,
           productCode,
-          quantity: selection.quantity,
-          pricePerKg: priceOption.price,
+          quantity: quantity,
+          pricePerKg: price,
           totalValue: productTotal,
           bagsUsed: usedBags,
           bagsCount: usedBags.length,
         });
 
         totalValue += productTotal;
-        totalWeight += selection.quantity;
+        totalWeight += quantity;
       }
 
       // Create loading record
@@ -901,101 +978,126 @@ const Loading = () => {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {Object.entries(groupedProducts).map(
-                    ([productType, productData]) => (
-                      <tr key={productType} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div>
-                              <div className="text-sm font-medium text-gray-900">
-                                {formatProductType(productType)}
-                              </div>
-                              <div className="text-sm text-gray-500">
-                                {productData.totalAvailableBags} bags available
+                    ([productType, productData]) => {
+                      const selection = selectedProducts[productType] || {};
+                      const maxAvailable = getMaxAvailable(productType);
+                      const currentPrice = getCurrentPrice(productType);
+                      const quantityError = !isQuantityValid(productType);
+
+                      return (
+                        <tr key={productType} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">
+                                  {formatProductType(productType)}
+                                </div>
+                                <div className="text-sm text-gray-500">
+                                  {productData.totalAvailableBags} bags
+                                  available
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900 font-semibold">
-                            {formatNumber(productData.totalAvailableWeight)} kg
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {productData.priceOptions.length === 1 ? (
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900 font-semibold">
+                              {formatNumber(productData.totalAvailableWeight)}{" "}
+                              kg
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {productData.priceOptions.length === 1 ? (
+                              <div className="text-sm text-gray-900 font-semibold">
+                                {formatCurrency(
+                                  productData.priceOptions[0].price
+                                )}
+                              </div>
+                            ) : (
+                              <div className="space-y-1">
+                                <select
+                                  value={selection.selectedPriceIndex ?? ""}
+                                  onChange={(e) =>
+                                    handleProductChange(
+                                      productType,
+                                      "selectedPriceIndex",
+                                      e.target.value
+                                    )
+                                  }
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                >
+                                  <option value="">Select price</option>
+                                  {productData.priceOptions.map(
+                                    (option, index) => (
+                                      <option key={index} value={index}>
+                                        {formatCurrency(option.price)} (
+                                        {formatNumber(option.totalWeight)}kg
+                                        available)
+                                      </option>
+                                    )
+                                  )}
+                                </select>
+                                {currentPrice > 0 && (
+                                  <div className="text-xs text-green-600 font-medium">
+                                    Selected: {formatCurrency(currentPrice)}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="space-y-1">
+                              <div className="flex items-center space-x-2">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={maxAvailable}
+                                  step="0.01"
+                                  value={selection.quantity || ""}
+                                  onChange={(e) =>
+                                    handleProductChange(
+                                      productType,
+                                      "quantity",
+                                      e.target.value
+                                    )
+                                  }
+                                  disabled={currentPrice <= 0}
+                                  className={`w-24 px-2 py-1 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100 ${
+                                    quantityError
+                                      ? "border-red-300 focus:ring-red-500 focus:border-red-500"
+                                      : "border-gray-300"
+                                  }`}
+                                  placeholder="0"
+                                />
+                                <span className="text-xs text-gray-500">
+                                  kg
+                                </span>
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                Max: {formatNumber(maxAvailable)} kg
+                              </div>
+                              {quantityError && (
+                                <div className="text-xs text-red-600">
+                                  Exceeds available quantity
+                                </div>
+                              )}
+                              {currentPrice <= 0 &&
+                                productData.priceOptions.length > 1 && (
+                                  <div className="text-xs text-amber-600">
+                                    Select price first
+                                  </div>
+                                )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-semibold text-gray-900">
                               {formatCurrency(
-                                productData.priceOptions[0].price
+                                calculateProductTotal(productType)
                               )}
                             </div>
-                          ) : (
-                            <select
-                              value={
-                                selectedProducts[productType]
-                                  ?.selectedPriceIndex || ""
-                              }
-                              onChange={(e) =>
-                                handleProductChange(
-                                  productType,
-                                  "selectedPriceIndex",
-                                  parseInt(e.target.value)
-                                )
-                              }
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                            >
-                              <option value="">Select price</option>
-                              {productData.priceOptions.map((option, index) => (
-                                <option key={index} value={index}>
-                                  {formatCurrency(option.price)} (
-                                  {formatNumber(option.totalWeight)}kg
-                                  available)
-                                </option>
-                              ))}
-                            </select>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <input
-                            type="number"
-                            min="0"
-                            max={
-                              productData.priceOptions.length === 1
-                                ? productData.priceOptions[0].totalWeight
-                                : selectedProducts[productType]
-                                    ?.selectedPriceIndex !== undefined
-                                ? productData.priceOptions[
-                                    selectedProducts[productType]
-                                      .selectedPriceIndex
-                                  ].totalWeight
-                                : 0
-                            }
-                            step="0.01"
-                            value={
-                              selectedProducts[productType]?.quantity || ""
-                            }
-                            onChange={(e) =>
-                              handleProductChange(
-                                productType,
-                                "quantity",
-                                parseFloat(e.target.value) || 0
-                              )
-                            }
-                            disabled={
-                              productData.priceOptions.length > 1 &&
-                              selectedProducts[productType]
-                                ?.selectedPriceIndex === undefined
-                            }
-                            className="w-20 px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100"
-                            placeholder="0"
-                          />
-                          <span className="ml-1 text-xs text-gray-500">kg</span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-semibold text-gray-900">
-                            {formatCurrency(calculateProductTotal(productType))}
-                          </div>
-                        </td>
-                      </tr>
-                    )
+                          </td>
+                        </tr>
+                      );
+                    }
                   )}
                 </tbody>
               </table>

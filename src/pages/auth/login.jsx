@@ -212,7 +212,7 @@ const Login = () => {
                   : "text-blue-600 hover:text-blue-700"
               }`}
             >
-              {isAdminMode ? "Switch to User Login" : "Admin Login?"}
+              {isAdminMode ? "Switch to User Login" : ""}
             </button>
           </div>
 
@@ -245,7 +245,7 @@ const Login = () => {
                   placeholder={
                     isAdminMode
                       ? "Enter your admin email"
-                      : "Enter email to auto-detect admin"
+                      : "Enter email (optional)"
                   }
                   required={isAdminMode}
                 />
@@ -257,8 +257,7 @@ const Login = () => {
               </div>
               {!isAdminMode && (
                 <p className="mt-2 text-xs text-gray-500">
-                  💡 Enter your email to automatically detect admin access, or
-                  use username below
+                  💡 Enter your email
                 </p>
               )}
               {isAdminMode && (
@@ -366,22 +365,7 @@ const Login = () => {
             ) : (
               <div className="space-y-2">
                 <p className="text-sm text-gray-600">
-                  Don't have an account?{" "}
-                  <button
-                    onClick={() => navigate("/signup")}
-                    className="text-blue-600 hover:text-blue-700 font-medium"
-                  >
-                    Sign up here
-                  </button>
-                </p>
-                <p className="text-sm text-gray-600">
-                  Forgot your password?{" "}
-                  <button
-                    onClick={() => navigate("/forgot-password")}
-                    className="text-blue-600 hover:text-blue-700 font-medium"
-                  >
-                    Reset it
-                  </button>
+                  Powered by Lumora Ventures (PVT) Ltd.
                 </p>
               </div>
             )}
