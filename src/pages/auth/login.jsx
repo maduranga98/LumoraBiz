@@ -8,13 +8,12 @@ import {
   Lock,
   Eye,
   EyeOff,
-  Building,
-  Shield,
   ArrowRight,
   AlertCircle,
   CheckCircle,
   Loader2,
 } from "lucide-react";
+import logo from "../../assets/logo.png";
 
 const Login = () => {
   const [isAdminMode, setIsAdminMode] = useState(false);
@@ -185,14 +184,14 @@ const Login = () => {
           } px-8 py-6 text-white transition-all duration-300`}
         >
           <div className="text-center">
-            <div className="mx-auto w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4">
-              {isAdminMode ? (
-                <Shield className="w-8 h-8 text-white" />
-              ) : (
-                <Building className="w-8 h-8 text-white" />
-              )}
+            <div className="mx-auto w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4 p-2">
+              <img
+                src={logo}
+                alt="LumoraBiz Logo"
+                className="w-full h-full object-contain"
+              />
             </div>
-            <h1 className="text-2xl font-bold mb-2">Rice Mill System</h1>
+            <h1 className="text-2xl font-bold mb-2">LumoraBiz</h1>
             <p className={`${isAdminMode ? "text-red-100" : "text-blue-100"}`}>
               {isAdminMode ? "Admin Access Portal" : "Welcome back!"}
             </p>
