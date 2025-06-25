@@ -17,13 +17,13 @@ import {
   LogOut,
   Menu,
   X,
-  Building2,
   Wallet,
   ChevronDown,
   Calendar,
   FileText,
   Wrench,
 } from "lucide-react";
+import logo from "../assets/logo.png";
 
 // Navigation Item Component
 const NavItem = ({
@@ -407,13 +407,16 @@ const NavbarLayout = () => {
             {/* Logo Section - Compressed */}
             <div className="flex items-center space-x-3 flex-shrink-0">
               <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center shadow-sm">
-                  <Building2 className="h-4 w-4 text-white" />
+                <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm border border-gray-200 p-1">
+                  <img
+                    src={logo}
+                    alt="LumoraBiz Logo"
+                    className="w-full h-full object-contain"
+                  />
                 </div>
                 <div className="hidden sm:block">
-                  <h1 className="text-base font-bold tracking-tight">
-                    <span className="text-gray-800">Lumora</span>
-                    <span className="text-purple-600">Biz</span>
+                  <h1 className="text-base font-bold tracking-tight text-gray-800">
+                    LumoraBiz
                   </h1>
                 </div>
               </div>
