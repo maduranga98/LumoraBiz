@@ -32,7 +32,12 @@ import {
   Info,
   Save,
   Database,
+  Package,
+  Edit3,
+  RotateCcw,
+  CheckCircle,
 } from "lucide-react";
+import { SubItemsDropdown } from "../../components/sub_inventory/SubItemsDropdown";
 
 const PriceCalculation = ({
   conversionData = null,
@@ -58,11 +63,14 @@ const PriceCalculation = ({
     dahiyaRate: 60,
     ricePolishRate: 80,
   });
-
-  // New states
   const [riceOutputKg, setRiceOutputKg] = useState(0);
   const [profitPercentage, setProfitPercentage] = useState(10);
   const [showBreakdown, setShowBreakdown] = useState(false);
+  const [secondaryStocks, setSecondaryStocks] = useState([]);
+  const [selectedSecondaryStocks, setSelectedSecondaryStocks] = useState([]);
+  const [isManualPriceMode, setIsManualPriceMode] = useState(false);
+  const [manualRicePrice, setManualRicePrice] = useState(0);
+  const [manualProfitMargin, setManualProfitMargin] = useState(0);
 
   const [results, setResults] = useState({
     adjustedRicePrice: 0,
@@ -74,6 +82,7 @@ const PriceCalculation = ({
       electricityCost: 0,
       laborCost: 0,
       otherExpensesCost: 0,
+      secondaryStocksCost: 0,
       expensePerKgRice: 0,
       totalCostFor100kg: 0,
     },
@@ -113,9 +122,29 @@ const PriceCalculation = ({
         processingExpenses: {
           electricityCost: results.breakdown.electricityCost,
           laborCost: results.breakdown.laborCost,
+          secondaryStocksCost: results.breakdown.secondaryStocksCost, // Add this line
           otherExpenses: results.breakdown.otherExpensesCost,
           totalProcessingCost: results.totalProcessingExpense,
         },
+        // Add secondary stocks data
+        secondaryStocksUsed: selectedSecondaryStocks
+          .map((stock) => {
+            const stockItem = secondaryStocks.find(
+              (s) => s.itemId === stock.itemId
+            );
+            console.log("Secondary stock item:", stockItem);
+            return {
+              itemId: stock.itemId,
+              itemName: stockItem?.itemName || "Unknown",
+              usedQuantity: parseFloat(stock.usedQuantity) || 0,
+              unitType: stockItem?.unitType || "units",
+              averagePrice: stockItem?.averagePrice || 0,
+              totalCost:
+                (stockItem?.averagePrice || 0) *
+                (parseFloat(stock.usedQuantity) || 0),
+            };
+          })
+          .filter((stock) => stock.usedQuantity > 0),
       });
 
       console.log("✅ Byproducts saved to purchase record");
@@ -123,6 +152,133 @@ const PriceCalculation = ({
       console.error("❌ Error saving byproducts to purchase:", error);
       console.warn("⚠️ Continuing without updating purchase record");
     }
+  };
+  // fetch function for secondary stocks
+  const fetchSecondaryStocks = async () => {
+    if (!currentUser || !currentBusiness?.id) {
+      return;
+    }
+
+    try {
+      const stockCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/materialStock/stock`;
+
+      // Fetch stock movements
+      const stockQuery = query(collection(db, stockCollectionPath));
+      const stockSnapshot = await getDocs(stockQuery);
+
+      // Calculate current stock from movements
+      const stockData = {};
+      stockSnapshot.forEach((doc) => {
+        const movement = doc.data();
+        const {
+          itemId,
+          itemName,
+          unitType,
+          totalQuantity,
+          quantity,
+          unitPrice,
+          total,
+          movementType,
+        } = movement;
+
+        const qty = totalQuantity || quantity || 0;
+        const movementValue = total || qty * unitPrice || 0;
+
+        if (!stockData[itemId]) {
+          stockData[itemId] = {
+            itemId,
+            itemName: itemName || "Unknown Item",
+            unitType: unitType || "units",
+            currentStock: 0,
+            averagePrice: 0,
+            totalValue: 0,
+            totalInValue: 0,
+            totalInQty: 0,
+          };
+        }
+
+        // Handle IN and OUT movements
+        if (movementType === "IN") {
+          stockData[itemId].currentStock += qty;
+          stockData[itemId].totalInValue += movementValue;
+          stockData[itemId].totalInQty += qty;
+        } else if (movementType === "OUT") {
+          stockData[itemId].currentStock -= qty;
+        }
+
+        // Calculate average price based on IN movements only
+        stockData[itemId].averagePrice =
+          stockData[itemId].totalInQty > 0
+            ? stockData[itemId].totalInValue / stockData[itemId].totalInQty
+            : 0;
+      });
+
+      // Filter only items with positive stock
+      const availableStocks = Object.values(stockData).filter(
+        (stock) => stock.currentStock > 0
+      );
+
+      setSecondaryStocks(availableStocks);
+      console.log("📦 Loaded secondary stocks:", availableStocks);
+    } catch (error) {
+      console.error("Error fetching secondary stocks:", error);
+      toast.error("Failed to load secondary stocks");
+    }
+  };
+
+  // NEW: Get current price values (calculated or manual)
+  const getCurrentPriceData = () => {
+    if (isManualPriceMode) {
+      return {
+        ricePrice: manualRicePrice,
+        sellingPrice: manualRicePrice * (1 + manualProfitMargin / 100),
+        profitMargin: manualProfitMargin,
+        isManual: true,
+      };
+    } else {
+      return {
+        ricePrice: results.adjustedRicePrice,
+        sellingPrice: results.recommendedSellingPrice,
+        profitMargin: profitPercentage,
+        isManual: false,
+      };
+    }
+  };
+
+  // NEW: Toggle between calculated and manual price mode
+  const togglePriceMode = () => {
+    if (!isManualPriceMode) {
+      // Switching to manual mode - set current calculated price as starting point
+      setManualRicePrice(results.adjustedRicePrice);
+      setManualProfitMargin(profitPercentage);
+    }
+    setIsManualPriceMode(!isManualPriceMode);
+  };
+
+  // NEW: Reset to calculated price
+  const resetToCalculatedPrice = () => {
+    setIsManualPriceMode(false);
+    setManualRicePrice(0);
+    setManualProfitMargin(0);
+  };
+  const addSecondaryStock = () => {
+    if (secondaryStocks.length === 0) return;
+    setSelectedSecondaryStocks((prev) => [
+      ...prev,
+      { itemId: "", quantity: "", usedQuantity: "" },
+    ]);
+  };
+
+  const removeSecondaryStock = (index) => {
+    setSelectedSecondaryStocks((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const updateSelectedSecondaryStock = (index, field, value) => {
+    setSelectedSecondaryStocks((prev) =>
+      prev.map((stock, i) =>
+        i === index ? { ...stock, [field]: value } : stock
+      )
+    );
   };
 
   // Update or create stock totals in processedStock document
@@ -189,8 +345,6 @@ const PriceCalculation = ({
       throw error;
     }
   };
-
-  // Find existing batch with same price or create new one
 
   // Find existing batch with same price or create new one
   const findOrCreateBatch = async (byproducts, batchNumber, pricingData) => {
@@ -306,6 +460,23 @@ const PriceCalculation = ({
           processingConfig: {
             electricityUnitPrice: electricityUnitPrice,
             selectedEmployees: selectedEmployees,
+            selectedSecondaryStocks: selectedSecondaryStocks
+              .map((stock) => {
+                const stockItem = secondaryStocks.find(
+                  (s) => s.itemId === stock.itemId
+                );
+                return {
+                  itemId: stock.itemId,
+                  itemName: stockItem?.itemName || "Unknown",
+                  usedQuantity: parseFloat(stock.usedQuantity) || 0,
+                  unitType: stockItem?.unitType || "units",
+                  averagePrice: stockItem?.averagePrice || 0,
+                  totalCost:
+                    (stockItem?.averagePrice || 0) *
+                    (parseFloat(stock.usedQuantity) || 0),
+                };
+              })
+              .filter((stock) => stock.usedQuantity > 0), // Add secondary stocks data
             otherExpenses: otherExpenses,
             byproductRates: byproductRates,
           },
@@ -380,7 +551,54 @@ const PriceCalculation = ({
       throw error;
     }
   };
+  const updateSecondaryStockQuantities = async () => {
+    if (selectedSecondaryStocks.length === 0) return;
 
+    try {
+      console.log("📦 Updating secondary stock quantities...");
+
+      const stockCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/materialStock/movements`;
+
+      for (const stock of selectedSecondaryStocks) {
+        const usedQuantity = parseFloat(stock.usedQuantity);
+        if (usedQuantity > 0) {
+          const stockItem = secondaryStocks.find(
+            (s) => s.itemId === stock.itemId
+          );
+
+          if (stockItem) {
+            // Create an OUT movement for the used secondary stock
+            await addDoc(collection(db, stockCollectionPath), {
+              itemId: stock.itemId,
+              itemName: stockItem.itemName,
+              unitType: stockItem.unitType,
+              quantity: usedQuantity,
+              totalQuantity: usedQuantity,
+              unitPrice: stockItem.averagePrice,
+              total: stockItem.averagePrice * usedQuantity,
+              movementType: "OUT",
+              reason: "Used in rice processing",
+              batchNumber: generateBatchNumber(),
+              processedBatchReference:
+                conversionData?.originalStock?.stockId || null,
+              businessId: currentBusiness.id,
+              ownerId: currentUser.uid,
+              createdBy: currentUser.uid,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            });
+
+            console.log(
+              `✅ Recorded OUT movement for ${stockItem.itemName}: ${usedQuantity} ${stockItem.unitType}`
+            );
+          }
+        }
+      }
+    } catch (error) {
+      console.error("❌ Error updating secondary stock quantities:", error);
+      // Don't throw error here, just log it
+    }
+  };
   // Update raw stock status to processed (optional - only if raw stock exists)
   const updateRawStockStatus = async (batchId, batchNumber) => {
     if (!conversionData?.originalStock?.stockId) {
@@ -430,11 +648,15 @@ const PriceCalculation = ({
       toast.error("Authentication or business context missing");
       return;
     }
-
+    if (isManualPriceMode && (!manualRicePrice || manualRicePrice <= 0)) {
+      toast.error("Please enter a valid manual rice price");
+      return;
+    }
     if (!conversionData) {
       toast.error("No conversion data available to save");
       return;
     }
+    const currentPriceData = getCurrentPriceData();
 
     setSaving(true);
 
@@ -468,6 +690,15 @@ const PriceCalculation = ({
         byproductRates: byproductRates,
         electricityUnitPrice: electricityUnitPrice,
         calculatedAt: new Date().toISOString(),
+        isManualPrice: currentPriceData.isManual,
+        manualPriceData: currentPriceData.isManual
+          ? {
+              manualRicePrice: manualRicePrice,
+              manualProfitMargin: manualProfitMargin,
+              originalCalculatedPrice: results.adjustedRicePrice,
+              priceOverrideReason: "Manual price adjustment",
+            }
+          : null,
       };
 
       // 1. Find existing batch with same price or create new batch document
@@ -482,7 +713,11 @@ const PriceCalculation = ({
       console.log("📊 Updating stock totals in processedStock document...");
       await updateStockTotals(byproducts);
 
-      // 3. Update buyer's purchase record with byproducts and pricing
+      // 3. Update secondary stock quantities (subtract used amounts)
+      console.log("📦 Updating secondary stock quantities...");
+      await updateSecondaryStockQuantities();
+
+      // 4. Update buyer's purchase record with byproducts and pricing
       if (conversionData?.originalStock?.purchaseId) {
         console.log(
           "📝 Updating purchase record with byproducts and pricing..."
@@ -509,7 +744,7 @@ const PriceCalculation = ({
         );
       }
 
-      // 4. Update raw stock status (optional - only if exists)
+      // 5. Update raw stock status (optional - only if exists)
       console.log("📦 Checking for raw stock to update...");
       await updateRawStockStatus(batchDocument.id, batchDocument.batchNumber);
 
@@ -532,7 +767,6 @@ const PriceCalculation = ({
       setSaving(false);
     }
   };
-
   // Calculate total converted quantity
   const getTotalConverted = () => {
     if (!conversionData) return 0;
@@ -582,6 +816,7 @@ const PriceCalculation = ({
   };
 
   // Calculate everything
+
   const calculateAll = () => {
     if (!conversionData) return;
 
@@ -589,7 +824,23 @@ const PriceCalculation = ({
     const currentRiceOutput =
       riceOutputKg > 0 ? riceOutputKg : parseFloat(conversionData.rice) || 0;
 
-    // Basic calculations
+    // Get actual quantities produced from processing
+    const actualQuantities = {
+      hunuSahal: parseFloat(conversionData.hunuSahal) || 0,
+      kadunuSahal: parseFloat(conversionData.kadunuSahal) || 0,
+      dahaiyya: parseFloat(conversionData.dahaiyya) || 0,
+      ricePolish: parseFloat(conversionData.ricePolish) || 0,
+      rice: parseFloat(conversionData.rice) || 0,
+    };
+
+    // Get total paddy quantity that was processed
+    const totalPaddyProcessed = originalStock.originalQuantity || 100;
+    const paddyPricePerKg = originalStock.pricePerKg || 0;
+
+    // 1️⃣ TOTAL PADDY COST
+    const totalPaddyCost = totalPaddyProcessed * paddyPricePerKg;
+
+    // 2️⃣ TOTAL PROCESSING COST
     const startReading = parseFloat(conversionData.startElectricityNumber) || 0;
     const endReading = parseFloat(conversionData.endElectricityNumber) || 0;
     const electricityCost = (endReading - startReading) * electricityUnitPrice;
@@ -601,52 +852,116 @@ const PriceCalculation = ({
       return total + dailyRate * days;
     }, 0);
 
+    const secondaryStocksCost = calculateSecondaryStocksCost();
+
     const otherExpensesCost = otherExpenses.reduce((total, expense) => {
       return total + (parseFloat(expense.amount) || 0);
     }, 0);
 
-    const totalProcessingExpense =
-      electricityCost + laborCost + otherExpensesCost;
-    const paddyCostPer100kg = 100 * (originalStock.pricePerKg || 0);
+    const totalProcessingCost =
+      electricityCost + laborCost + secondaryStocksCost + otherExpensesCost;
 
-    // Advanced calculations
-    const expensePerKgRice =
-      currentRiceOutput > 0 ? totalProcessingExpense / currentRiceOutput : 0;
-    const totalCostFor100kg =
-      paddyCostPer100kg + expensePerKgRice * currentRiceOutput;
+    // 3️⃣ TOTAL BYPRODUCT REVENUE (from actual produced quantities, excluding kadunu sahal)
+    const totalByproductRevenue =
+      actualQuantities.hunuSahal * byproductRates.hunuSahalRate +
+      // actualQuantities.kadunuSahal * byproductRates.kadunuSahalRate + // EXCLUDED from calculation
+      actualQuantities.dahaiyya * byproductRates.dahiyaRate +
+      actualQuantities.ricePolish * byproductRates.ricePolishRate;
 
-    const profitFromByproducts =
-      (parseFloat(conversionData.hunuSahal) || 0) *
-        byproductRates.hunuSahalRate +
-      (parseFloat(conversionData.kadunuSahal) || 0) *
-        byproductRates.kadunuSahalRate +
-      (parseFloat(conversionData.dahaiyya) || 0) * byproductRates.dahiyaRate +
-      (parseFloat(conversionData.ricePolish) || 0) *
-        byproductRates.ricePolishRate;
+    // 4️⃣ TOTAL RICE QUANTITY
+    const totalRiceQty = currentRiceOutput;
 
-    const adjustedRicePrice =
-      currentRiceOutput > 0
-        ? (totalCostFor100kg - profitFromByproducts) / currentRiceOutput
+    // 🎯 FINAL RICE PRICE CALCULATION
+    // ricePrice = (TotalPaddyCost + TotalProcessingCost - TotalByproductRevenue) / TotalRiceQty
+    const ricePrice =
+      totalRiceQty > 0
+        ? (totalPaddyCost + totalProcessingCost - totalByproductRevenue) /
+          totalRiceQty
         : 0;
-    const recommendedSellingPrice =
-      adjustedRicePrice * (1 + profitPercentage / 100);
 
-    setResults({
-      adjustedRicePrice,
-      profitFromByproducts,
-      totalProcessingExpense,
-      paddyCostPer100kg,
-      recommendedSellingPrice,
-      breakdown: {
-        electricityCost,
-        laborCost,
-        otherExpensesCost,
-        expensePerKgRice,
-        totalCostFor100kg,
+    // Calculate recommended selling price with profit margin
+    const recommendedSellingPrice = ricePrice * (1 + profitPercentage / 100);
+
+    // Detailed breakdown for UI display
+    const detailedBreakdown = {
+      // Main calculation components
+      totalPaddyCost,
+      totalProcessingCost,
+      totalByproductRevenue,
+      totalRiceQty,
+
+      // Processing cost breakdown
+      electricityCost,
+      laborCost,
+      secondaryStocksCost,
+      otherExpensesCost,
+
+      // Paddy information
+      totalPaddyProcessed,
+      paddyPricePerKg,
+
+      // Byproduct breakdown with actual quantities
+      byproductDetails: {
+        hunuSahal: {
+          quantity: actualQuantities.hunuSahal,
+          rate: byproductRates.hunuSahalRate,
+          revenue: actualQuantities.hunuSahal * byproductRates.hunuSahalRate,
+        },
+        dahaiyya: {
+          quantity: actualQuantities.dahaiyya,
+          rate: byproductRates.dahiyaRate,
+          revenue: actualQuantities.dahaiyya * byproductRates.dahiyaRate,
+        },
+        ricePolish: {
+          quantity: actualQuantities.ricePolish,
+          rate: byproductRates.ricePolishRate,
+          revenue: actualQuantities.ricePolish * byproductRates.ricePolishRate,
+        },
+        kadunuSahal: {
+          quantity: actualQuantities.kadunuSahal,
+          rate: byproductRates.kadunuSahalRate,
+          revenue:
+            actualQuantities.kadunuSahal * byproductRates.kadunuSahalRate, // Calculate but don't include
+          excluded: true,
+        },
       },
+
+      // Final calculation summary
+      finalCalculation: {
+        totalPaddyCost,
+        totalProcessingCost,
+        totalByproductRevenue,
+        netCost: totalPaddyCost + totalProcessingCost - totalByproductRevenue,
+        totalRiceQty,
+        pricePerKg: ricePrice,
+        formula:
+          "(TotalPaddyCost + TotalProcessingCost - TotalByproductRevenue) / TotalRiceQty",
+      },
+
+      // Legacy field names for compatibility (if needed elsewhere in the code)
+      paddyCostFor100kg: totalPaddyCost, // For backward compatibility
+      expensePerKgRice: totalProcessingCost / totalRiceQty,
+      byproductRevenue100kg: totalByproductRevenue, // For backward compatibility
+    };
+
+    // Update results
+    setResults({
+      adjustedRicePrice: ricePrice,
+      profitFromByproducts: totalByproductRevenue,
+      totalProcessingExpense: totalProcessingCost,
+      paddyCostPer100kg: totalPaddyCost,
+      recommendedSellingPrice,
+      breakdown: detailedBreakdown,
     });
   };
-
+  const calculateSecondaryStocksCost = () => {
+    return selectedSecondaryStocks.reduce((total, stock) => {
+      const stockItem = secondaryStocks.find((s) => s.itemId === stock.itemId);
+      const averagePrice = stockItem ? stockItem.averagePrice : 0;
+      const usedQuantity = parseFloat(stock.usedQuantity) || 0;
+      return total + averagePrice * usedQuantity;
+    }, 0);
+  };
   // Event handlers
   const addEmployee = () => {
     if (employees.length === 0) return;
@@ -692,6 +1007,7 @@ const PriceCalculation = ({
   useEffect(() => {
     if (currentUser && currentBusiness?.id) {
       fetchEmployees();
+      fetchSecondaryStocks();
     }
   }, [currentUser, currentBusiness]);
 
@@ -707,9 +1023,11 @@ const PriceCalculation = ({
     conversionData,
     electricityUnitPrice,
     selectedEmployees,
+    selectedSecondaryStocks,
     otherExpenses,
     employees,
     byproductRates,
+    secondaryStocks,
     riceOutputKg,
     profitPercentage,
   ]);
@@ -737,6 +1055,9 @@ const PriceCalculation = ({
       </div>
     );
   }
+
+  // Get current price data for display
+  const currentPriceData = getCurrentPriceData();
 
   return (
     <div className="max-w-6xl mx-auto p-4 space-y-6">
@@ -766,7 +1087,6 @@ const PriceCalculation = ({
                 <span>Back</span>
               </button>
             )}
-            {/* 🎯 NEW: Save Data Button */}
             <button
               onClick={handleSaveData}
               disabled={saving}
@@ -810,7 +1130,7 @@ const PriceCalculation = ({
 
       {/* Main Results Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Rice Cost Result */}
+        {/* Rice Cost Result with Manual Override */}
         <div className="lg:col-span-2 bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200 rounded-lg p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center space-x-2">
@@ -818,70 +1138,441 @@ const PriceCalculation = ({
               <h2 className="text-lg font-semibold text-yellow-800">
                 Cost per 1kg Rice
               </h2>
+              {currentPriceData.isManual && (
+                <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded-full font-medium">
+                  Manual Override
+                </span>
+              )}
             </div>
-            <button
-              onClick={() => setShowBreakdown(!showBreakdown)}
-              className="flex items-center space-x-1 text-yellow-700 hover:text-yellow-800 text-sm"
-            >
-              <span>{showBreakdown ? "Hide" : "Show"} breakdown</span>
-              <ChevronDown
-                className={`w-4 h-4 transition-transform ${
-                  showBreakdown ? "rotate-180" : ""
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={togglePriceMode}
+                className={`flex items-center space-x-1 px-3 py-1 rounded-lg text-sm transition-colors ${
+                  isManualPriceMode
+                    ? "bg-orange-100 text-orange-700 hover:bg-orange-200"
+                    : "bg-blue-100 text-blue-700 hover:bg-blue-200"
                 }`}
-              />
-            </button>
+              >
+                <Edit3 className="w-3 h-3" />
+                <span>
+                  {isManualPriceMode ? "Manual Mode" : "Set Manual Price"}
+                </span>
+              </button>
+              {isManualPriceMode && (
+                <button
+                  onClick={resetToCalculatedPrice}
+                  className="flex items-center space-x-1 text-gray-600 hover:text-gray-800 text-sm"
+                  title="Reset to calculated price"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Reset</span>
+                </button>
+              )}
+              <button
+                onClick={() => setShowBreakdown(!showBreakdown)}
+                className="flex items-center space-x-1 text-yellow-700 hover:text-yellow-800 text-sm"
+              >
+                <span>{showBreakdown ? "Hide" : "Show"} breakdown</span>
+                <ChevronDown
+                  className={`w-4 h-4 transition-transform ${
+                    showBreakdown ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+            </div>
           </div>
 
+          {/* Manual Price Input Section */}
+          {isManualPriceMode && (
+            <div className="mb-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+              <div className="flex items-center space-x-2 mb-3">
+                <Edit3 className="w-4 h-4 text-orange-600" />
+                <h3 className="font-medium text-orange-800">
+                  Manual Price Override
+                </h3>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-orange-700 mb-1">
+                    Rice Price per kg (Rs.)
+                  </label>
+                  <input
+                    type="number"
+                    value={manualRicePrice}
+                    onChange={(e) =>
+                      setManualRicePrice(parseFloat(e.target.value) || 0)
+                    }
+                    className="w-full px-3 py-2 border border-orange-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    placeholder="Enter manual price"
+                    step="0.01"
+                  />
+                  <p className="text-xs text-orange-600 mt-1">
+                    Calculated: {formatCurrency(results.adjustedRicePrice)}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-orange-700 mb-1">
+                    Profit Margin (%)
+                  </label>
+                  <input
+                    type="number"
+                    value={manualProfitMargin}
+                    onChange={(e) =>
+                      setManualProfitMargin(parseFloat(e.target.value) || 0)
+                    }
+                    className="w-full px-3 py-2 border border-orange-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    placeholder="Enter profit margin"
+                    step="0.1"
+                  />
+                  <p className="text-xs text-orange-600 mt-1">
+                    Selling Price:{" "}
+                    {formatCurrency(
+                      manualRicePrice * (1 + manualProfitMargin / 100)
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {manualRicePrice > 0 && (
+                <div className="mt-3 p-3 bg-white rounded border">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    <span className="text-sm font-medium text-gray-800">
+                      Price Override Summary
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-600">Calculated Price:</span>
+                      <span className="ml-2 font-medium">
+                        {formatCurrency(results.adjustedRicePrice)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Manual Price:</span>
+                      <span className="ml-2 font-medium text-orange-600">
+                        {formatCurrency(manualRicePrice)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Difference:</span>
+                      <span
+                        className={`ml-2 font-medium ${
+                          manualRicePrice > results.adjustedRicePrice
+                            ? "text-green-600"
+                            : "text-red-600"
+                        }`}
+                      >
+                        {manualRicePrice > results.adjustedRicePrice ? "+" : ""}
+                        {formatCurrency(
+                          manualRicePrice - results.adjustedRicePrice
+                        )}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Selling Price:</span>
+                      <span className="ml-2 font-medium text-green-600">
+                        {formatCurrency(
+                          manualRicePrice * (1 + manualProfitMargin / 100)
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Current Price Display */}
           <div className="text-3xl font-bold text-yellow-900 mb-2">
-            {formatCurrency(results.adjustedRicePrice)}
+            {formatCurrency(currentPriceData.ricePrice)}
           </div>
           <p className="text-sm text-yellow-700">
-            Add profit margin for selling price
+            {currentPriceData.isManual
+              ? "Manual price with profit margin"
+              : "Add profit margin for selling price"}
           </p>
 
           {/* Compact Breakdown */}
           {showBreakdown && (
-            <div className="mt-4 p-3 bg-white rounded-lg border space-y-2">
-              <div className="text-sm font-medium text-gray-800 mb-2">
-                Calculation Steps:
+            <div className="mt-4 p-4 bg-white rounded-lg border space-y-4">
+              <div className="text-sm font-medium text-gray-800 mb-3 border-b pb-2">
+                📊 Rice Price Calculation:
               </div>
-              {[
-                {
-                  label: "Paddy cost (100kg)",
-                  value: results.paddyCostPer100kg,
-                },
-                {
-                  label: "Processing cost",
-                  value: results.totalProcessingExpense,
-                },
-                {
-                  label: "Byproduct revenue",
-                  value: -results.profitFromByproducts,
-                  negative: true,
-                },
-                {
-                  label: "Final cost per kg",
-                  value: results.adjustedRicePrice,
-                  isFinal: true,
-                },
-              ].map((item, index) => (
-                <div
-                  key={index}
-                  className={`flex justify-between text-xs ${
-                    item.isFinal ? "border-t pt-2 font-semibold" : ""
-                  }`}
-                >
-                  <span className="text-gray-600">{item.label}:</span>
-                  <span
-                    className={
-                      item.negative ? "text-green-600" : "text-gray-900"
-                    }
-                  >
-                    {item.negative ? "-" : ""}
-                    {formatCurrency(Math.abs(item.value))}
-                  </span>
+
+              {/* Show calculation method */}
+              {currentPriceData.isManual ? (
+                <div className="bg-orange-50 p-4 rounded-lg border-2 border-orange-200">
+                  <h4 className="text-sm font-semibold text-orange-800 mb-2">
+                    🎯 Manual Price Override Active
+                  </h4>
+                  <div className="bg-white p-3 rounded border">
+                    <div className="grid grid-cols-1 gap-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">
+                          Original Calculated Price:
+                        </span>
+                        <span className="font-medium text-gray-500 line-through">
+                          {formatCurrency(results.adjustedRicePrice)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">
+                          Manual Override Price:
+                        </span>
+                        <span className="font-bold text-orange-600">
+                          {formatCurrency(manualRicePrice)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">
+                          Profit Margin ({manualProfitMargin}%):
+                        </span>
+                        <span className="font-medium">
+                          +
+                          {formatCurrency(
+                            (manualRicePrice * manualProfitMargin) / 100
+                          )}
+                        </span>
+                      </div>
+                      <div className="border-t-2 pt-2 flex justify-between border-orange-300">
+                        <span className="text-orange-800 font-bold">
+                          Final Selling Price:
+                        </span>
+                        <span className="text-orange-800 font-bold text-lg">
+                          {formatCurrency(
+                            manualRicePrice * (1 + manualProfitMargin / 100)
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              ))}
+              ) : (
+                <div className="bg-indigo-50 p-4 rounded-lg border-2 border-indigo-200">
+                  <h4 className="text-sm font-semibold text-indigo-800 mb-2">
+                    🎯 Formula: ricePrice = (TotalPaddyCost +
+                    TotalProcessingCost - TotalByproductRevenue) / TotalRiceQty
+                  </h4>
+                  <div className="bg-white p-3 rounded border font-mono text-sm">
+                    <div className="grid grid-cols-1 gap-2">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Total Paddy Cost:</span>
+                        <span className="font-semibold">
+                          {results.breakdown.totalPaddyProcessed}kg ×{" "}
+                          {formatCurrency(results.breakdown.paddyPricePerKg)} =
+                          <span className="text-blue-600 ml-1">
+                            {formatCurrency(results.breakdown.totalPaddyCost)}
+                          </span>
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">
+                          Total Processing Cost:
+                        </span>
+                        <span className="text-purple-600 font-semibold">
+                          +{" "}
+                          {formatCurrency(
+                            results.breakdown.totalProcessingCost
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">
+                          Total Byproduct Revenue:
+                        </span>
+                        <span className="text-green-600 font-semibold">
+                          -{" "}
+                          {formatCurrency(
+                            results.breakdown.totalByproductRevenue
+                          )}
+                        </span>
+                      </div>
+                      <div className="border-t pt-2 flex justify-between">
+                        <span className="text-gray-600">Net Cost:</span>
+                        <span className="font-semibold">
+                          ={" "}
+                          {formatCurrency(
+                            results.breakdown.finalCalculation.netCost
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">
+                          Total Rice Quantity:
+                        </span>
+                        <span className="font-semibold">
+                          ÷ {results.breakdown.totalRiceQty}kg
+                        </span>
+                      </div>
+                      <div className="border-t-2 pt-2 flex justify-between border-indigo-300">
+                        <span className="text-indigo-800 font-bold">
+                          Final Rice Price:
+                        </span>
+                        <span className="text-indigo-800 font-bold text-lg">
+                          = {formatCurrency(results.adjustedRicePrice)}/kg
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Detailed Breakdown Sections */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* 1. Paddy Cost Breakdown */}
+                <div className="bg-blue-50 p-3 rounded-lg">
+                  <h4 className="text-sm font-semibold text-blue-800 mb-2">
+                    1️⃣ Total Paddy Cost
+                  </h4>
+                  <div className="space-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Quantity Processed:</span>
+                      <span>{results.breakdown.totalPaddyProcessed}kg</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Price per kg:</span>
+                      <span>
+                        {formatCurrency(results.breakdown.paddyPricePerKg)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between font-semibold border-t pt-1">
+                      <span className="text-blue-700">Total Cost:</span>
+                      <span className="text-blue-700">
+                        {formatCurrency(results.breakdown.totalPaddyCost)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Processing Cost Breakdown */}
+                <div className="bg-purple-50 p-3 rounded-lg">
+                  <h4 className="text-sm font-semibold text-purple-800 mb-2">
+                    2️⃣ Total Processing Cost
+                  </h4>
+                  <div className="space-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Electricity:</span>
+                      <span>
+                        {formatCurrency(results.breakdown.electricityCost)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Labor:</span>
+                      <span>{formatCurrency(results.breakdown.laborCost)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Secondary Stocks:</span>
+                      <span>
+                        {formatCurrency(results.breakdown.secondaryStocksCost)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Other Expenses:</span>
+                      <span>
+                        {formatCurrency(results.breakdown.otherExpensesCost)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between font-semibold border-t pt-1">
+                      <span className="text-purple-700">Total Cost:</span>
+                      <span className="text-purple-700">
+                        {formatCurrency(results.breakdown.totalProcessingCost)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Byproduct Revenue Breakdown */}
+                <div className="bg-green-50 p-3 rounded-lg">
+                  <h4 className="text-sm font-semibold text-green-800 mb-2">
+                    3️⃣ Total Byproduct Revenue
+                  </h4>
+                  <div className="space-y-1 text-xs">
+                    {results.breakdown.byproductDetails &&
+                      Object.entries(results.breakdown.byproductDetails).map(
+                        ([key, details]) => (
+                          <div
+                            key={key}
+                            className={`flex justify-between items-center ${
+                              details.excluded
+                                ? "text-gray-400 line-through"
+                                : ""
+                            }`}
+                          >
+                            <span className="text-gray-600">
+                              {details.quantity.toFixed(1)}kg ×{" "}
+                              {formatCurrency(details.rate)}:
+                            </span>
+                            <span
+                              className={
+                                details.excluded
+                                  ? "text-gray-400"
+                                  : "text-gray-700"
+                              }
+                            >
+                              {formatCurrency(details.revenue)}
+                              {details.excluded && (
+                                <span className="ml-1 text-red-500 text-xs">
+                                  (excluded)
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        )
+                      )}
+                    <div className="flex justify-between font-semibold border-t pt-1">
+                      <span className="text-green-700">Total Revenue:</span>
+                      <span className="text-green-700">
+                        {formatCurrency(
+                          results.breakdown.totalByproductRevenue
+                        )}
+                      </span>
+                    </div>
+                    <div className="text-xs text-green-600 mt-1 italic">
+                      (Kadunu Sahal excluded from calculation)
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary */}
+              <div className="bg-gray-50 p-3 rounded-lg border">
+                <h4 className="text-sm font-semibold text-gray-800 mb-2">
+                  📝 Calculation Summary:
+                </h4>
+                <div className="text-xs space-y-1">
+                  <div>
+                    <strong>Total Cost:</strong>{" "}
+                    {formatCurrency(results.breakdown.totalPaddyCost)} +
+                    {formatCurrency(results.breakdown.totalProcessingCost)} =
+                    {formatCurrency(
+                      results.breakdown.totalPaddyCost +
+                        results.breakdown.totalProcessingCost
+                    )}
+                  </div>
+                  <div>
+                    <strong>Less Byproduct Revenue:</strong>
+                    {formatCurrency(
+                      results.breakdown.totalPaddyCost +
+                        results.breakdown.totalProcessingCost
+                    )}{" "}
+                    -{formatCurrency(results.breakdown.totalByproductRevenue)} =
+                    {formatCurrency(results.breakdown.finalCalculation.netCost)}
+                  </div>
+                  <div>
+                    <strong>Divided by Rice Quantity:</strong>
+                    {formatCurrency(
+                      results.breakdown.finalCalculation.netCost
+                    )}{" "}
+                    ÷{results.breakdown.totalRiceQty}kg =
+                    <span className="font-bold text-indigo-600">
+                      {formatCurrency(results.adjustedRicePrice)}/kg
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -892,22 +1583,32 @@ const PriceCalculation = ({
             <TrendingUp className="w-5 h-5 text-green-600" />
             <h3 className="font-semibold text-green-800">Selling Price</h3>
           </div>
-          <div className="flex items-center space-x-2 mb-2">
-            <label className="text-sm text-green-700">Profit %:</label>
-            <input
-              type="number"
-              value={profitPercentage}
-              onChange={(e) =>
-                setProfitPercentage(parseFloat(e.target.value) || 0)
-              }
-              className="w-16 px-2 py-1 border border-green-300 rounded text-sm text-center"
-            />
-          </div>
+
+          {!isManualPriceMode && (
+            <div className="flex items-center space-x-2 mb-2">
+              <label className="text-sm text-green-700">Profit %:</label>
+              <input
+                type="number"
+                value={profitPercentage}
+                onChange={(e) =>
+                  setProfitPercentage(parseFloat(e.target.value) || 0)
+                }
+                className="w-16 px-2 py-1 border border-green-300 rounded text-sm text-center"
+              />
+            </div>
+          )}
+
           <div className="text-2xl font-bold text-green-600">
-            {formatCurrency(results.recommendedSellingPrice)}
+            {formatCurrency(currentPriceData.sellingPrice)}
           </div>
           <p className="text-xs text-green-600 mt-1">
-            {formatCurrency(results.adjustedRicePrice)} + {profitPercentage}%
+            {formatCurrency(currentPriceData.ricePrice)} +{" "}
+            {currentPriceData.profitMargin}%
+            {currentPriceData.isManual && (
+              <span className="block text-orange-600 font-medium mt-1">
+                (Manual Override Active)
+              </span>
+            )}
           </p>
         </div>
       </div>
@@ -1023,6 +1724,155 @@ const PriceCalculation = ({
             )}
           </div>
 
+          {/* secondary stock */}
+          <div className="mb-4 border-t pt-3">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-gray-700 flex items-center">
+                <Package className="w-3 h-3 mr-1" />
+                Secondary Stocks
+              </label>
+              <button
+                onClick={addSecondaryStock}
+                disabled={secondaryStocks.length === 0}
+                className="flex items-center space-x-1 bg-orange-100 hover:bg-orange-200 text-orange-700 px-2 py-1 rounded text-xs disabled:opacity-50"
+              >
+                <Plus className="w-3 h-3" />
+                <span>Add</span>
+              </button>
+            </div>
+
+            <div className="space-y-3 mb-2">
+              {selectedSecondaryStocks.map((stock, index) => {
+                const stockItem = secondaryStocks.find(
+                  (s) => s.itemId === stock.itemId
+                );
+                const usedQuantity = parseFloat(stock.usedQuantity) || 0;
+                const itemCost = stockItem
+                  ? stockItem.averagePrice * usedQuantity
+                  : 0;
+
+                return (
+                  <div
+                    key={index}
+                    className="space-y-2 p-3 border border-gray-200 rounded-lg bg-gray-50"
+                  >
+                    {/* Item Selection */}
+                    <div className="flex space-x-2">
+                      <select
+                        value={stock.itemId}
+                        onChange={(e) =>
+                          updateSelectedSecondaryStock(
+                            index,
+                            "itemId",
+                            e.target.value
+                          )
+                        }
+                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs"
+                      >
+                        <option value="">Select Stock Item</option>
+                        {secondaryStocks.map((stockItem) => (
+                          <option
+                            key={stockItem.itemId}
+                            value={stockItem.itemId}
+                          >
+                            {stockItem.itemName}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => removeSecondaryStock(index)}
+                        className="p-1 text-red-500 hover:text-red-700"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+
+                    {/* Stock Details */}
+                    {stockItem && (
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="space-y-1">
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Available:</span>
+                            <span className="font-medium">
+                              {stockItem.currentStock.toFixed(1)}{" "}
+                              {stockItem.unitType}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Avg Price:</span>
+                            <span className="font-medium">
+                              {formatCurrency(stockItem.averagePrice)}/
+                              {stockItem.unitType}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <div>
+                            <label className="text-gray-600 block">
+                              Use Quantity:
+                            </label>
+                            <input
+                              type="number"
+                              placeholder={`Max ${stockItem.currentStock.toFixed(
+                                1
+                              )}`}
+                              value={stock.usedQuantity}
+                              onChange={(e) =>
+                                updateSelectedSecondaryStock(
+                                  index,
+                                  "usedQuantity",
+                                  e.target.value
+                                )
+                              }
+                              max={stockItem.currentStock}
+                              className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                            />
+                          </div>
+                          {usedQuantity > 0 && (
+                            <div className="flex justify-between font-medium text-orange-700">
+                              <span>Cost:</span>
+                              <span>{formatCurrency(itemCost)}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Validation */}
+                    {stockItem && usedQuantity > stockItem.currentStock && (
+                      <div className="text-xs text-red-600 bg-red-50 p-2 rounded">
+                        ⚠️ Quantity exceeds available stock (
+                        {stockItem.currentStock.toFixed(1)} {stockItem.unitType}
+                        )
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {selectedSecondaryStocks.length === 0 && (
+                <p className="text-xs text-gray-500 py-2">
+                  No secondary stocks selected
+                </p>
+              )}
+            </div>
+
+            {/* Total Secondary Stocks Cost */}
+            {selectedSecondaryStocks.some((stock) => stock.usedQuantity) && (
+              <div className="mt-2 p-2 bg-orange-50 rounded border">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-medium text-orange-800">
+                    Total Secondary Stock Cost:
+                  </span>
+                  <span className="text-sm font-bold text-orange-600">
+                    {formatCurrency(calculateSecondaryStocksCost())}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Other Expenses */}
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -1105,6 +1955,11 @@ const PriceCalculation = ({
             <h3 className="font-semibold text-gray-800">Byproduct Rates</h3>
           </div>
 
+          <div className="text-xs text-gray-600 mb-3 italic">
+            * Set rates per kg. Revenue calculated for current quantities shown
+            below.
+          </div>
+
           <div className="space-y-3">
             {[
               {
@@ -1116,17 +1971,26 @@ const PriceCalculation = ({
                 key: "kadunuSahalRate",
                 label: "Kadunu Sahal",
                 dataKey: "kadunuSahal",
+                excluded: true,
               },
-              { key: "dahiyaRate", label: "Dahaiyya", dataKey: "dahaiyya" },
+              {
+                key: "dahiyaRate",
+                label: "Dahaiyya",
+                dataKey: "dahaiyya",
+              },
               {
                 key: "ricePolishRate",
                 label: "Rice Polish",
                 dataKey: "ricePolish",
               },
             ].map((product) => (
-              <div key={product.key}>
+              <div
+                key={product.key}
+                className={product.excluded ? "opacity-60" : ""}
+              >
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  {product.label} (Rs/kg)
+                  {product.label} (Rs/kg){" "}
+                  {product.excluded && "(Not used in calculation)"}
                 </label>
                 <input
                   type="number"
@@ -1136,13 +2000,28 @@ const PriceCalculation = ({
                   }
                   className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-green-500"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  {parseFloat(conversionData?.[product.dataKey]) || 0} kg ={" "}
-                  {formatCurrency(
-                    (parseFloat(conversionData?.[product.dataKey]) || 0) *
-                      byproductRates[product.key]
-                  )}
-                </p>
+                <div className="flex justify-between items-center mt-1">
+                  <p className="text-xs text-gray-500">
+                    Current:{" "}
+                    {parseFloat(conversionData?.[product.dataKey]) || 0} kg
+                  </p>
+                  <p
+                    className={`text-xs font-medium ${
+                      product.excluded
+                        ? "text-gray-400 line-through"
+                        : "text-green-600"
+                    }`}
+                  >
+                    ={" "}
+                    {formatCurrency(
+                      (parseFloat(conversionData?.[product.dataKey]) || 0) *
+                        byproductRates[product.key]
+                    )}
+                    {product.excluded && (
+                      <span className="text-red-500 ml-1">(excluded)</span>
+                    )}
+                  </p>
+                </div>
               </div>
             ))}
           </div>
@@ -1150,11 +2029,28 @@ const PriceCalculation = ({
           <div className="mt-3 p-2 bg-green-50 rounded border">
             <div className="flex justify-between items-center">
               <span className="text-xs font-medium text-green-800">
-                Total Revenue:
+                Total Current Revenue:
               </span>
               <span className="text-sm font-bold text-green-600">
-                {formatCurrency(results.profitFromByproducts)}
+                {formatCurrency(
+                  // Calculate total including all products but show which ones are excluded
+                  (parseFloat(conversionData?.hunuSahal) || 0) *
+                    byproductRates.hunuSahalRate +
+                    (parseFloat(conversionData?.dahaiyya) || 0) *
+                      byproductRates.dahiyaRate +
+                    (parseFloat(conversionData?.ricePolish) || 0) *
+                      byproductRates.ricePolishRate
+                  // Note: kadunuSahal is excluded from this calculation
+                )}
               </span>
+            </div>
+            <div className="text-xs text-green-600 mt-1">
+              (Kadunu Sahal excluded:{" "}
+              {formatCurrency(
+                (parseFloat(conversionData?.kadunuSahal) || 0) *
+                  byproductRates.kadunuSahalRate
+              )}
+              )
             </div>
           </div>
         </div>

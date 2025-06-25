@@ -105,7 +105,7 @@ const AddingEmployees = () => {
     let counter = 1;
 
     while (true) {
-      // Check in managers collection
+      // Check in managers collection (global)
       const managersQuery = query(
         collection(db, "managers"),
         where("username", "==", username),
@@ -113,17 +113,29 @@ const AddingEmployees = () => {
       );
       const managersSnapshot = await getDocs(managersQuery);
 
-      // Check in sales_reps collection
-      const salesRepsQuery = query(
+      // Check in sales_reps collection (global)
+      const salesRepsGlobalQuery = query(
+        collection(db, "sales_reps"),
+        where("username", "==", username),
+        where("ownerId", "==", ownerId)
+      );
+      const salesRepsGlobalSnapshot = await getDocs(salesRepsGlobalQuery);
+
+      // Check in local business sales reps collection
+      const salesRepsLocalQuery = query(
         collection(
           db,
           `owners/${ownerId}/businesses/${currentBusiness.id}/salesReps`
         ),
         where("username", "==", username)
       );
-      const salesRepsSnapshot = await getDocs(salesRepsQuery);
+      const salesRepsLocalSnapshot = await getDocs(salesRepsLocalQuery);
 
-      if (managersSnapshot.empty && salesRepsSnapshot.empty) {
+      if (
+        managersSnapshot.empty &&
+        salesRepsGlobalSnapshot.empty &&
+        salesRepsLocalSnapshot.empty
+      ) {
         return username;
       }
 
@@ -131,7 +143,6 @@ const AddingEmployees = () => {
       counter++;
     }
   };
-
   // Generate secure password
   const generatePassword = () => {
     const chars =
@@ -497,7 +508,27 @@ const AddingEmployees = () => {
         };
 
         await setDoc(salesRepDocRef, salesRepData);
-        console.log("Sales rep saved with ID:", employeeId);
+        console.log("Sales rep saved locally with ID:", employeeId);
+        const salesRepGlobalDocRef = doc(db, "sales_reps", employeeId);
+
+        const salesRepGlobalData = {
+          name: formData.employeeName,
+          email: formData.email,
+          phone: formData.mobile1,
+          username: credentials.username,
+          password: credentials.password,
+          imageUrl: imageUrls.employeePhoto || null,
+          employeeId,
+          businessId,
+          ownerId: uid,
+          role: "sales_rep",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          status: "active",
+        };
+
+        await setDoc(salesRepGlobalDocRef, salesRepGlobalData);
+        console.log("Sales rep saved globally with ID:", employeeId);
       }
 
       // If role is Manager, save to managers collection (global)

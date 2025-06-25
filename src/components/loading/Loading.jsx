@@ -13,6 +13,7 @@ import {
   increment,
   serverTimestamp,
   writeBatch,
+  limit,
 } from "firebase/firestore";
 import { toast } from "react-hot-toast";
 import { useAuth } from "../../contexts/AuthContext";
@@ -35,42 +36,505 @@ const Loading = () => {
   const [error, setError] = useState(null);
   const [isProcessingLoading, setIsProcessingLoading] = useState(false);
 
-  // Fetch data when current business changes
-  useEffect(() => {
-    if (currentBusiness?.id && currentUser?.uid) {
-      Promise.all([fetchBaggedStocks(), fetchSalesReps(), fetchAllRoutes()]);
-    } else {
+  // Enhanced get product type code with rice type support
+  const getProductTypeCode = (productType, riceType = null) => {
+    if (productType === "rice" && riceType) {
+      return `rice_${riceType.toLowerCase().replace(/\s+/g, "_")}`;
+    }
+
+    const codeMap = {
+      rice: "rice",
+      hunuSahal: "hunu_sahal",
+      kadunuSahal: "kadunu_sahal",
+      ricePolish: "rice_polish",
+      dahaiyya: "dahaiyya",
+      flour: "flour",
+    };
+    return (
+      codeMap[productType] || productType.toLowerCase().replace(/\s+/g, "_")
+    );
+  };
+
+  // Format currency
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat("en-LK", {
+      style: "currency",
+      currency: "LKR",
+      minimumFractionDigits: 2,
+    })
+      .format(amount)
+      .replace("LKR", "Rs.");
+  };
+
+  // Format number safely
+  const formatNumber = (value, decimals = 2) => {
+    const num = Number(value || 0);
+    return isNaN(num) ? "0.00" : num.toFixed(decimals);
+  };
+
+  // Enhanced format product type for display with rice types
+  const formatProductType = (type) => {
+    if (type.startsWith("rice_")) {
+      const riceType = type.replace("rice_", "");
+      const riceTypeMap = {
+        samba: "Samba Rice",
+        nadu: "Nadu Rice",
+        keeri_samba: "Keeri Samba Rice",
+        red_rice: "Red Rice",
+        basmati: "Basmati Rice",
+        white_rice: "White Rice",
+      };
+      return (
+        riceTypeMap[riceType] ||
+        `${riceType.charAt(0).toUpperCase() + riceType.slice(1)} Rice`
+      );
+    }
+
+    const typeMap = {
+      rice: "Rice (Hal)",
+      hunuSahal: "Hunu Sahal",
+      kadunuSahal: "Kadunu Sahal",
+      ricePolish: "Rice Polish",
+      dahaiyya: "Dahaiyya",
+      flour: "Flour",
+    };
+    return typeMap[type] || type;
+  };
+
+  // Helper function to discover product types from existing data
+  const discoverProductTypes = async () => {
+    try {
+      const discoveredTypes = {
+        productTypes: new Set(),
+        riceTypes: new Set(),
+      };
+
+      // 1. Discover from batches
+      try {
+        const batchesQuery = query(
+          collection(
+            db,
+            `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/processedStock/stock`
+          ),
+          where("status", "==", "available")
+        );
+
+        const querySnapshot = await getDocs(batchesQuery);
+
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data.products) {
+            Object.keys(data.products).forEach((productType) => {
+              if (data.products[productType] > 0) {
+                discoveredTypes.productTypes.add(productType);
+
+                // If it's rice, also track the rice type
+                if (productType === "rice" && data.originalPaddyType) {
+                  discoveredTypes.riceTypes.add(data.originalPaddyType);
+                }
+              }
+            });
+          }
+        });
+      } catch (error) {
+        console.log("Error discovering from batches:", error);
+      }
+
+      // 2. Discover from stock totals
+      try {
+        const stockTotalsRef = doc(
+          db,
+          `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/stockTotals`
+        );
+
+        const stockTotalsDoc = await getDoc(stockTotalsRef);
+
+        if (stockTotalsDoc.exists()) {
+          const data = stockTotalsDoc.data();
+
+          Object.keys(data).forEach((key) => {
+            // Extract rice types from keys like "rice_samba_bagged_total"
+            if (
+              key.startsWith("rice_") &&
+              !key.includes("_bagged_") &&
+              !key.includes("_bags_") &&
+              !key.includes("_loaded_")
+            ) {
+              const riceType = key.replace("rice_", "");
+              if (riceType && riceType !== "rice") {
+                discoveredTypes.riceTypes.add(riceType);
+                discoveredTypes.productTypes.add("rice");
+              }
+            }
+
+            // Extract other product types
+            const nonRiceProducts = [
+              "hunuSahal",
+              "kadunuSahal",
+              "ricePolish",
+              "dahaiyya",
+              "flour",
+            ];
+            nonRiceProducts.forEach((product) => {
+              if (key === product || key.startsWith(`${product}_`)) {
+                discoveredTypes.productTypes.add(product);
+              }
+            });
+          });
+        }
+      } catch (error) {
+        console.log("Error discovering from stock totals:", error);
+      }
+
+      // 3. Add common fallbacks if nothing discovered
+      if (discoveredTypes.productTypes.size === 0) {
+        const commonProductTypes = [
+          "hunuSahal",
+          "kadunuSahal",
+          "ricePolish",
+          "dahaiyya",
+          "flour",
+        ];
+        commonProductTypes.forEach((type) =>
+          discoveredTypes.productTypes.add(type)
+        );
+      }
+
+      if (discoveredTypes.riceTypes.size === 0) {
+        const commonRiceTypes = [
+          "samba",
+          "nadu",
+          "keeri_samba",
+          "red_rice",
+          "basmati",
+          "white_rice",
+        ];
+        commonRiceTypes.forEach((type) => discoveredTypes.riceTypes.add(type));
+      }
+
+      return {
+        productTypes: Array.from(discoveredTypes.productTypes),
+        riceTypes: Array.from(discoveredTypes.riceTypes),
+      };
+    } catch (error) {
+      console.error("Error in product type discovery:", error);
+      return {
+        productTypes: [
+          "hunuSahal",
+          "kadunuSahal",
+          "ricePolish",
+          "dahaiyya",
+          "flour",
+        ],
+        riceTypes: [
+          "samba",
+          "nadu",
+          "keeri_samba",
+          "red_rice",
+          "basmati",
+          "white_rice",
+        ],
+      };
+    }
+  };
+
+  // Brute force discovery as fallback
+  const bruteForceDiscovery = async () => {
+    const basePath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock`;
+    const foundCollections = [];
+
+    // Possible collection names to try
+    const possibleCollections = [
+      // Standard products
+      "hunuSahal",
+      "hunu_sahal",
+      "kadunuSahal",
+      "kadunu_sahal",
+      "ricePolish",
+      "rice_polish",
+      "dahaiyya",
+      "flour",
+
+      // Rice variations
+      "rice",
+      "rice_samba",
+      "rice_nadu",
+      "rice_keeri_samba",
+      "rice_red_rice",
+      "rice_basmati",
+      "rice_white_rice",
+      "samba",
+      "nadu",
+      "keeri_samba",
+      "red_rice",
+      "basmati",
+      "white_rice",
+
+      // Alternative rice naming
+      "hal_samba",
+      "hal_nadu",
+      "hal_keeri_samba",
+      "rice_hal",
+      "rice_white",
+      "rice_red",
+    ];
+
+    for (const collectionName of possibleCollections) {
+      try {
+        const testQuery = query(
+          collection(db, `${basePath}/${collectionName}`),
+          where("status", "==", "available"),
+          limit(1) // Just check if any documents exist
+        );
+
+        const testSnapshot = await getDocs(testQuery);
+        if (!testSnapshot.empty) {
+          foundCollections.push(collectionName);
+          console.log(`Found collection: ${collectionName}`);
+        }
+      } catch (error) {
+        // Silently ignore - collection doesn't exist or no permission
+      }
+    }
+
+    return foundCollections;
+  };
+
+  // Enhanced fetchBaggedStocks with dynamic discovery
+  const fetchBaggedStocks = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log("Starting dynamic bagged stocks discovery...");
+
+      // Step 1: Discover product types from existing data
+      const { productTypes, riceTypes } = await discoverProductTypes();
+
+      console.log("Discovered product types:", productTypes);
+      console.log("Discovered rice types:", riceTypes);
+
+      const baggedStocksData = {};
+
+      // Step 2: Check each discovered product type
+      for (const productType of productTypes) {
+        if (productType === "rice") {
+          // Handle each rice type
+          for (const riceType of riceTypes) {
+            const productCode = getProductTypeCode("rice", riceType);
+            const displayName = `rice_${riceType}`;
+            const collectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`;
+
+            console.log(`Checking rice ${riceType} at: ${collectionPath}`);
+
+            try {
+              const baggedStockQuery = query(
+                collection(db, collectionPath),
+                where("status", "==", "available"),
+                orderBy("createdAt", "desc")
+              );
+
+              const querySnapshot = await getDocs(baggedStockQuery);
+
+              if (!querySnapshot.empty) {
+                const bags = [];
+                querySnapshot.forEach((doc) => {
+                  const data = doc.data();
+                  bags.push({
+                    id: doc.id,
+                    ...data,
+                    createdAt: data.createdAt?.toDate() || new Date(),
+                    updatedAt: data.updatedAt?.toDate() || new Date(),
+                    riceType: riceType,
+                    originalPaddyType: data.originalPaddyType || riceType,
+                  });
+                });
+
+                console.log(
+                  `✅ Found ${bags.length} rice bags for ${riceType}`
+                );
+                baggedStocksData[displayName] = bags;
+              }
+            } catch (error) {
+              console.log(
+                `❌ No rice bags found for ${riceType}:`,
+                error.message
+              );
+            }
+          }
+        } else {
+          // Handle non-rice products
+          const productCode = getProductTypeCode(productType);
+          const collectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`;
+
+          console.log(`Checking ${productType} at: ${collectionPath}`);
+
+          try {
+            const baggedStockQuery = query(
+              collection(db, collectionPath),
+              where("status", "==", "available"),
+              orderBy("createdAt", "desc")
+            );
+
+            const querySnapshot = await getDocs(baggedStockQuery);
+
+            if (!querySnapshot.empty) {
+              const bags = [];
+              querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                bags.push({
+                  id: doc.id,
+                  ...data,
+                  createdAt: data.createdAt?.toDate() || new Date(),
+                  updatedAt: data.updatedAt?.toDate() || new Date(),
+                });
+              });
+
+              console.log(`✅ Found ${bags.length} bags for ${productType}`);
+              baggedStocksData[productType] = bags;
+            }
+          } catch (error) {
+            console.log(`❌ No bags found for ${productType}:`, error.message);
+          }
+        }
+      }
+
+      // Step 3: Fallback - brute force discovery if nothing found
+      if (Object.keys(baggedStocksData).length === 0) {
+        console.log(
+          "🔍 No collections found through smart discovery, trying brute force..."
+        );
+        const bruteForceCollections = await bruteForceDiscovery();
+
+        for (const collectionName of bruteForceCollections) {
+          const collectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${collectionName}`;
+
+          try {
+            const baggedStockQuery = query(
+              collection(db, collectionPath),
+              where("status", "==", "available"),
+              orderBy("createdAt", "desc")
+            );
+
+            const querySnapshot = await getDocs(baggedStockQuery);
+            const bags = [];
+
+            querySnapshot.forEach((doc) => {
+              const data = doc.data();
+              bags.push({
+                id: doc.id,
+                ...data,
+                createdAt: data.createdAt?.toDate() || new Date(),
+                updatedAt: data.updatedAt?.toDate() || new Date(),
+              });
+            });
+
+            if (bags.length > 0) {
+              baggedStocksData[collectionName] = bags;
+              console.log(
+                `🎯 Brute force found ${bags.length} bags in: ${collectionName}`
+              );
+            }
+          } catch (error) {
+            console.log(
+              `Error checking brute force collection ${collectionName}:`,
+              error.message
+            );
+          }
+        }
+      }
+
+      console.log("=== FINAL DYNAMIC DISCOVERY RESULT ===");
+      console.log(
+        `Total product types found: ${Object.keys(baggedStocksData).length}`
+      );
+      console.log("Product types:", Object.keys(baggedStocksData));
+      Object.entries(baggedStocksData).forEach(([type, bags]) => {
+        console.log(`  ${type}: ${bags.length} bags`);
+      });
+
+      setBaggedStocks(baggedStocksData);
+    } catch (error) {
+      console.error("Error in dynamic bagged stocks fetch:", error);
+      setError(`Failed to load bagged stocks: ${error.message}`);
+    } finally {
       setLoading(false);
     }
-  }, [currentBusiness?.id, currentUser?.uid]);
+  };
 
-  // Update today's route when sales rep is selected
-  useEffect(() => {
-    if (selectedSalesRep) {
-      fetchTodayRoute(selectedSalesRep);
-    } else {
-      setTodayRouteInfo(null);
-    }
-  }, [selectedSalesRep, allRoutes]);
+  // Enhanced process grouped products to show all bag sizes separately
+  const processGroupedProducts = () => {
+    console.log("Processing grouped products from baggedStocks:", baggedStocks);
+    const grouped = {};
 
-  // Initialize selected products when grouped products change
-  useEffect(() => {
-    if (Object.keys(groupedProducts).length > 0) {
-      const initialSelections = {};
-      Object.keys(groupedProducts).forEach((productType) => {
-        const productData = groupedProducts[productType];
-        initialSelections[productType] = {
-          selectedPriceIndex: productData.priceOptions.length === 1 ? 0 : null,
-          quantity: "",
-          maxAvailable:
-            productData.priceOptions.length === 1
-              ? productData.priceOptions[0].totalWeight
-              : 0,
+    Object.entries(baggedStocks).forEach(([productType, bags]) => {
+      console.log(`Processing ${productType} with ${bags.length} bags`);
+
+      // Group bags by bag size and price combination
+      const bagSizeGroups = {};
+
+      bags.forEach((bag) => {
+        const price = bag.recommendedSellingPrice || bag.pricePerKg || 0;
+        const bagSize = bag.bagSize || bag.weight || 0;
+        const groupKey = `${bagSize}kg_${price}`;
+
+        if (!bagSizeGroups[groupKey]) {
+          bagSizeGroups[groupKey] = {
+            bagSize: bagSize,
+            price: price,
+            bags: [],
+            totalWeight: 0,
+            totalBags: 0,
+            displayName: `${bagSize}kg @ ${formatCurrency(price)}/kg`,
+            productType: productType,
+            uniqueKey: `${productType}_${groupKey}`, // Unique identifier for this bag size option
+          };
+        }
+
+        bagSizeGroups[groupKey].bags.push(bag);
+        bagSizeGroups[groupKey].totalWeight += bag.weight || 0;
+        bagSizeGroups[groupKey].totalBags += 1;
+      });
+
+      // Convert to array and sort by bag size, then by price
+      const bagSizeOptions = Object.values(bagSizeGroups).sort(
+        (a, b) => a.bagSize - b.bagSize || a.price - b.price
+      );
+
+      console.log(`${productType} bag size options:`, bagSizeOptions);
+
+      // Create a separate entry for each bag size option
+      bagSizeOptions.forEach((option) => {
+        const uniqueKey = option.uniqueKey;
+        grouped[uniqueKey] = {
+          productType,
+          originalProductType: productType, // Keep reference to original product type
+          bagSize: option.bagSize,
+          price: option.price,
+          displayName: `${formatProductType(productType)} - ${
+            option.displayName
+          }`,
+          shortDisplayName: option.displayName,
+          bags: option.bags,
+          totalAvailableWeight: option.totalWeight,
+          totalAvailableBags: option.totalBags,
+          // Single option since each entry represents one bag size/price combo
+          priceOptions: [
+            {
+              bagSize: option.bagSize,
+              price: option.price,
+              bags: option.bags,
+              totalWeight: option.totalWeight,
+              totalBags: option.totalBags,
+            },
+          ],
         };
       });
-      setSelectedProducts(initialSelections);
-    }
-  }, [groupedProducts]);
+    });
+
+    console.log("Final grouped products with all bag sizes:", grouped);
+    setGroupedProducts(grouped);
+  };
 
   // Fetch sales representatives
   const fetchSalesReps = async () => {
@@ -230,257 +694,130 @@ const Loading = () => {
     }
   };
 
-  // Process grouped products when bagged stocks change
-  useEffect(() => {
-    if (Object.keys(baggedStocks).length > 0) {
-      processGroupedProducts();
-    }
-  }, [baggedStocks]);
+  // Enhanced product selection handling for bag quantities (simplified for single option per row)
+  const handleProductChange = (uniqueKey, field, value) => {
+    console.log(`handleProductChange: ${uniqueKey}, ${field}, ${value}`);
 
-  // Fetch bagged stocks from the database
-  const fetchBaggedStocks = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const baggedStocksData = {};
-      const productTypes = [
-        "rice",
-        "hunuSahal",
-        "kadunuSahal",
-        "ricePolish",
-        "dahaiyya",
-        "flour",
-      ];
-
-      for (const productType of productTypes) {
-        const productCode = getProductTypeCode(productType);
-        const baggedStockQuery = query(
-          collection(
-            db,
-            `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`
-          ),
-          where("status", "==", "available"),
-          orderBy("createdAt", "desc")
-        );
-
-        try {
-          const querySnapshot = await getDocs(baggedStockQuery);
-          const bags = [];
-
-          querySnapshot.forEach((doc) => {
-            const data = doc.data();
-            bags.push({
-              id: doc.id,
-              ...data,
-              createdAt: data.createdAt?.toDate() || new Date(),
-              updatedAt: data.updatedAt?.toDate() || new Date(),
-            });
-          });
-
-          if (bags.length > 0) {
-            baggedStocksData[productType] = bags;
-          }
-        } catch (error) {
-          console.error(`Error fetching ${productType} bagged stocks:`, error);
-        }
-      }
-
-      setBaggedStocks(baggedStocksData);
-    } catch (error) {
-      console.error("Error fetching bagged stocks:", error);
-      setError(`Failed to load bagged stocks: ${error.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Get product type code for path
-  const getProductTypeCode = (productType) => {
-    const codeMap = {
-      rice: "rice",
-      hunuSahal: "hunu_sahal",
-      kadunuSahal: "kadunu_sahal",
-      ricePolish: "rice_polish",
-      dahaiyya: "dahaiyya",
-      flour: "flour",
-    };
-    return (
-      codeMap[productType] || productType.toLowerCase().replace(/\s+/g, "_")
-    );
-  };
-
-  // Process grouped products by type and price
-  const processGroupedProducts = () => {
-    const grouped = {};
-
-    Object.entries(baggedStocks).forEach(([productType, bags]) => {
-      // Group bags by recommended selling price
-      const priceGroups = {};
-
-      bags.forEach((bag) => {
-        const price = bag.recommendedSellingPrice || bag.pricePerKg || 0;
-        const priceKey = price.toString();
-
-        if (!priceGroups[priceKey]) {
-          priceGroups[priceKey] = {
-            price: price,
-            bags: [],
-            totalWeight: 0,
-            totalBags: 0,
-          };
-        }
-
-        priceGroups[priceKey].bags.push(bag);
-        priceGroups[priceKey].totalWeight += bag.weight || 0;
-        priceGroups[priceKey].totalBags += 1;
-      });
-
-      // Convert to array and sort by price
-      const priceOptions = Object.values(priceGroups).sort(
-        (a, b) => a.price - b.price
-      );
-
-      grouped[productType] = {
-        productType,
-        priceOptions,
-        totalAvailableWeight: bags.reduce(
-          (sum, bag) => sum + (bag.weight || 0),
-          0
-        ),
-        totalAvailableBags: bags.length,
-      };
-    });
-
-    setGroupedProducts(grouped);
-  };
-
-  // FIXED: Enhanced product selection handling
-  const handleProductChange = (productType, field, value) => {
     setSelectedProducts((prev) => {
       const updated = { ...prev };
 
-      if (!updated[productType]) {
-        updated[productType] = {
-          selectedPriceIndex: null,
-          quantity: "",
-          maxAvailable: 0,
+      if (!updated[uniqueKey]) {
+        updated[uniqueKey] = {
+          selectedPriceIndex: 0,
+          bagQuantity: "",
+          maxAvailableBags: 0,
+          maxAvailableWeight: 0,
         };
       }
 
-      if (field === "selectedPriceIndex") {
-        const priceIndex = parseInt(value);
-        const priceOption =
-          groupedProducts[productType]?.priceOptions[priceIndex];
-
-        updated[productType] = {
-          ...updated[productType],
-          selectedPriceIndex: priceIndex,
-          maxAvailable: priceOption?.totalWeight || 0,
-          // Don't reset quantity automatically - let user keep their input
-        };
-      } else if (field === "quantity") {
-        // Handle quantity input more carefully
-        const numValue = value === "" ? "" : Number(value);
-        updated[productType] = {
-          ...updated[productType],
-          quantity: numValue,
+      if (field === "bagQuantity") {
+        // Handle bag quantity input - keep as string for empty values, convert to number for validation
+        updated[uniqueKey] = {
+          ...updated[uniqueKey],
+          bagQuantity: value, // Keep the raw value (string)
         };
       }
 
+      console.log("Updated selected products:", updated);
       return updated;
     });
   };
 
-  // FIXED: Get max available quantity for a product
-  const getMaxAvailable = (productType) => {
-    const selection = selectedProducts[productType];
-    if (!selection || selection.selectedPriceIndex === null) {
-      const productData = groupedProducts[productType];
-      if (productData?.priceOptions.length === 1) {
-        return productData.priceOptions[0].totalWeight;
-      }
+  // Get max available bags for a product (simplified)
+  const getMaxAvailableBags = (uniqueKey) => {
+    const productData = groupedProducts[uniqueKey];
+    return productData?.totalAvailableBags || 0;
+  };
+
+  // Get bag size for selected option (simplified)
+  const getBagSize = (uniqueKey) => {
+    const productData = groupedProducts[uniqueKey];
+    return productData?.bagSize || 0;
+  };
+
+  // Get current price for a product (simplified)
+  const getCurrentPrice = (uniqueKey) => {
+    const productData = groupedProducts[uniqueKey];
+    return productData?.price || 0;
+  };
+
+  // Calculate total weight for a product (bags × kg per bag) - updated for unique keys
+  const calculateProductWeight = (uniqueKey) => {
+    const selection = selectedProducts[uniqueKey];
+    if (!selection || !selection.bagQuantity || selection.bagQuantity === "") {
       return 0;
     }
 
-    const priceOption =
-      groupedProducts[productType]?.priceOptions[selection.selectedPriceIndex];
-    return priceOption?.totalWeight || 0;
+    const bagSize = getBagSize(uniqueKey);
+    const bagQuantity = parseInt(selection.bagQuantity) || 0;
+
+    return bagQuantity * bagSize;
   };
 
-  // FIXED: Get current price for a product
-  const getCurrentPrice = (productType) => {
-    const selection = selectedProducts[productType];
-    const productData = groupedProducts[productType];
+  // Calculate total value for a product - updated for unique keys
+  const calculateProductTotal = (uniqueKey) => {
+    const totalWeight = calculateProductWeight(uniqueKey);
+    const price = getCurrentPrice(uniqueKey);
 
-    if (!productData) return 0;
-
-    if (productData.priceOptions.length === 1) {
-      return productData.priceOptions[0].price;
-    }
-
-    if (
-      selection?.selectedPriceIndex !== null &&
-      selection?.selectedPriceIndex !== undefined
-    ) {
-      return productData.priceOptions[selection.selectedPriceIndex]?.price || 0;
-    }
-
-    return 0;
+    return totalWeight * price;
   };
 
-  // Calculate total for a product
-  const calculateProductTotal = (productType) => {
-    const selection = selectedProducts[productType];
-    if (!selection || !selection.quantity) {
-      return 0;
-    }
+  // Validate bag quantity input - updated for unique keys
+  const isBagQuantityValid = (uniqueKey) => {
+    const selection = selectedProducts[uniqueKey];
+    if (!selection || !selection.bagQuantity || selection.bagQuantity === "")
+      return true;
 
-    const price = getCurrentPrice(productType);
-    const quantity = Number(selection.quantity) || 0;
+    const bagQuantity = parseInt(selection.bagQuantity);
+    const maxAvailableBags = getMaxAvailableBags(uniqueKey);
 
-    return quantity * price;
+    return (
+      bagQuantity > 0 && bagQuantity <= maxAvailableBags && !isNaN(bagQuantity)
+    );
   };
 
-  // Calculate grand total
+  // Calculate grand total - updated for unique keys
   const calculateGrandTotal = () => {
-    return Object.keys(groupedProducts).reduce((total, productType) => {
-      return total + calculateProductTotal(productType);
+    return Object.keys(groupedProducts).reduce((total, uniqueKey) => {
+      return total + calculateProductTotal(uniqueKey);
     }, 0);
   };
 
-  // Get total selected quantity
-  const getTotalSelectedQuantity = () => {
+  // Get total selected weight - updated for unique keys
+  const getTotalSelectedWeight = () => {
+    return Object.keys(groupedProducts).reduce((total, uniqueKey) => {
+      return total + calculateProductWeight(uniqueKey);
+    }, 0);
+  };
+
+  // Get total selected bags
+  const getTotalSelectedBags = () => {
     return Object.values(selectedProducts).reduce((total, selection) => {
-      return total + (Number(selection?.quantity) || 0);
+      const bagQuantity = parseInt(selection?.bagQuantity) || 0;
+      return total + bagQuantity;
     }, 0);
   };
 
-  // FIXED: Validate quantity input
-  const isQuantityValid = (productType) => {
-    const selection = selectedProducts[productType];
-    if (!selection || !selection.quantity) return true;
-
-    const quantity = Number(selection.quantity);
-    const maxAvailable = getMaxAvailable(productType);
-
-    return quantity > 0 && quantity <= maxAvailable;
-  };
-
-  // Handle loading creation
+  // Enhanced loading creation with bag allocation - updated for unique keys
   const createLoading = async () => {
     // Validate selections
     const validSelections = Object.entries(selectedProducts).filter(
-      ([productType, selection]) => {
-        const quantity = Number(selection?.quantity) || 0;
-        const hasPrice = getCurrentPrice(productType) > 0;
-        return quantity > 0 && hasPrice && isQuantityValid(productType);
+      ([uniqueKey, selection]) => {
+        const bagQuantity = parseInt(selection?.bagQuantity) || 0;
+        const hasPrice = getCurrentPrice(uniqueKey) > 0;
+        const isValid = isBagQuantityValid(uniqueKey);
+        console.log(
+          `Validating ${uniqueKey}: bagQuantity=${bagQuantity}, hasPrice=${hasPrice}, isValid=${isValid}`
+        );
+        return bagQuantity > 0 && hasPrice && isValid;
       }
     );
 
+    console.log("Valid selections:", validSelections);
+
     if (validSelections.length === 0) {
       toast.error(
-        "Please select at least one product with valid quantity and price"
+        "Please select at least one product with valid bag quantity and price"
       );
       return;
     }
@@ -498,6 +835,7 @@ const Loading = () => {
       const loadingItems = [];
       let totalValue = 0;
       let totalWeight = 0;
+      let totalBags = 0;
 
       // Get selected sales rep details
       const selectedSalesRepData = salesReps.find(
@@ -505,84 +843,73 @@ const Loading = () => {
       );
 
       // Process each selected product
-      for (const [productType, selection] of validSelections) {
-        const quantity = Number(selection.quantity);
-        const price = getCurrentPrice(productType);
-        const productCode = getProductTypeCode(productType);
+      for (const [uniqueKey, selection] of validSelections) {
+        const bagQuantity = parseInt(selection.bagQuantity);
+        const price = getCurrentPrice(uniqueKey);
+        const bagSize = getBagSize(uniqueKey);
+        const productData = groupedProducts[uniqueKey];
+        const originalProductType = productData.originalProductType;
 
-        // Get the appropriate price option
-        let priceOption;
-        if (groupedProducts[productType].priceOptions.length === 1) {
-          priceOption = groupedProducts[productType].priceOptions[0];
+        console.log(
+          `Processing ${uniqueKey}: ${bagQuantity} bags of ${bagSize}kg each at ${price}/kg`
+        );
+
+        // Determine product code and rice type
+        let productCode,
+          riceType = null;
+        if (originalProductType.startsWith("rice_")) {
+          riceType = originalProductType.replace("rice_", "");
+          productCode = getProductTypeCode("rice", riceType);
         } else {
-          priceOption =
-            groupedProducts[productType].priceOptions[
-              selection.selectedPriceIndex
-            ];
+          productCode = getProductTypeCode(originalProductType);
         }
 
-        let remainingQuantity = quantity;
+        // Get the bags from this specific option
+        const priceOption = productData.priceOptions[0]; // Always index 0 since each row has one option
+
+        let remainingBags = bagQuantity;
         const usedBags = [];
 
-        // Allocate bags for this quantity (FIFO - first in, first out)
+        // Allocate specific bags for this quantity (FIFO - first in, first out)
         for (const bag of priceOption.bags) {
-          if (remainingQuantity <= 0) break;
+          if (remainingBags <= 0) break;
 
-          const bagWeight = bag.weight || 0;
-          if (bagWeight <= remainingQuantity) {
-            // Use entire bag
-            usedBags.push({
-              bagId: bag.bagId,
-              bagDocId: bag.id,
-              weight: bagWeight,
-              pricePerKg: price,
-            });
-            remainingQuantity -= bagWeight;
+          // Use entire bag
+          usedBags.push({
+            bagId: bag.bagId,
+            bagDocId: bag.id,
+            weight: bag.weight || bagSize,
+            bagSize: bagSize,
+            pricePerKg: price,
+          });
+          remainingBags -= 1;
 
-            // Mark bag as loaded
-            const bagRef = doc(
-              db,
-              `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`,
-              bag.id
-            );
-            batch.update(bagRef, {
-              status: "loaded",
-              loadedAt: serverTimestamp(),
-              salesRepId: selectedSalesRep,
-              salesRepName: selectedSalesRepData?.name || "",
-              updatedAt: serverTimestamp(),
-            });
-          } else {
-            // Partial bag usage
-            usedBags.push({
-              bagId: bag.bagId,
-              bagDocId: bag.id,
-              weight: remainingQuantity,
-              pricePerKg: price,
-            });
-            remainingQuantity = 0;
-
-            // For partial usage, mark as loaded
-            const bagRef = doc(
-              db,
-              `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`,
-              bag.id
-            );
-            batch.update(bagRef, {
-              status: "loaded",
-              loadedAt: serverTimestamp(),
-              salesRepId: selectedSalesRep,
-              salesRepName: selectedSalesRepData?.name || "",
-              updatedAt: serverTimestamp(),
-            });
-          }
+          // Mark bag as loaded
+          const bagRef = doc(
+            db,
+            `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`,
+            bag.id
+          );
+          batch.update(bagRef, {
+            status: "loaded",
+            loadedAt: serverTimestamp(),
+            salesRepId: selectedSalesRep,
+            salesRepName: selectedSalesRepData?.name || "",
+            updatedAt: serverTimestamp(),
+          });
         }
 
-        const productTotal = quantity * price;
+        const productWeight = bagQuantity * bagSize;
+        const productTotal = productWeight * price;
+
         loadingItems.push({
-          productType,
+          productType: riceType ? "rice" : originalProductType,
           productCode,
-          quantity: quantity,
+          riceType: riceType,
+          displayName: productData.displayName,
+          bagQuantity: bagQuantity,
+          bagSize: bagSize,
+          totalWeight: productWeight,
           pricePerKg: price,
           totalValue: productTotal,
           bagsUsed: usedBags,
@@ -590,7 +917,8 @@ const Loading = () => {
         });
 
         totalValue += productTotal;
-        totalWeight += quantity;
+        totalWeight += productWeight;
+        totalBags += bagQuantity;
       }
 
       // Create loading record
@@ -605,6 +933,7 @@ const Loading = () => {
         items: loadingItems,
         totalWeight: totalWeight,
         totalValue: totalValue,
+        totalBags: totalBags,
         itemCount: loadingItems.length,
         salesRepId: selectedSalesRep,
         salesRepName: selectedSalesRepData?.name || "",
@@ -627,16 +956,13 @@ const Loading = () => {
       const stockUpdates = {};
 
       loadingItems.forEach((item) => {
-        stockUpdates[`${item.productType}_bagged_total`] = increment(
-          -item.quantity
-        );
-        stockUpdates[`${item.productType}_bags_count`] = increment(
-          -item.bagsCount
-        );
-        stockUpdates[`${item.productType}_loaded_total`] = increment(
-          item.quantity
-        );
-        stockUpdates[`${item.productType}_loaded_bags_count`] = increment(
+        const stockKey = item.riceType
+          ? `rice_${item.riceType}`
+          : item.productType;
+        stockUpdates[`${stockKey}_bagged_total`] = increment(-item.totalWeight);
+        stockUpdates[`${stockKey}_bags_count`] = increment(-item.bagsCount);
+        stockUpdates[`${stockKey}_loaded_total`] = increment(item.totalWeight);
+        stockUpdates[`${stockKey}_loaded_bags_count`] = increment(
           item.bagsCount
         );
       });
@@ -656,7 +982,9 @@ const Loading = () => {
       toast.success(
         `Loading created successfully for ${
           selectedSalesRepData?.name
-        }! Total value: ${formatCurrency(totalValue)} for ${totalWeight}kg`
+        }! Total: ${totalBags} bags (${formatNumber(
+          totalWeight
+        )}kg) worth ${formatCurrency(totalValue)}`
       );
     } catch (error) {
       console.error("Error creating loading:", error);
@@ -664,36 +992,6 @@ const Loading = () => {
     } finally {
       setIsProcessingLoading(false);
     }
-  };
-
-  // Format currency
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat("en-LK", {
-      style: "currency",
-      currency: "LKR",
-      minimumFractionDigits: 2,
-    })
-      .format(amount)
-      .replace("LKR", "Rs.");
-  };
-
-  // Format number safely
-  const formatNumber = (value, decimals = 2) => {
-    const num = Number(value || 0);
-    return isNaN(num) ? "0.00" : num.toFixed(decimals);
-  };
-
-  // Format product type for display
-  const formatProductType = (type) => {
-    const typeMap = {
-      rice: "Rice (Hal)",
-      hunuSahal: "Hunu Sahal",
-      kadunuSahal: "Kadunu Sahal",
-      ricePolish: "Rice Polish",
-      dahaiyya: "Dahaiyya",
-      flour: "Flour",
-    };
-    return typeMap[type] || type;
   };
 
   // Get today's day of week for route scheduling
@@ -704,6 +1002,52 @@ const Loading = () => {
     const monthName = today.toLocaleDateString("en-US", { month: "long" });
     return `${dayName}, ${monthName} ${dayNumber}`;
   };
+
+  // Fetch data when current business changes
+  useEffect(() => {
+    if (currentBusiness?.id && currentUser?.uid) {
+      Promise.all([fetchBaggedStocks(), fetchSalesReps(), fetchAllRoutes()]);
+    } else {
+      setLoading(false);
+    }
+  }, [currentBusiness?.id, currentUser?.uid]);
+
+  // Update today's route when sales rep is selected
+  useEffect(() => {
+    if (selectedSalesRep) {
+      fetchTodayRoute(selectedSalesRep);
+    } else {
+      setTodayRouteInfo(null);
+    }
+  }, [selectedSalesRep, allRoutes]);
+
+  // Initialize selected products when grouped products change
+  useEffect(() => {
+    if (Object.keys(groupedProducts).length > 0) {
+      const initialSelections = {};
+      Object.keys(groupedProducts).forEach((uniqueKey) => {
+        const productData = groupedProducts[uniqueKey];
+        initialSelections[uniqueKey] = {
+          selectedPriceIndex: 0, // Always 0 since each entry has only one option
+          bagQuantity: "",
+          maxAvailableBags: productData.totalAvailableBags,
+          maxAvailableWeight: productData.totalAvailableWeight,
+        };
+      });
+      setSelectedProducts(initialSelections);
+      console.log(
+        "Initialized selected products for all bag sizes:",
+        initialSelections
+      );
+    }
+  }, [groupedProducts]);
+
+  // Process grouped products when bagged stocks change
+  useEffect(() => {
+    if (Object.keys(baggedStocks).length > 0) {
+      processGroupedProducts();
+    }
+  }, [baggedStocks]);
 
   if (loading) {
     return (
@@ -736,10 +1080,33 @@ const Loading = () => {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Create Loading</h1>
-        <p className="text-gray-600 mt-1">
-          Select products and quantities to prepare for loading
-        </p>
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">Create Loading</h1>
+            <p className="text-gray-600 mt-1">
+              Select products and bag quantities to prepare for loading
+            </p>
+          </div>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => {
+                console.log("=== DEBUG INFO ===");
+                console.log("baggedStocks:", baggedStocks);
+                console.log("groupedProducts:", groupedProducts);
+                console.log("selectedProducts:", selectedProducts);
+              }}
+              className="px-3 py-2 text-xs bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200"
+            >
+              🐛 Debug
+            </button>
+            <button
+              onClick={() => fetchBaggedStocks()}
+              className="px-3 py-2 text-xs bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
+            >
+              🔄 Refresh
+            </button>
+          </div>
+        </div>
       </div>
 
       {!hasProducts ? (
@@ -766,6 +1133,35 @@ const Loading = () => {
         </div>
       ) : (
         <div className="space-y-6">
+          {/* Debug Info Panel */}
+          {Object.keys(baggedStocks).length > 0 && (
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+              <h3 className="text-sm font-medium text-gray-900 mb-2">
+                Available Product Summary ({Object.keys(baggedStocks).length}{" "}
+                types found)
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 text-xs">
+                {Object.entries(baggedStocks).map(([productType, bags]) => (
+                  <div
+                    key={productType}
+                    className="bg-white p-2 rounded border"
+                  >
+                    <div className="font-medium text-gray-900">
+                      {formatProductType(productType)}
+                    </div>
+                    <div className="text-gray-600">
+                      {bags.length} bags •{" "}
+                      {bags
+                        .reduce((sum, bag) => sum + (bag.weight || 0), 0)
+                        .toFixed(1)}{" "}
+                      kg
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Loading Information */}
           <div className="bg-white shadow-sm rounded-xl p-6 border border-gray-200">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
@@ -951,8 +1347,12 @@ const Loading = () => {
           <div className="bg-white shadow-sm rounded-xl overflow-hidden border border-gray-200">
             <div className="px-6 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-900">
-                Available Products
+                Available Products (Bags)
               </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Select number of bags to load. Each bag has a specific size and
+                weight.
+              </p>
             </div>
 
             <div className="overflow-x-auto">
@@ -963,13 +1363,16 @@ const Loading = () => {
                       Product
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Available Quantity
+                      Available Bags
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Price per kg
+                      Bag Size & Price
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Quantity to Load
+                      Bags to Load
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Total Weight
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Total Value
@@ -978,71 +1381,48 @@ const Loading = () => {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {Object.entries(groupedProducts).map(
-                    ([productType, productData]) => {
-                      const selection = selectedProducts[productType] || {};
-                      const maxAvailable = getMaxAvailable(productType);
-                      const currentPrice = getCurrentPrice(productType);
-                      const quantityError = !isQuantityValid(productType);
+                    ([uniqueKey, productData]) => {
+                      const selection = selectedProducts[uniqueKey] || {};
+                      const maxAvailableBags = getMaxAvailableBags(uniqueKey);
+                      const currentPrice = getCurrentPrice(uniqueKey);
+                      const bagSize = getBagSize(uniqueKey);
+                      const bagQuantityError = !isBagQuantityValid(uniqueKey);
+                      const selectedWeight = calculateProductWeight(uniqueKey);
 
                       return (
-                        <tr key={productType} className="hover:bg-gray-50">
+                        <tr key={uniqueKey} className="hover:bg-gray-50">
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center">
                               <div>
                                 <div className="text-sm font-medium text-gray-900">
-                                  {formatProductType(productType)}
+                                  {formatProductType(
+                                    productData.originalProductType
+                                  )}
                                 </div>
                                 <div className="text-sm text-gray-500">
-                                  {productData.totalAvailableBags} bags
-                                  available
+                                  {productData.shortDisplayName}
                                 </div>
                               </div>
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900 font-semibold">
-                              {formatNumber(productData.totalAvailableWeight)}{" "}
-                              kg
+                              {maxAvailableBags} bags
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {formatNumber(maxAvailableBags * bagSize)} kg
+                              available
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            {productData.priceOptions.length === 1 ? (
+                            <div className="space-y-1">
                               <div className="text-sm text-gray-900 font-semibold">
-                                {formatCurrency(
-                                  productData.priceOptions[0].price
-                                )}
+                                {bagSize}kg bags
                               </div>
-                            ) : (
-                              <div className="space-y-1">
-                                <select
-                                  value={selection.selectedPriceIndex ?? ""}
-                                  onChange={(e) =>
-                                    handleProductChange(
-                                      productType,
-                                      "selectedPriceIndex",
-                                      e.target.value
-                                    )
-                                  }
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                                >
-                                  <option value="">Select price</option>
-                                  {productData.priceOptions.map(
-                                    (option, index) => (
-                                      <option key={index} value={index}>
-                                        {formatCurrency(option.price)} (
-                                        {formatNumber(option.totalWeight)}kg
-                                        available)
-                                      </option>
-                                    )
-                                  )}
-                                </select>
-                                {currentPrice > 0 && (
-                                  <div className="text-xs text-green-600 font-medium">
-                                    Selected: {formatCurrency(currentPrice)}
-                                  </div>
-                                )}
+                              <div className="text-sm text-green-600 font-medium">
+                                {formatCurrency(currentPrice)}/kg
                               </div>
-                            )}
+                            </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="space-y-1">
@@ -1050,49 +1430,50 @@ const Loading = () => {
                                 <input
                                   type="number"
                                   min="0"
-                                  max={maxAvailable}
-                                  step="0.01"
-                                  value={selection.quantity || ""}
+                                  max={maxAvailableBags}
+                                  step="1"
+                                  value={selection.bagQuantity || ""}
                                   onChange={(e) =>
                                     handleProductChange(
-                                      productType,
-                                      "quantity",
+                                      uniqueKey,
+                                      "bagQuantity",
                                       e.target.value
                                     )
                                   }
-                                  disabled={currentPrice <= 0}
-                                  className={`w-24 px-2 py-1 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100 ${
-                                    quantityError
+                                  className={`w-20 px-2 py-1 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm ${
+                                    bagQuantityError
                                       ? "border-red-300 focus:ring-red-500 focus:border-red-500"
                                       : "border-gray-300"
                                   }`}
                                   placeholder="0"
                                 />
                                 <span className="text-xs text-gray-500">
-                                  kg
+                                  bags
                                 </span>
                               </div>
                               <div className="text-xs text-gray-500">
-                                Max: {formatNumber(maxAvailable)} kg
+                                Max: {maxAvailableBags} bags
                               </div>
-                              {quantityError && (
+                              {bagQuantityError && (
                                 <div className="text-xs text-red-600">
-                                  Exceeds available quantity
+                                  Exceeds available bags
                                 </div>
                               )}
-                              {currentPrice <= 0 &&
-                                productData.priceOptions.length > 1 && (
-                                  <div className="text-xs text-amber-600">
-                                    Select price first
-                                  </div>
-                                )}
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm font-semibold text-gray-900">
-                              {formatCurrency(
-                                calculateProductTotal(productType)
-                              )}
+                              {formatNumber(selectedWeight)} kg
+                            </div>
+                            {selection.bagQuantity && bagSize > 0 && (
+                              <div className="text-xs text-gray-500">
+                                {selection.bagQuantity} × {bagSize}kg bags
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-semibold text-gray-900">
+                              {formatCurrency(calculateProductTotal(uniqueKey))}
                             </div>
                           </td>
                         </tr>
@@ -1111,9 +1492,12 @@ const Loading = () => {
                 <h3 className="text-lg font-semibold text-gray-900">
                   Loading Summary
                 </h3>
-                <p className="text-sm text-gray-600 mt-1">
-                  Total Quantity: {formatNumber(getTotalSelectedQuantity())} kg
-                </p>
+                <div className="text-sm text-gray-600 mt-1 space-y-1">
+                  <p>Total Bags: {getTotalSelectedBags()} bags</p>
+                  <p>
+                    Total Weight: {formatNumber(getTotalSelectedWeight())} kg
+                  </p>
+                </div>
               </div>
               <div className="text-right">
                 <div className="text-2xl font-bold text-gray-900">
