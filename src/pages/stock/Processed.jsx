@@ -78,6 +78,7 @@ const ProcessedProducts = () => {
   }, [currentBusiness?.id, currentUser?.uid, sortField, sortDirection]);
 
   // Fetch all data
+  // Updated fetchAllData function with proper sequence
   const fetchAllData = async () => {
     if (!currentBusiness?.id || !currentUser?.uid) {
       setLoading(false);
@@ -88,12 +89,51 @@ const ProcessedProducts = () => {
     setError(null);
 
     try {
+      // Step 1: Fetch batches first since we need them for product type discovery
+      await fetchProcessedBatches();
+
+      // Step 2: Wait a moment for batches state to update, then fetch other data
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Step 3: Fetch other data in parallel
       await Promise.all([
         fetchStockTotals(),
         fetchBaggedInventory(),
-        fetchBaggedStocks(),
         fetchBagSizes(),
-        fetchProcessedBatches(),
+      ]);
+
+      // Step 4: Fetch bagged stocks last, after we have batches data
+      // This needs to be separate to ensure batches state is updated
+      setTimeout(() => {
+        fetchBaggedStocks();
+      }, 200);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      setError(`Failed to load data: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Alternative: More robust approach using state callback
+  const fetchAllDataRobust = async () => {
+    if (!currentBusiness?.id || !currentUser?.uid) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Fetch batches first
+      await fetchProcessedBatches();
+
+      // Fetch other static data
+      await Promise.all([
+        fetchStockTotals(),
+        fetchBaggedInventory(),
+        fetchBagSizes(),
       ]);
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -103,6 +143,161 @@ const ProcessedProducts = () => {
     }
   };
 
+  // Add a separate useEffect for bagged stocks that depends on batches
+  useEffect(() => {
+    if (batches.length > 0 && currentBusiness?.id && currentUser?.uid) {
+      fetchBaggedStocks();
+    }
+  }, [batches.length, currentBusiness?.id, currentUser?.uid]);
+  // Helper function to discover all product types from multiple sources
+  const discoverAllProductTypes = () => {
+    const productTypes = new Set();
+    const riceTypes = new Set();
+
+    // From batches
+    batches.forEach((batch) => {
+      if (batch.products) {
+        Object.keys(batch.products).forEach((productType) => {
+          productTypes.add(productType);
+          if (productType === "rice" && batch.originalPaddyType) {
+            riceTypes.add(batch.originalPaddyType);
+          }
+        });
+      }
+    });
+
+    // From stock totals (extract from keys)
+    if (stockTotals) {
+      Object.keys(stockTotals).forEach((key) => {
+        // Extract rice types from stock totals keys like "rice_samba", "rice_nadu_bagged_total"
+        if (
+          key.startsWith("rice_") &&
+          !key.includes("_bagged_") &&
+          !key.includes("_bags_")
+        ) {
+          const riceType = key.replace("rice_", "");
+          if (riceType && riceType !== "rice") {
+            riceTypes.add(riceType);
+          }
+        }
+
+        // Extract other product types
+        const nonRiceProducts = [
+          "hunuSahal",
+          "kadunuSahal",
+          "ricePolish",
+          "dahaiyya",
+          "flour",
+        ];
+        nonRiceProducts.forEach((product) => {
+          if (key === product || key.startsWith(`${product}_`)) {
+            productTypes.add(product);
+          }
+        });
+      });
+    }
+
+    // Add rice as a product type if we have rice types
+    if (riceTypes.size > 0) {
+      productTypes.add("rice");
+    }
+
+    return {
+      productTypes: Array.from(productTypes),
+      riceTypes: Array.from(riceTypes),
+    };
+  };
+
+  // Enhanced fetchBaggedStocks using the discovery helper
+  const fetchBaggedStocksWithDiscovery = async () => {
+    try {
+      console.log("Starting enhanced bagged stocks fetch with discovery...");
+
+      const { productTypes, riceTypes } = discoverAllProductTypes();
+      console.log("Discovered product types:", productTypes);
+      console.log("Discovered rice types:", riceTypes);
+
+      const baggedStocksData = {};
+
+      // Check each discovered product type
+      for (const productType of productTypes) {
+        if (productType === "rice") {
+          // Handle each rice type
+          for (const riceType of riceTypes) {
+            const productCode = getProductTypeCode("rice", riceType);
+            const displayName = `rice_${riceType}`;
+            const collectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`;
+
+            try {
+              const baggedStockQuery = query(
+                collection(db, collectionPath),
+                where("status", "==", "available"),
+                orderBy("createdAt", "desc")
+              );
+
+              const querySnapshot = await getDocs(baggedStockQuery);
+
+              if (!querySnapshot.empty) {
+                const bags = [];
+                querySnapshot.forEach((doc) => {
+                  const data = doc.data();
+                  bags.push({
+                    id: doc.id,
+                    ...data,
+                    createdAt: data.createdAt?.toDate() || new Date(),
+                    updatedAt: data.updatedAt?.toDate() || new Date(),
+                  });
+                });
+
+                console.log(`Found ${bags.length} bags for rice ${riceType}`);
+                baggedStocksData[displayName] = bags;
+              }
+            } catch (error) {
+              console.log(`No bags found for rice ${riceType}:`, error.message);
+            }
+          }
+        } else {
+          // Handle non-rice products
+          const productCode = getProductTypeCode(productType);
+          const collectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`;
+
+          try {
+            const baggedStockQuery = query(
+              collection(db, collectionPath),
+              where("status", "==", "available"),
+              orderBy("createdAt", "desc")
+            );
+
+            const querySnapshot = await getDocs(baggedStockQuery);
+
+            if (!querySnapshot.empty) {
+              const bags = [];
+              querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                bags.push({
+                  id: doc.id,
+                  ...data,
+                  createdAt: data.createdAt?.toDate() || new Date(),
+                  updatedAt: data.updatedAt?.toDate() || new Date(),
+                });
+              });
+
+              console.log(`Found ${bags.length} bags for ${productType}`);
+              baggedStocksData[productType] = bags;
+            }
+          } catch (error) {
+            console.log(`No bags found for ${productType}:`, error.message);
+          }
+        }
+      }
+
+      console.log("Final discovered baggedStocksData:", baggedStocksData);
+      setBaggedStocks(baggedStocksData);
+    } catch (error) {
+      console.error("Error in discovery-based fetch:", error);
+      toast.error(`Failed to load bagged stocks: ${error.message}`);
+    }
+  };
   // Fetch processed batches from the correct path
   const fetchProcessedBatches = async () => {
     try {
@@ -138,11 +333,132 @@ const ProcessedProducts = () => {
   };
 
   // Fetch bagged stocks from the new structure
+  // Enhanced fetchBaggedStocks function that dynamically discovers all product collections
   const fetchBaggedStocks = async () => {
     try {
+      console.log("Starting enhanced fetchBaggedStocks...");
       const baggedStocksData = {};
-      const productTypes = [
-        "rice",
+
+      // Step 1: Get all available product types from current batches
+      const availableProductTypes = new Set();
+      const availableRiceTypes = new Set();
+
+      // Extract product types from batches
+      batches.forEach((batch) => {
+        if (batch.products) {
+          Object.keys(batch.products).forEach((productType) => {
+            if (batch.products[productType] > 0) {
+              availableProductTypes.add(productType);
+
+              // If it's rice, also track the rice type
+              if (productType === "rice" && batch.originalPaddyType) {
+                availableRiceTypes.add(batch.originalPaddyType);
+              }
+            }
+          });
+        }
+      });
+
+      console.log(
+        "Available product types from batches:",
+        Array.from(availableProductTypes)
+      );
+      console.log(
+        "Available rice types from batches:",
+        Array.from(availableRiceTypes)
+      );
+
+      // Step 2: Check each discovered product type for bagged stocks
+      for (const productType of availableProductTypes) {
+        if (productType === "rice") {
+          // Handle rice types separately
+          for (const riceType of availableRiceTypes) {
+            const productCode = getProductTypeCode("rice", riceType);
+            const displayName = `rice_${riceType}`;
+            const collectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`;
+
+            console.log(`Checking rice ${riceType} at path: ${collectionPath}`);
+
+            try {
+              const baggedStockQuery = query(
+                collection(db, collectionPath),
+                where("status", "==", "available"),
+                orderBy("createdAt", "desc")
+              );
+
+              const querySnapshot = await getDocs(baggedStockQuery);
+              const bags = [];
+
+              querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                bags.push({
+                  id: doc.id,
+                  ...data,
+                  createdAt: data.createdAt?.toDate() || new Date(),
+                  updatedAt: data.updatedAt?.toDate() || new Date(),
+                });
+              });
+
+              console.log(
+                `Found ${bags.length} available bags for rice ${riceType}`
+              );
+
+              if (bags.length > 0) {
+                baggedStocksData[displayName] = bags;
+              }
+            } catch (error) {
+              console.log(
+                `No rice bags found for ${riceType} or access error:`,
+                error.message
+              );
+            }
+          }
+        } else {
+          // Handle non-rice products
+          const productCode = getProductTypeCode(productType);
+          const collectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`;
+
+          console.log(`Checking ${productType} at path: ${collectionPath}`);
+
+          try {
+            const baggedStockQuery = query(
+              collection(db, collectionPath),
+              where("status", "==", "available"),
+              orderBy("createdAt", "desc")
+            );
+
+            const querySnapshot = await getDocs(baggedStockQuery);
+            const bags = [];
+
+            querySnapshot.forEach((doc) => {
+              const data = doc.data();
+              bags.push({
+                id: doc.id,
+                ...data,
+                createdAt: data.createdAt?.toDate() || new Date(),
+                updatedAt: data.updatedAt?.toDate() || new Date(),
+              });
+            });
+
+            console.log(
+              `Found ${bags.length} available bags for ${productType}`
+            );
+
+            if (bags.length > 0) {
+              baggedStocksData[productType] = bags;
+            }
+          } catch (error) {
+            console.log(
+              `No bags found for ${productType} or access error:`,
+              error.message
+            );
+          }
+        }
+      }
+
+      // Step 3: Also check for any additional product types that might exist in Firebase
+      // but aren't in current batches (in case there are historical bags)
+      const additionalProductTypes = [
         "hunuSahal",
         "kadunuSahal",
         "ricePolish",
@@ -150,49 +466,228 @@ const ProcessedProducts = () => {
         "flour",
       ];
 
-      for (const productType of productTypes) {
-        const productCode = getProductTypeCode(productType);
-        const baggedStockQuery = query(
-          collection(
-            db,
-            `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`
-          ),
-          where("status", "==", "available"),
-          orderBy("createdAt", "desc")
-        );
+      for (const productType of additionalProductTypes) {
+        if (!availableProductTypes.has(productType)) {
+          const productCode = getProductTypeCode(productType);
+          const collectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`;
 
-        try {
-          const querySnapshot = await getDocs(baggedStockQuery);
-          const bags = [];
+          console.log(
+            `Checking additional product ${productType} at path: ${collectionPath}`
+          );
 
-          querySnapshot.forEach((doc) => {
-            const data = doc.data();
-            bags.push({
-              id: doc.id,
-              ...data,
-              createdAt: data.createdAt?.toDate() || new Date(),
-              updatedAt: data.updatedAt?.toDate() || new Date(),
+          try {
+            const baggedStockQuery = query(
+              collection(db, collectionPath),
+              where("status", "==", "available"),
+              orderBy("createdAt", "desc")
+            );
+
+            const querySnapshot = await getDocs(baggedStockQuery);
+            const bags = [];
+
+            querySnapshot.forEach((doc) => {
+              const data = doc.data();
+              bags.push({
+                id: doc.id,
+                ...data,
+                createdAt: data.createdAt?.toDate() || new Date(),
+                updatedAt: data.updatedAt?.toDate() || new Date(),
+              });
             });
-          });
 
-          if (bags.length > 0) {
-            baggedStocksData[productType] = bags;
+            console.log(
+              `Found ${bags.length} additional available bags for ${productType}`
+            );
+
+            if (bags.length > 0) {
+              baggedStocksData[productType] = bags;
+            }
+          } catch (error) {
+            console.log(
+              `No additional bags found for ${productType}:`,
+              error.message
+            );
           }
-        } catch (error) {
-          console.error(`Error fetching ${productType} bagged stocks:`, error);
         }
       }
 
+      console.log("Final baggedStocksData:", baggedStocksData);
       setBaggedStocks(baggedStocksData);
     } catch (error) {
       console.error("Error fetching bagged stocks:", error);
+      toast.error(`Failed to load bagged stocks: ${error.message}`);
+    }
+  };
+
+  // Alternative approach using Firestore collection listing (if you want to be more comprehensive)
+  const fetchBaggedStocksComprehensive = async () => {
+    try {
+      console.log("Starting comprehensive fetchBaggedStocks...");
+      const baggedStocksData = {};
+
+      // Get the base path for bagged stock
+      const basePath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock`;
+
+      // Since we can't list collections directly in the web SDK, we'll use a hybrid approach
+      // First, get product types from current batches
+      const knownProductTypes = new Set();
+      const knownRiceTypes = new Set();
+
+      batches.forEach((batch) => {
+        if (batch.products) {
+          Object.keys(batch.products).forEach((productType) => {
+            knownProductTypes.add(productType);
+            if (productType === "rice" && batch.originalPaddyType) {
+              knownRiceTypes.add(batch.originalPaddyType);
+            }
+          });
+        }
+      });
+
+      // Add common product types that might not be in current batches
+      const commonProductTypes = [
+        "hunuSahal",
+        "kadunuSahal",
+        "ricePolish",
+        "dahaiyya",
+        "flour",
+      ];
+      commonProductTypes.forEach((type) => knownProductTypes.add(type));
+
+      // Add common rice types
+      const commonRiceTypes = [
+        "samba",
+        "nadu",
+        "keeri_samba",
+        "red_rice",
+        "basmati",
+        "white_rice",
+      ];
+      commonRiceTypes.forEach((type) => knownRiceTypes.add(type));
+
+      // Check each product type
+      for (const productType of knownProductTypes) {
+        if (productType === "rice") {
+          // Handle rice types
+          for (const riceType of knownRiceTypes) {
+            const productCode = getProductTypeCode("rice", riceType);
+            const displayName = `rice_${riceType}`;
+
+            try {
+              const baggedStockQuery = query(
+                collection(db, `${basePath}/${productCode}`),
+                where("status", "==", "available"),
+                orderBy("createdAt", "desc")
+              );
+
+              const querySnapshot = await getDocs(baggedStockQuery);
+
+              if (!querySnapshot.empty) {
+                const bags = [];
+                querySnapshot.forEach((doc) => {
+                  const data = doc.data();
+                  bags.push({
+                    id: doc.id,
+                    ...data,
+                    createdAt: data.createdAt?.toDate() || new Date(),
+                    updatedAt: data.updatedAt?.toDate() || new Date(),
+                  });
+                });
+
+                console.log(`Found ${bags.length} bags for rice ${riceType}`);
+                baggedStocksData[displayName] = bags;
+              }
+            } catch (error) {
+              // Collection doesn't exist or no permission - this is normal
+              console.log(`No collection found for rice ${riceType}`);
+            }
+          }
+        } else {
+          // Handle non-rice products
+          const productCode = getProductTypeCode(productType);
+
+          try {
+            const baggedStockQuery = query(
+              collection(db, `${basePath}/${productCode}`),
+              where("status", "==", "available"),
+              orderBy("createdAt", "desc")
+            );
+
+            const querySnapshot = await getDocs(baggedStockQuery);
+
+            if (!querySnapshot.empty) {
+              const bags = [];
+              querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                bags.push({
+                  id: doc.id,
+                  ...data,
+                  createdAt: data.createdAt?.toDate() || new Date(),
+                  updatedAt: data.updatedAt?.toDate() || new Date(),
+                });
+              });
+
+              console.log(`Found ${bags.length} bags for ${productType}`);
+              baggedStocksData[productType] = bags;
+            }
+          } catch (error) {
+            // Collection doesn't exist or no permission - this is normal
+            console.log(`No collection found for ${productType}`);
+          }
+        }
+      }
+
+      console.log("Final comprehensive baggedStocksData:", baggedStocksData);
+      setBaggedStocks(baggedStocksData);
+    } catch (error) {
+      console.error("Error in comprehensive fetch:", error);
+      toast.error(`Failed to load bagged stocks: ${error.message}`);
+    }
+  };
+
+  const debugBaggedStocks = async () => {
+    try {
+      console.log("=== DEBUG: Checking all bagged stock collections ===");
+
+      const standardProductTypes = [
+        "hunuSahal",
+        "kadunuSahal",
+        "ricePolish",
+        "dahaiyya",
+        "flour",
+      ];
+
+      for (const productType of standardProductTypes) {
+        const productCode = getProductTypeCode(productType);
+        const collectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`;
+
+        console.log(`Checking collection: ${collectionPath}`);
+
+        try {
+          const querySnapshot = await getDocs(collection(db, collectionPath));
+
+          console.log(
+            `${productType} (${productCode}): ${querySnapshot.size} documents`
+          );
+
+          querySnapshot.forEach((doc) => {
+            console.log(`  - ${doc.id}:`, doc.data());
+          });
+        } catch (error) {
+          console.log(`  Error accessing ${productType}:`, error.message);
+        }
+      }
+    } catch (error) {
+      console.error("Debug error:", error);
     }
   };
 
   // Get product type code for path
-  const getProductTypeCode = (productType) => {
+  const getProductTypeCode = (productType, riceType = null) => {
     const codeMap = {
-      rice: "rice",
+      rice: riceType
+        ? `rice_${riceType.toLowerCase().replace(/\s+/g, "_")}`
+        : "rice",
       hunuSahal: "hunu_sahal",
       kadunuSahal: "kadunu_sahal",
       ricePolish: "rice_polish",
@@ -379,7 +874,27 @@ const ProcessedProducts = () => {
     setIsCreatingBags(true);
 
     try {
-      const productCode = getProductTypeCode(productType);
+      // Get product code with rice type consideration
+      let productCode, stockTotalKey, baggedTotalKey, bagCountKey;
+
+      if (productType === "rice") {
+        const riceType = batch.originalPaddyType;
+        productCode = getProductTypeCode(productType, riceType);
+        stockTotalKey = `rice_${riceType}`;
+        baggedTotalKey = `rice_${riceType}_bagged_total`;
+        bagCountKey = `rice_${riceType}_bags_count`;
+      } else {
+        productCode = getProductTypeCode(productType);
+        stockTotalKey = productType;
+        baggedTotalKey = `${productType}_bagged_total`;
+        bagCountKey = `${productType}_bags_count`;
+      }
+
+      console.log("Creating bags with productCode:", productCode); // Debug log
+      console.log(
+        "Collection path will be:",
+        `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/baggedStock/${productCode}`
+      ); // Debug log
 
       // Step 1: Check if documents exist and get current values
       const stockTotalsRef = doc(
@@ -402,74 +917,83 @@ const ProcessedProducts = () => {
       let newBaggedInventory;
 
       if (stockTotalsSnap.exists()) {
-        // Document exists - update existing values
         const currentData = stockTotalsSnap.data();
         newStockTotals = {
           ...currentData,
-          [productType]: (currentData[productType] || 0) - totalWeight,
-          [`${productType}_bagged_total`]:
-            (currentData[`${productType}_bagged_total`] || 0) + totalWeight,
-          [`${productType}_bags_count`]:
-            (currentData[`${productType}_bags_count`] || 0) + quantityNum,
+          [stockTotalKey]: (currentData[stockTotalKey] || 0) - totalWeight,
+          [baggedTotalKey]: (currentData[baggedTotalKey] || 0) + totalWeight,
+          [bagCountKey]: (currentData[bagCountKey] || 0) + quantityNum,
           lastUpdated: serverTimestamp(),
         };
       } else {
-        // Document doesn't exist - create with initial values
+        // Initialize with rice type specific fields
+        const riceTypes = [
+          ...new Set(batches.map((b) => b.originalPaddyType).filter(Boolean)),
+        ];
         newStockTotals = {
           businessId: currentBusiness.id,
           ownerId: currentUser.uid,
           createdAt: serverTimestamp(),
           lastUpdated: serverTimestamp(),
-          // Initialize all product types to 0
-          rice: 0,
+          // Standard product types
           hunuSahal: 0,
           kadunuSahal: 0,
           ricePolish: 0,
           dahaiyya: 0,
           flour: 0,
-          // Initialize bagged totals
-          rice_bagged_total: 0,
           hunuSahal_bagged_total: 0,
           kadunuSahal_bagged_total: 0,
           ricePolish_bagged_total: 0,
           dahaiyya_bagged_total: 0,
           flour_bagged_total: 0,
-          // Initialize bag counts
-          rice_bags_count: 0,
           hunuSahal_bags_count: 0,
           kadunuSahal_bags_count: 0,
           ricePolish_bags_count: 0,
           dahaiyya_bags_count: 0,
           flour_bags_count: 0,
-          // Set actual values for this operation
-          [productType]: -totalWeight,
-          [`${productType}_bagged_total`]: totalWeight,
-          [`${productType}_bags_count`]: quantityNum,
         };
+
+        // Add rice type specific fields
+        riceTypes.forEach((riceType) => {
+          newStockTotals[`rice_${riceType}`] = 0;
+          newStockTotals[`rice_${riceType}_bagged_total`] = 0;
+          newStockTotals[`rice_${riceType}_bags_count`] = 0;
+        });
+
+        // Set actual values for this operation
+        newStockTotals[stockTotalKey] = -totalWeight;
+        newStockTotals[baggedTotalKey] = totalWeight;
+        newStockTotals[bagCountKey] = quantityNum;
       }
 
       if (baggedInventorySnap.exists()) {
-        // Document exists - update existing values
         const currentData = baggedInventorySnap.data();
         newBaggedInventory = {
           ...currentData,
           lastUpdated: serverTimestamp(),
         };
 
-        // Handle nested bag size counting
-        if (!newBaggedInventory[productType]) {
-          newBaggedInventory[productType] = {};
+        // Handle nested bag size counting with rice type consideration
+        const inventoryKey =
+          productType === "rice"
+            ? `rice_${batch.originalPaddyType}`
+            : productType;
+        if (!newBaggedInventory[inventoryKey]) {
+          newBaggedInventory[inventoryKey] = {};
         }
-        newBaggedInventory[productType][bagSizeKey] =
-          (currentData[productType]?.[bagSizeKey] || 0) + quantityNum;
+        newBaggedInventory[inventoryKey][bagSizeKey] =
+          (currentData[inventoryKey]?.[bagSizeKey] || 0) + quantityNum;
       } else {
-        // Document doesn't exist - create with initial values
+        const inventoryKey =
+          productType === "rice"
+            ? `rice_${batch.originalPaddyType}`
+            : productType;
         newBaggedInventory = {
           businessId: currentBusiness.id,
           ownerId: currentUser.uid,
           lastUpdated: serverTimestamp(),
           createdAt: serverTimestamp(),
-          [productType]: {
+          [inventoryKey]: {
             [bagSizeKey]: quantityNum,
           },
         };
@@ -488,7 +1012,7 @@ const ProcessedProducts = () => {
           bagId
         );
 
-        batch_write.set(bagRef, {
+        const bagData = {
           bagId: bagId,
           productType: productType,
           productCode: productCode,
@@ -497,6 +1021,7 @@ const ProcessedProducts = () => {
           sourceBatchId: batchId,
           sourceBatchNumber: batch.batchNumber,
           originalPaddyType: batch.originalPaddyType,
+          riceType: productType === "rice" ? batch.originalPaddyType : null, // Store rice type explicitly
           pricePerKg: batch.pricingData?.adjustedRicePrice || 0,
           recommendedSellingPrice:
             batch.pricingData?.recommendedSellingPrice || 0,
@@ -512,12 +1037,15 @@ const ProcessedProducts = () => {
             originalQuantity: batch.originalQuantity,
             originalPricePerKg: batch.originalPricePerKg,
           },
-        });
+        };
 
+        console.log(`Creating bag ${bagId} with data:`, bagData); // Debug log
+
+        batch_write.set(bagRef, bagData);
         createdBagIds.push(bagId);
       }
 
-      // Update batch - reduce product quantity (this should exist)
+      // Update batch - reduce product quantity
       const batchRef = doc(
         db,
         `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/processedStock/stock`,
@@ -529,14 +1057,16 @@ const ProcessedProducts = () => {
         updatedAt: serverTimestamp(),
       });
 
-      // Set/update stock totals (use set to handle both create and update)
+      // Set/update stock totals
       batch_write.set(stockTotalsRef, newStockTotals);
 
-      // Set/update bagged inventory (use set to handle both create and update)
+      // Set/update bagged inventory
       batch_write.set(baggedInventoryRef, newBaggedInventory);
 
       // Execute all operations atomically
       await batch_write.commit();
+
+      console.log("Batch write completed successfully"); // Debug log
 
       // Refresh data
       await fetchAllData();
@@ -551,10 +1081,14 @@ const ProcessedProducts = () => {
       setShowBagCreationModal(false);
       setSelectedProductForBagging(null);
 
+      const riceTypeText =
+        productType === "rice" ? ` (${batch.originalPaddyType})` : "";
       toast.success(
-        `Successfully created ${quantityNum} bags of ${sizeKgNum}kg ${productType}. Bag IDs: ${createdBagIds
-          .slice(0, 3)
-          .join(", ")}${quantityNum > 3 ? "..." : ""}`
+        `Successfully created ${quantityNum} bags of ${sizeKgNum}kg ${formatProductType(
+          productType
+        )}${riceTypeText}. Bag IDs: ${createdBagIds.slice(0, 3).join(", ")}${
+          quantityNum > 3 ? "..." : ""
+        }`
       );
     } catch (error) {
       console.error("Error creating bags:", error);
@@ -564,6 +1098,14 @@ const ProcessedProducts = () => {
     }
   };
 
+  const DebugButton = () => (
+    <button
+      onClick={debugBaggedStocks}
+      className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg text-sm flex items-center transition-colors"
+    >
+      🐛 Debug Stocks
+    </button>
+  );
   // Sell individual bag
   const sellIndividualBag = (bag) => {
     setSelectedBag(bag);
@@ -597,7 +1139,21 @@ const ProcessedProducts = () => {
     const totalAmount = finalPrice * selectedBag.weight;
 
     try {
-      const productCode = getProductTypeCode(selectedBag.productType);
+      // Get product code with rice type consideration
+      let productCode, stockTotalKey, baggedTotalKey, bagCountKey;
+
+      if (selectedBag.productType === "rice") {
+        const riceType = selectedBag.riceType || selectedBag.originalPaddyType;
+        productCode = getProductTypeCode("rice", riceType);
+        stockTotalKey = `rice_${riceType}`;
+        baggedTotalKey = `rice_${riceType}_bagged_total`;
+        bagCountKey = `rice_${riceType}_bags_count`;
+      } else {
+        productCode = getProductTypeCode(selectedBag.productType);
+        stockTotalKey = selectedBag.productType;
+        baggedTotalKey = `${selectedBag.productType}_bagged_total`;
+        bagCountKey = `${selectedBag.productType}_bags_count`;
+      }
 
       // Step 1: Check if stock totals document exists
       const stockTotalsRef = doc(
@@ -611,50 +1167,53 @@ const ProcessedProducts = () => {
       let newStockTotals;
 
       if (stockTotalsSnap.exists()) {
-        // Document exists - update existing values
         const currentData = stockTotalsSnap.data();
         newStockTotals = {
           ...currentData,
-          [`${selectedBag.productType}_bagged_total`]: Math.max(
+          [baggedTotalKey]: Math.max(
             0,
-            (currentData[`${selectedBag.productType}_bagged_total`] || 0) -
-              selectedBag.weight
+            (currentData[baggedTotalKey] || 0) - selectedBag.weight
           ),
-          [`${selectedBag.productType}_bags_count`]: Math.max(
-            0,
-            (currentData[`${selectedBag.productType}_bags_count`] || 0) - 1
-          ),
+          [bagCountKey]: Math.max(0, (currentData[bagCountKey] || 0) - 1),
           lastUpdated: serverTimestamp(),
         };
       } else {
-        // Document doesn't exist - create with initial values (this shouldn't happen for sales, but handle it)
+        // Initialize if doesn't exist (shouldn't happen for sales, but handle gracefully)
+        const riceTypes = [
+          ...new Set(batches.map((b) => b.originalPaddyType).filter(Boolean)),
+        ];
         newStockTotals = {
           businessId: currentBusiness.id,
           ownerId: currentUser.uid,
           createdAt: serverTimestamp(),
           lastUpdated: serverTimestamp(),
-          rice: 0,
           hunuSahal: 0,
           kadunuSahal: 0,
           ricePolish: 0,
           dahaiyya: 0,
           flour: 0,
-          rice_bagged_total: 0,
           hunuSahal_bagged_total: 0,
           kadunuSahal_bagged_total: 0,
           ricePolish_bagged_total: 0,
           dahaiyya_bagged_total: 0,
           flour_bagged_total: 0,
-          rice_bags_count: 0,
           hunuSahal_bags_count: 0,
           kadunuSahal_bags_count: 0,
           ricePolish_bags_count: 0,
           dahaiyya_bags_count: 0,
           flour_bags_count: 0,
-          // This is unusual for a sale, but we'll handle it gracefully
-          [`${selectedBag.productType}_bagged_total`]: 0,
-          [`${selectedBag.productType}_bags_count`]: 0,
         };
+
+        // Add rice type specific fields
+        riceTypes.forEach((riceType) => {
+          newStockTotals[`rice_${riceType}`] = 0;
+          newStockTotals[`rice_${riceType}_bagged_total`] = 0;
+          newStockTotals[`rice_${riceType}_bags_count`] = 0;
+        });
+
+        // Set current operation values
+        newStockTotals[baggedTotalKey] = 0;
+        newStockTotals[bagCountKey] = 0;
       }
 
       // Step 3: Execute operations in batch
@@ -690,6 +1249,7 @@ const ProcessedProducts = () => {
         bagDocId: selectedBag.id,
         productType: selectedBag.productType,
         productCode: productCode,
+        riceType: selectedBag.riceType || selectedBag.originalPaddyType,
         weight: selectedBag.weight,
         bagSize: selectedBag.bagSize,
         sourceBatchId: selectedBag.sourceBatchId,
@@ -710,7 +1270,7 @@ const ProcessedProducts = () => {
         status: "completed",
       });
 
-      // Update stock totals using set (handles both create and update)
+      // Update stock totals
       batch_write.set(stockTotalsRef, newStockTotals);
 
       await batch_write.commit();
@@ -725,10 +1285,14 @@ const ProcessedProducts = () => {
         notes: "",
       });
 
+      const riceTypeText =
+        selectedBag.productType === "rice"
+          ? ` (${selectedBag.riceType || selectedBag.originalPaddyType})`
+          : "";
       toast.success(
         `Successfully sold ${selectedBag.weight}kg ${formatProductType(
           selectedBag.productType
-        )} bag for ${formatCurrency(totalAmount)}`
+        )}${riceTypeText} bag for ${formatCurrency(totalAmount)}`
       );
     } catch (error) {
       console.error("Error selling individual bag:", error);
@@ -954,7 +1518,11 @@ const ProcessedProducts = () => {
   };
 
   // Format product type for display
-  const formatProductType = (type) => {
+  const formatProductType = (type, riceType = null) => {
+    if (type === "rice" && riceType) {
+      return `Rice (${riceType})`;
+    }
+
     const typeMap = {
       rice: "Rice (Hal)",
       hunuSahal: "Hunu Sahal",
@@ -1032,15 +1600,22 @@ const ProcessedProducts = () => {
           Individual Bagged Stocks
         </h3>
 
-        {Object.entries(baggedStocks).map(([productType, bags]) => {
+        {Object.entries(baggedStocks).map(([productTypeKey, bags]) => {
           const groupedBags = groupBagsByBatchAndSize(bags);
 
+          // Determine display name for product type
+          let displayName;
+          if (productTypeKey.startsWith("rice_")) {
+            const riceType = productTypeKey.replace("rice_", "");
+            displayName = `Rice (${riceType})`;
+          } else {
+            displayName = formatProductType(productTypeKey);
+          }
+
           return (
-            <div key={productType} className="mb-4 last:mb-0">
+            <div key={productTypeKey} className="mb-4 last:mb-0">
               <div className="flex justify-between items-center mb-2">
-                <h4 className="font-medium text-gray-900">
-                  {formatProductType(productType)}
-                </h4>
+                <h4 className="font-medium text-gray-900">{displayName}</h4>
                 <span className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded">
                   {bags.length} bags (
                   {formatNumber(
@@ -1067,7 +1642,7 @@ const ProcessedProducts = () => {
                         Price/kg
                       </th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Paddy Type
+                        Rice Type
                       </th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Created
@@ -1089,7 +1664,7 @@ const ProcessedProducts = () => {
                           </span>
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
-                          {formatCurrency(group.pricePerKg)}
+                          {formatCurrency(group.recommendedSellingPrice)}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-600">
                           {group.originalPaddyType || "—"}
