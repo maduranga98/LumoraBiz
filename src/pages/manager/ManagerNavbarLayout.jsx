@@ -2,6 +2,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Link, useLocation, useNavigate, Outlet } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
+import logo from "../../assets/logo.png";
+
 import {
   LayoutDashboard,
   Package,
@@ -136,23 +138,17 @@ const ManagerNavbarLayout = ({ children }) => {
             <div className="flex items-center space-x-3 flex-shrink-0">
               <div className="flex items-center space-x-2">
                 <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-blue-600 rounded-lg flex items-center justify-center shadow-sm">
-                  <Shield className="h-4 w-4 text-white" />
+                  <img
+                    src={logo}
+                    alt="LumoraBiz Logo"
+                    className="w-full h-full object-contain"
+                  />
                 </div>
                 <div className="hidden sm:block">
                   <h1 className="text-base font-bold tracking-tight">
                     <span className="text-gray-800">Manager</span>
                     <span className="text-green-600"> Portal</span>
                   </h1>
-                </div>
-              </div>
-
-              {/* Manager Info */}
-              <div className="hidden md:flex items-center border-l border-gray-200 pl-3">
-                <div className="text-sm">
-                  <span className="text-gray-500">Logged in as: </span>
-                  <span className="font-medium text-gray-900">
-                    {userProfile?.name || currentUser?.displayName || "Manager"}
-                  </span>
                 </div>
               </div>
             </div>
