@@ -1,4 +1,4 @@
-import React, { useState, useEffect, createContext, useContext } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Users,
   UserPlus,
@@ -20,164 +20,36 @@ import {
   Loader2,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
-import { collection, getDocs, doc, getDoc } from "firebase/firestore";
-import { db } from "../../services/firebase";
-import { toast } from "react-hot-toast";
+import {
+  ManagerBusinessProvider,
+  useBusiness,
+} from "../../contexts/ManagerBusinessContext";
+import ManagerMarkAttendance from "../../components/manager/components/ManagerMarkAttendance";
 
-// Create Manager Business Context
-const ManagerBusinessContext = createContext();
+// Manager Component Wrapper - provides correct context to existing components
+const ManagerComponentWrapper = ({ children }) => {
+  const managerContext = useBusiness();
 
-export const useManagerBusiness = () => {
-  const context = useContext(ManagerBusinessContext);
-  if (!context) {
-    throw new Error(
-      "useManagerBusiness must be used within a ManagerBusinessProvider"
-    );
-  }
-  return context;
-};
+  // Create a context provider that existing components can use
+  const BusinessContext = React.createContext();
 
-// Also export as useBusiness for compatibility with existing components
-export const useBusiness = () => {
-  const context = useContext(ManagerBusinessContext);
-  if (!context) {
-    throw new Error(
-      "useBusiness must be used within a BusinessProvider (Manager)"
-    );
-  }
-  return context;
-};
-
-// Business Context Provider for Manager
-const ManagerBusinessProvider = ({ children }) => {
-  const { currentUser } = useAuth();
-  const [currentBusiness, setCurrentBusiness] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const loadManagerBusiness = async () => {
-      if (!currentUser || currentUser.role !== "manager") {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        // Manager data structure based on your example:
-        // currentUser has: businessId, ownerId, employeeId, permissions, etc.
-        const ownerId = currentUser.ownerId;
-        const businessId = currentUser.businessId;
-
-        console.log(
-          "Manager business context - ownerId:",
-          ownerId,
-          "businessId:",
-          businessId
-        );
-
-        if (ownerId && businessId) {
-          // Load the specific business this manager is assigned to
-          const businessDocRef = doc(
-            db,
-            "owners",
-            ownerId,
-            "businesses",
-            businessId
-          );
-          const businessDoc = await getDoc(businessDocRef);
-
-          if (businessDoc.exists()) {
-            const businessData = {
-              id: businessDoc.id,
-              ...businessDoc.data(),
-            };
-            setCurrentBusiness(businessData);
-            console.log("Manager business loaded:", businessData);
-          } else {
-            console.error("Business not found for manager");
-            toast.error("Business not found");
-          }
-        } else {
-          console.error("Manager missing businessId or ownerId");
-          toast.error(
-            "Manager profile incomplete - missing business assignment"
-          );
-        }
-      } catch (error) {
-        console.error("Error loading manager business:", error);
-        toast.error("Failed to load business data");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadManagerBusiness();
-  }, [currentUser]);
-
-  const value = {
-    currentBusiness,
-    loading,
-    getCurrentBusinessId: () => currentBusiness?.id || null,
-    // Add these for compatibility with existing components
-    userBusinesses: currentBusiness ? [currentBusiness] : [],
-    hasBusinesses: () => !!currentBusiness,
-    getBusinessById: (id) =>
-      currentBusiness?.id === id ? currentBusiness : null,
-  };
-
-  return (
-    <ManagerBusinessContext.Provider value={value}>
-      {loading ? (
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="text-center">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
-            <p className="text-gray-600">Loading business data...</p>
-            <p className="text-sm text-gray-500 mt-2">
-              Connecting to your assigned business...
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div>
-          {currentBusiness ? (
-            children
-          ) : (
-            <div className="min-h-screen flex items-center justify-center">
-              <div className="text-center max-w-md mx-auto p-6">
-                <Building2 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  No Business Assigned
-                </h3>
-                <p className="text-gray-600 mb-4">
-                  You are not currently assigned to any business. Please contact
-                  your administrator.
-                </p>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <p className="text-sm text-blue-700">
-                    <strong>Note:</strong> Managers need to be assigned to a
-                    specific business by the owner to access management
-                    features.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </ManagerBusinessContext.Provider>
+  // Mock the original useBusiness hook for components
+  const OriginalBusinessProvider = ({ children }) => (
+    <BusinessContext.Provider value={managerContext}>
+      {children}
+    </BusinessContext.Provider>
   );
+
+  return <OriginalBusinessProvider>{children}</OriginalBusinessProvider>;
 };
 
-// Import existing components (wrapped with error boundaries)
-const SafeComponentWrapper = ({
-  component: Component,
-  fallbackTitle,
-  ...props
-}) => {
+// Error boundary wrapper for components
+const SafeComponentWrapper = ({ children, fallbackTitle = "Component" }) => {
   const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
     setHasError(false);
-  }, [Component]);
+  }, [children]);
 
   if (hasError) {
     return (
@@ -203,7 +75,7 @@ const SafeComponentWrapper = ({
   }
 
   try {
-    return <Component {...props} />;
+    return <>{children}</>;
   } catch (error) {
     console.error(`Error in ${fallbackTitle}:`, error);
     setHasError(true);
@@ -211,7 +83,53 @@ const SafeComponentWrapper = ({
   }
 };
 
-// Manager Dashboard with Business Context
+// Manager Dashboard Loading State
+const ManagerDashboardLoading = () => {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-center">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+        <p className="text-gray-600">Loading business data...</p>
+        <p className="text-sm text-gray-500 mt-2">
+          Connecting to your assigned business...
+        </p>
+      </div>
+    </div>
+  );
+};
+
+// Manager Dashboard Error State
+const ManagerDashboardError = ({ error, currentUser }) => {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-center max-w-md mx-auto p-6">
+        <Building2 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+        <h3 className="text-xl font-semibold text-gray-900 mb-2">
+          Business Connection Issue
+        </h3>
+        <p className="text-gray-600 mb-4">
+          {error ||
+            "Unable to connect to your assigned business. Please contact your administrator."}
+        </p>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-sm text-blue-700">
+            <strong>Manager Access:</strong> You need to be assigned to a
+            specific business by the owner to access management features.
+          </p>
+        </div>
+        {currentUser && (
+          <div className="mt-4 text-xs text-gray-500">
+            <p>Manager: {currentUser.name}</p>
+            <p>Owner ID: {currentUser.ownerId}</p>
+            <p>Business ID: {currentUser.businessId}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Main Manager Dashboard Component
 const ManagerDashboard = () => {
   return (
     <ManagerBusinessProvider>
@@ -223,168 +141,175 @@ const ManagerDashboard = () => {
 const ManagerDashboardContent = () => {
   const [activeSection, setActiveSection] = useState("overview");
   const [activeSubSection, setActiveSubSection] = useState("");
+  const { currentBusiness, loading, error } = useBusiness();
+  const { currentUser } = useAuth();
 
-  // Lazy load components to handle import errors gracefully
-  const LazyAddEmployee = React.lazy(() =>
-    import("../../components/employees/AddEmployee").catch(() => ({
-      default: () => (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
-          <div className="text-center py-12">
-            <UserPlus className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              Add Employee
-            </h3>
-            <p className="text-gray-600">
-              Employee addition feature will be available here.
-            </p>
-          </div>
+  // Show loading state
+  if (loading) {
+    return <ManagerDashboardLoading />;
+  }
+
+  // Show error state
+  if (error || !currentBusiness) {
+    return <ManagerDashboardError error={error} currentUser={currentUser} />;
+  }
+
+  // Define component loaders with better error handling
+  const loadComponent = (importPath, fallbackComponent) => {
+    return React.lazy(async () => {
+      try {
+        const module = await import(importPath);
+        return module;
+      } catch (error) {
+        console.log(`Failed to load component from ${importPath}:`, error);
+        return {
+          default: fallbackComponent,
+        };
+      }
+    });
+  };
+
+  // Lazy load components with proper fallbacks
+  const LazyAddEmployee = loadComponent(
+    "../../components/employees/AddEmployee",
+    () => (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
+        <div className="text-center py-12">
+          <UserPlus className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">
+            Add Employee
+          </h3>
+          <p className="text-gray-600">
+            Employee addition feature will be available here.
+          </p>
         </div>
-      ),
-    }))
+      </div>
+    )
   );
 
-  const LazyEmployeeList = React.lazy(() =>
-    import("../../pages/employees/EmployeeList").catch(() => ({
-      default: () => (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
-          <div className="text-center py-12">
-            <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              Employee List
-            </h3>
-            <p className="text-gray-600">
-              Employee management feature will be available here.
-            </p>
-          </div>
+  const LazyEmployeeList = loadComponent(
+    "../../pages/employees/EmployeeList",
+    () => (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
+        <div className="text-center py-12">
+          <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">
+            Employee List
+          </h3>
+          <p className="text-gray-600">
+            Employee management feature will be available here.
+          </p>
         </div>
-      ),
-    }))
+      </div>
+    )
   );
 
-  const LazyMarkAttendance = React.lazy(() =>
-    import("../../pages/employees/MarkAttendence").catch(() => ({
-      default: () => (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
-          <div className="text-center py-12">
-            <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              Attendance
-            </h3>
-            <p className="text-gray-600">
-              Attendance management feature will be available here.
-            </p>
-          </div>
+  const LazyMarkAttendance = loadComponent("../../pages/manage", () => (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
+      <div className="text-center py-12">
+        <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+        <h3 className="text-xl font-semibold text-gray-900 mb-2">Attendance</h3>
+        <p className="text-gray-600">
+          Attendance management feature will be available here.
+        </p>
+      </div>
+    </div>
+  ));
+
+  const LazyStock = loadComponent("../../pages/home/pages/Stock", () => (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
+      <div className="text-center py-12">
+        <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+        <h3 className="text-xl font-semibold text-gray-900 mb-2">
+          Main Inventory
+        </h3>
+        <p className="text-gray-600">
+          Inventory management feature will be available here.
+        </p>
+      </div>
+    </div>
+  ));
+
+  const LazySubStockPage = loadComponent(
+    "../../pages/home/pages/SubStockPage",
+    () => (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
+        <div className="text-center py-12">
+          <Boxes className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">
+            Sub Inventory
+          </h3>
+          <p className="text-gray-600">
+            Sub inventory management feature will be available here.
+          </p>
         </div>
-      ),
-    }))
+      </div>
+    )
   );
 
-  const LazyStock = React.lazy(() =>
-    import("../../pages/home/pages/Stock").catch(() => ({
-      default: () => (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
-          <div className="text-center py-12">
-            <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              Main Inventory
-            </h3>
-            <p className="text-gray-600">
-              Inventory management feature will be available here.
-            </p>
-          </div>
+  const LazyLoading = loadComponent("../../components/loading/Loading", () => (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
+      <div className="text-center py-12">
+        <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+        <h3 className="text-xl font-semibold text-gray-900 mb-2">
+          Loading Operations
+        </h3>
+        <p className="text-gray-600">
+          Loading management feature will be available here.
+        </p>
+      </div>
+    </div>
+  ));
+
+  const LazyUnloading = loadComponent(
+    "../../components/loading/Unloading",
+    () => (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
+        <div className="text-center py-12">
+          <Boxes className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">
+            Unloading Operations
+          </h3>
+          <p className="text-gray-600">
+            Unloading management feature will be available here.
+          </p>
         </div>
-      ),
-    }))
+      </div>
+    )
   );
 
-  const LazySubStockPage = React.lazy(() =>
-    import("../../pages/home/pages/SubStockPage").catch(() => ({
-      default: () => (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
-          <div className="text-center py-12">
-            <Boxes className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              Sub Inventory
-            </h3>
-            <p className="text-gray-600">
-              Sub inventory management feature will be available here.
-            </p>
-          </div>
+  const LazyRoutesPlanning = loadComponent(
+    "../../pages/RoutesManager/RoutesPalning",
+    () => (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
+        <div className="text-center py-12">
+          <MapPin className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">
+            Route Planning
+          </h3>
+          <p className="text-gray-600">
+            Route planning feature will be available here.
+          </p>
         </div>
-      ),
-    }))
+      </div>
+    )
   );
 
-  const LazyLoading = React.lazy(() =>
-    import("../../components/loading/Loading").catch(() => ({
-      default: () => (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
-          <div className="text-center py-12">
-            <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              Loading Operations
-            </h3>
-            <p className="text-gray-600">
-              Loading management feature will be available here.
-            </p>
-          </div>
+  const LazyAssignRoutes = loadComponent(
+    "../../pages/RoutesManager/AssignRoutes",
+    () => (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
+        <div className="text-center py-12">
+          <Navigation className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">
+            Route Assignment
+          </h3>
+          <p className="text-gray-600">
+            Route assignment feature will be available here.
+          </p>
         </div>
-      ),
-    }))
-  );
-
-  const LazyUnloading = React.lazy(() =>
-    import("../../components/loading/Unloading").catch(() => ({
-      default: () => (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
-          <div className="text-center py-12">
-            <Boxes className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              Unloading Operations
-            </h3>
-            <p className="text-gray-600">
-              Unloading management feature will be available here.
-            </p>
-          </div>
-        </div>
-      ),
-    }))
-  );
-
-  const LazyRoutesPlanning = React.lazy(() =>
-    import("../../pages/RoutesManager/RoutesPalning").catch(() => ({
-      default: () => (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
-          <div className="text-center py-12">
-            <MapPin className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              Route Planning
-            </h3>
-            <p className="text-gray-600">
-              Route planning feature will be available here.
-            </p>
-          </div>
-        </div>
-      ),
-    }))
-  );
-
-  const LazyAssignRoutes = React.lazy(() =>
-    import("../../pages/RoutesManager/AssignRoutes").catch(() => ({
-      default: () => (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
-          <div className="text-center py-12">
-            <Navigation className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              Route Assignment
-            </h3>
-            <p className="text-gray-600">
-              Route assignment feature will be available here.
-            </p>
-          </div>
-        </div>
-      ),
-    }))
+      </div>
+    )
   );
 
   // Section configurations
@@ -396,7 +321,7 @@ const ManagerDashboardContent = () => {
         title: "Manage Employees",
       },
       attendance: {
-        component: LazyMarkAttendance,
+        component: ManagerMarkAttendance,
         title: "Attendance Management",
       },
       "assign-work": {
@@ -460,19 +385,44 @@ const ManagerDashboardContent = () => {
 
   const renderOverview = () => (
     <div className="space-y-8">
-      {/* Welcome Section */}
+      {/* Welcome Section with Business Info */}
       <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 rounded-2xl p-8 text-white">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold mb-2">Manager Dashboard</h1>
             <p className="text-blue-100 text-lg">
-              Complete overview of your rice mill operations
+              {currentBusiness?.businessName || "Rice Mill"} Operations
+              Management
+            </p>
+            <p className="text-blue-200 text-sm mt-1">
+              Complete overview of your assigned business operations
             </p>
           </div>
           <div className="hidden md:block">
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
               <BarChart3 className="w-12 h-12 text-white" />
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Business Info Card */}
+      <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
+        <div className="flex items-center space-x-4">
+          <div className="bg-blue-50 p-3 rounded-lg">
+            <Building2 className="w-8 h-8 text-blue-600" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">
+              {currentBusiness?.businessName || "Business Name"}
+            </h3>
+            <p className="text-gray-600">
+              {currentBusiness?.businessType || "Rice Mill"} • ID:{" "}
+              {currentBusiness?.id}
+            </p>
+            <p className="text-sm text-gray-500">
+              Manager Access • Full Operations Control
+            </p>
           </div>
         </div>
       </div>
@@ -539,7 +489,7 @@ const ManagerDashboardContent = () => {
         </div>
       </div>
 
-      {/* Management Sections - Same as before */}
+      {/* Management Sections */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Employee Management */}
         <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
@@ -801,7 +751,7 @@ const ManagerDashboardContent = () => {
             </span>
           </div>
 
-          {/* Component Content with Suspense */}
+          {/* Component Content with Suspense and Context Wrapper */}
           <React.Suspense
             fallback={
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
@@ -814,10 +764,11 @@ const ManagerDashboardContent = () => {
               </div>
             }
           >
-            <SafeComponentWrapper
-              component={Component}
-              fallbackTitle={sectionConfig.title}
-            />
+            <SafeComponentWrapper fallbackTitle={sectionConfig.title}>
+              <ManagerComponentWrapper>
+                <Component />
+              </ManagerComponentWrapper>
+            </SafeComponentWrapper>
           </React.Suspense>
         </div>
       );
