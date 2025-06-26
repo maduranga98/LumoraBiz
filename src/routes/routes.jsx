@@ -32,6 +32,7 @@ import ProtectedRoute from "../components/auth/ProtectedRoute";
 import { BusinessProvider } from "../contexts/BusinessContext";
 import NavbarLayout from "../components/Navbar";
 import ManagerNavbarLayout from "../pages/manager/ManagerNavbarLayout";
+import ManagerDashboard from "../pages/manager/ManagerDashboard";
 
 // Fallback components for admin/manager dashboards (if they don't exist)
 const AdminDashboard = React.lazy(() =>
@@ -45,19 +46,6 @@ const AdminDashboard = React.lazy(() =>
       </div>
     ),
   }))
-);
-
-const ManagerDashboard = () => (
-  <div className="p-8 text-center">
-    <h1 className="text-2xl font-bold text-gray-900 mb-4">Manager Dashboard</h1>
-    <p className="text-gray-600">Manager dashboard coming soon...</p>
-    <div className="mt-4 text-sm text-gray-500">
-      <p>
-        Welcome to the manager portal. Use the navigation above to access
-        different sections.
-      </p>
-    </div>
-  </div>
 );
 
 // Help page for managers
