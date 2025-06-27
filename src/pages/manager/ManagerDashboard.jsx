@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Users,
   Calendar,
@@ -35,28 +35,68 @@ import {
   Receipt,
   Car,
   Wheat,
+  Plus,
+  Move,
+  CheckSquare,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import {
   ManagerBusinessProvider,
   useBusiness,
 } from "../../contexts/ManagerBusinessContext";
-import ManagerEmployeeDirectory from "./components/managerEmployee/ManagerEmployeeDirectory";
-import ManagerAddingEmployees from "./components/managerEmployee/ManagerAddingEmployees";
+import { db } from "../../services/firebase";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  getDoc,
+  doc,
+} from "firebase/firestore";
 import ManagerMarkAttendance from "./components/managerEmployee/ManagerMarkAttendance";
 import { ManagerWorkAssigned } from "./components/managerEmployee/ManagerWorkedAssigned";
 import { ManagerAssigedWorkList } from "./components/managerEmployee/ManagerAssignedWrokList";
-import ManagerLeaveRequest from "./components/managerEmployee/ManagerLeaveRequest";
 import ManagerAdddingExpenses from "./components/Managerlogisitics/ManagerAddingExpenses";
-import ManagerLogisticsExpensesList from "./components/Managerlogisitics/ManagerLogisticsExpensesList";
-import ManagerSchedule from "./components/Managerlogisitics/ManagerLogisticsSchedule";
-import ManagerAddingPaddy from "./components/Inventory/ManagerAddingPaddy";
 import { ManagerAddingSubItems } from "./components/Inventory/ManagerAddingSubStock";
-import { SubStock } from "./components/Inventory/SubStock";
 import { SubStockItemMoves } from "./components/Inventory/SubStockItemMoves";
-import { SubStockHistory } from "./components/Inventory/SubStockHistory";
 
-// Simple component wrapper
+// Reusable Stat Card Component
+const StatCard = ({ title, value, subtitle, icon: Icon, color }) => {
+  const colorClasses = {
+    green: {
+      bg: "bg-green-50",
+      icon: "text-green-600",
+      value: "text-green-600",
+    },
+    blue: {
+      bg: "bg-blue-50",
+      icon: "text-blue-600",
+      value: "text-blue-600",
+    },
+    purple: {
+      bg: "bg-purple-50",
+      icon: "text-purple-600",
+      value: "text-purple-600",
+    },
+  };
+
+  const colors = colorClasses[color] || colorClasses.blue;
+
+  return (
+    <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-gray-600">{title}</p>
+          <p className={`text-3xl font-bold ${colors.value} mt-1`}>{value}</p>
+          <p className="text-sm text-gray-600 mt-1">{subtitle}</p>
+        </div>
+        <div className={`${colors.bg} p-3 rounded-lg`}>
+          <Icon className={`w-8 h-8 ${colors.icon}`} />
+        </div>
+      </div>
+    </div>
+  );
+};
 const ManagerComponentWrapper = ({ children }) => {
   const managerContext = useBusiness();
   const BusinessContext = React.createContext();
@@ -151,8 +191,157 @@ const ManagerDashboard = () => {
 
 const ManagerDashboardContent = () => {
   const [activeSection, setActiveSection] = useState("overview");
+  const [dashboardData, setDashboardData] = useState({
+    todaysAttendance: 0,
+    totalEmployees: 0,
+    totalTasks: 0,
+    loading: true,
+  });
   const { currentBusiness, loading, error } = useBusiness();
   const { currentUser } = useAuth();
+
+  // Fetch dashboard data
+  useEffect(() => {
+    if (currentBusiness?.id && currentUser) {
+      fetchDashboardData();
+    }
+  }, [currentBusiness?.id, currentUser]);
+
+  const fetchDashboardData = async () => {
+    try {
+      setDashboardData((prev) => ({ ...prev, loading: true }));
+
+      // Fetch employees count
+      const employeesCount = await fetchEmployeesCount();
+
+      // Fetch today's attendance
+      const attendanceCount = await fetchTodaysAttendance();
+
+      // Fetch total tasks
+      const tasksCount = await fetchTotalTasks();
+
+      setDashboardData({
+        todaysAttendance: attendanceCount,
+        totalEmployees: employeesCount,
+        totalTasks: tasksCount,
+        loading: false,
+      });
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+      setDashboardData((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
+  const fetchEmployeesCount = async () => {
+    try {
+      // Use Pattern 1: Same as fetchEmployees in MarkAttendance
+      const ownerDocRef = doc(db, "owners", currentUser.ownerId);
+      const businessDocRef = doc(
+        ownerDocRef,
+        "businesses",
+        currentUser.businessId
+      );
+      const employeesCollectionRef = collection(businessDocRef, "employees");
+
+      const querySnapshot = await getDocs(employeesCollectionRef);
+      console.log("Dashboard - Total employees found:", querySnapshot.size);
+      return querySnapshot.size;
+    } catch (error) {
+      console.error("Dashboard - Error fetching employees count:", error);
+      return 0;
+    }
+  };
+
+  const fetchTodaysAttendance = async () => {
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      console.log("Dashboard - Fetching attendance for date:", today);
+
+      // Use Pattern 2: Same as fetchTodayAttendance and markAttendance in MarkAttendance
+      const ownerDocRef = doc(db, "owners", currentUser.uid);
+      const businessDocRef = doc(ownerDocRef, "businesses", currentBusiness.id);
+      const employeesCollectionRef = collection(businessDocRef, "employees");
+
+      console.log("Dashboard - Using path:", {
+        uid: currentUser.uid,
+        businessId: currentBusiness.id,
+        path: `owners/${currentUser.uid}/businesses/${currentBusiness.id}/employees`,
+      });
+
+      const employeesSnapshot = await getDocs(employeesCollectionRef);
+      console.log(
+        "Dashboard - Employees to check attendance for:",
+        employeesSnapshot.size
+      );
+
+      let presentCount = 0;
+
+      for (const employeeDoc of employeesSnapshot.docs) {
+        const attendanceDocRef = doc(employeeDoc.ref, "attendance", today);
+
+        try {
+          const attendanceDoc = await getDoc(attendanceDocRef);
+
+          if (attendanceDoc.exists()) {
+            const attendanceData = attendanceDoc.data();
+            console.log(
+              `Dashboard - Employee ${employeeDoc.id} attendance:`,
+              attendanceData
+            );
+
+            if (attendanceData.status === "present") {
+              presentCount++;
+            }
+          }
+        } catch (empError) {
+          console.log(
+            `Dashboard - No attendance for employee ${employeeDoc.id}`
+          );
+        }
+      }
+
+      console.log("Dashboard - Total present count:", presentCount);
+      return presentCount;
+    } catch (error) {
+      console.error("Dashboard - Error fetching today's attendance:", error);
+      return 0;
+    }
+  };
+
+  const fetchTotalTasks = async () => {
+    try {
+      // Use Pattern 1: Same as ManagerAssigedWorkList component
+      const ownerDocRef = doc(db, "owners", currentUser.ownerId);
+      const businessDocRef = doc(
+        ownerDocRef,
+        "businesses",
+        currentUser.businessId
+      );
+      const temporaryWorksCollectionRef = collection(
+        businessDocRef,
+        "temporaryWorks"
+      );
+
+      const querySnapshot = await getDocs(temporaryWorksCollectionRef);
+      console.log("Dashboard - Total tasks found:", querySnapshot.size);
+      return querySnapshot.size;
+    } catch (error) {
+      console.error("Dashboard - Error fetching total tasks:", error);
+      return 0;
+    }
+  };
+
+  const getTodaysAttendanceCount = () => {
+    return dashboardData.loading ? "--" : dashboardData.todaysAttendance;
+  };
+
+  const getTotalEmployeesCount = () => {
+    return dashboardData.loading ? "--" : dashboardData.totalEmployees;
+  };
+
+  const getTotalTasksCount = () => {
+    return dashboardData.loading ? "--" : dashboardData.totalTasks;
+  };
 
   if (loading) {
     return <ManagerDashboardLoading />;
@@ -162,119 +351,55 @@ const ManagerDashboardContent = () => {
     return <ManagerDashboardError error={error} currentUser={currentUser} />;
   }
 
-  // Only essential manager features
+  // Essential manager features - only the specified ones
   const managerFeatures = [
     {
       id: "attendance",
       title: "Mark Attendance",
-      description: "Daily attendance tracking",
-      icon: Calendar,
+      description: "Daily attendance tracking for employees",
+      icon: CalendarCheck,
       color: "from-green-500 to-green-600",
       component: ManagerMarkAttendance,
     },
     {
-      id: "employee-list",
-      title: "Employee Directory",
-      description: "View employee information",
-      icon: Users,
-      color: "from-blue-500 to-blue-600",
-      component: ManagerEmployeeDirectory,
-    },
-    {
-      id: "employee-adding",
-      title: "Addding Employees",
-      description: "Add New Employee",
-      icon: Users,
-      color: "from-blue-500 to-blue-600",
-      component: ManagerAddingEmployees,
-    },
-    {
-      id: "worke-assign",
+      id: "work-assign",
       title: "Assign Work",
-      description: "Assign works to the Employee",
-      icon: Users,
+      description: "Assign tasks and work to employees",
+      icon: ClipboardList,
       color: "from-blue-500 to-blue-600",
       component: ManagerWorkAssigned,
     },
     {
-      id: "worke-assign-list",
+      id: "work-list",
       title: "Assigned Work List",
-      description: "Assign works List",
-      icon: Users,
-      color: "from-blue-500 to-blue-600",
+      description: "View and manage assigned work tasks",
+      icon: CheckSquare,
+      color: "from-purple-500 to-purple-600",
       component: ManagerAssigedWorkList,
     },
     {
-      id: "leave-request",
-      title: "Request Leave",
-      description: "Leaves request management",
-      icon: Users,
-      color: "from-blue-500 to-blue-600",
-      component: ManagerLeaveRequest,
-    },
-    {
-      id: "logisitics-expenses-add",
+      id: "vehicle-expenses",
       title: "Add Vehicle Expenses",
-      description: "Add the Vehicle Expenses",
-      icon: Truck,
-      color: "from-blue-500 to-blue-600",
+      description: "Record vehicle expenses and costs",
+      icon: Receipt,
+      color: "from-orange-500 to-orange-600",
       component: ManagerAdddingExpenses,
     },
     {
-      id: "logisitics-expenses-list",
-      title: "Vehicle Expenses List",
-      description: "Vehicle Expenses List",
-      icon: Truck,
-      color: "from-blue-500 to-blue-600",
-      component: ManagerLogisticsExpensesList,
-    },
-    {
-      id: "logisitics-schedules",
-      title: "Vehicle Schedules",
-      description: "Schedule maintenance",
-      icon: Truck,
-      color: "from-blue-500 to-blue-600",
-      component: ManagerSchedule,
-    },
-    {
-      id: "adding-paddy",
-      title: "Adding Paddy Stocks",
-      description: "Add a new Paddy Stock",
-      icon: Truck,
-      color: "from-blue-500 to-blue-600",
-      component: ManagerAddingPaddy,
-    },
-    {
-      id: "adding-sub-stock",
+      id: "add-materials",
       title: "Adding Material Stocks",
-      description: "Add a new Material Stock",
-      icon: Truck,
-      color: "from-blue-500 to-blue-600",
+      description: "Add new material items to inventory",
+      icon: Plus,
+      color: "from-teal-500 to-teal-600",
       component: ManagerAddingSubItems,
     },
     {
-      id: "sub-stock",
-      title: "Material Stocks",
-      description: "Material Stock",
-      icon: Truck,
-      color: "from-blue-500 to-blue-600",
-      component: SubStock,
-    },
-    {
-      id: "sub-stock-itemmove",
-      title: "Moveing of Material Stocks",
-      description: "Moving of Material Stock",
-      icon: Truck,
-      color: "from-blue-500 to-blue-600",
+      id: "move-materials",
+      title: "Move Material Stocks",
+      description: "Transfer materials between locations",
+      icon: Move,
+      color: "from-indigo-500 to-indigo-600",
       component: SubStockItemMoves,
-    },
-    {
-      id: "sub-stock-history",
-      title: "Material Stocks History",
-      description: "Material Stock History",
-      icon: Truck,
-      color: "from-blue-500 to-blue-600",
-      component: SubStockHistory,
     },
   ];
 
@@ -286,7 +411,7 @@ const ManagerDashboardContent = () => {
           <div>
             <h1 className="text-3xl font-bold mb-2">Manager Dashboard</h1>
             <p className="text-blue-100 text-lg">
-              {currentBusiness?.businessName || "Rice Mill"}
+              {currentBusiness?.businessName || "Rice Mill Management"}
             </p>
             <p className="text-blue-200 text-sm mt-1">
               Welcome, {currentUser?.displayName || currentUser?.name}
@@ -317,79 +442,62 @@ const ManagerDashboardContent = () => {
         </div>
       </div>
 
-      {/* Quick Stats */}
+      {/* Quick Stats with Real Data */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">
-                Today's Attendance
-              </p>
-              <p className="text-3xl font-bold text-green-600 mt-1">--</p>
-              <p className="text-sm text-gray-600 mt-1">Employees present</p>
-            </div>
-            <div className="bg-green-50 p-3 rounded-lg">
-              <CheckCircle className="w-8 h-8 text-green-600" />
-            </div>
-          </div>
-        </div>
+        <StatCard
+          title="Today's Attendance"
+          value={getTodaysAttendanceCount()}
+          subtitle="Employees present"
+          icon={CheckCircle}
+          color="green"
+        />
 
-        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">
-                Total Employees
-              </p>
-              <p className="text-3xl font-bold text-blue-600 mt-1">--</p>
-              <p className="text-sm text-gray-600 mt-1">Active employees</p>
-            </div>
-            <div className="bg-blue-50 p-3 rounded-lg">
-              <Users className="w-8 h-8 text-blue-600" />
-            </div>
-          </div>
-        </div>
+        <StatCard
+          title="Total Employees"
+          value={getTotalEmployeesCount()}
+          subtitle="Active employees"
+          icon={Users}
+          color="blue"
+        />
 
-        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Tasks Today</p>
-              <p className="text-3xl font-bold text-purple-600 mt-1">--</p>
-              <p className="text-sm text-gray-600 mt-1">Pending tasks</p>
-            </div>
-            <div className="bg-purple-50 p-3 rounded-lg">
-              <ClipboardList className="w-8 h-8 text-purple-600" />
-            </div>
-          </div>
-        </div>
+        <StatCard
+          title="Total Tasks Assigned"
+          value={getTotalTasksCount()}
+          subtitle="Work assignments"
+          icon={ClipboardList}
+          color="purple"
+        />
       </div>
 
-      {/* Manager Features */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {managerFeatures.map((feature) => (
-          <div
-            key={feature.id}
-            className="bg-white rounded-xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all duration-200"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <div
-                className={`bg-gradient-to-r ${feature.color} p-3 rounded-lg`}
-              >
-                <feature.icon className="w-6 h-6 text-white" />
-              </div>
-            </div>
-            <h3 className="text-lg font-bold text-gray-900 mb-2">
-              {feature.title}
-            </h3>
-            <p className="text-gray-600 text-sm mb-4">{feature.description}</p>
+      {/* Manager Quick Actions - Removed to avoid duplication */}
+      <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
+        <h3 className="text-lg font-bold text-gray-900 mb-6">Quick Actions</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {managerFeatures.map((feature) => (
             <button
+              key={feature.id}
               onClick={() => setActiveSection(feature.id)}
-              className="w-full flex items-center justify-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors group"
+              className="group p-4 rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-md transition-all duration-200 text-left"
             >
-              <span className="text-sm font-medium">Open</span>
-              <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
+              <div className="flex items-center space-x-3">
+                <div
+                  className={`bg-gradient-to-r ${feature.color} p-2 rounded-lg`}
+                >
+                  <feature.icon className="w-5 h-5 text-white" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-medium text-gray-900 group-hover:text-gray-700">
+                    {feature.title}
+                  </h4>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {feature.description}
+                  </p>
+                </div>
+                <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-gray-600 group-hover:translate-x-1 transition-all" />
+              </div>
             </button>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
       {/* Recent Activities */}
@@ -400,26 +508,37 @@ const ManagerDashboardContent = () => {
         <div className="space-y-4">
           {[
             {
-              action: "Attendance marked for today",
-              time: "2 hours ago",
-              color: "bg-green-500",
-            },
-            {
-              action: "Employee directory accessed",
-              time: "4 hours ago",
+              action: "Work assigned to employees",
+              time: "1 hour ago",
               color: "bg-blue-500",
+              icon: ClipboardList,
             },
             {
-              action: "Inventory checked",
+              action: "Material stock added",
+              time: "3 hours ago",
+              color: "bg-teal-500",
+              icon: Plus,
+            },
+            {
+              action: "Vehicle expense recorded",
+              time: "5 hours ago",
+              color: "bg-orange-500",
+              icon: Receipt,
+            },
+            {
+              action: "Attendance marked",
               time: "1 day ago",
-              color: "bg-purple-500",
+              color: "bg-green-500",
+              icon: CalendarCheck,
             },
           ].map((activity, index) => (
             <div
               key={index}
-              className="flex items-center space-x-4 p-4 rounded-lg bg-gray-50"
+              className="flex items-center space-x-4 p-4 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors"
             >
-              <div className={`w-3 h-3 rounded-full ${activity.color}`}></div>
+              <div className={`p-2 rounded-lg ${activity.color}`}>
+                <activity.icon className="w-4 h-4 text-white" />
+              </div>
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-900">
                   {activity.action}
@@ -450,12 +569,16 @@ const ManagerDashboardContent = () => {
           <div className="flex items-center space-x-2 text-sm text-gray-600">
             <button
               onClick={() => setActiveSection("overview")}
-              className="hover:text-gray-900 transition-colors"
+              className="hover:text-gray-900 transition-colors flex items-center space-x-1"
             >
-              Dashboard
+              <LayoutDashboard className="w-4 h-4" />
+              <span>Dashboard</span>
             </button>
             <span>/</span>
-            <span className="text-gray-900 font-medium">{feature.title}</span>
+            <span className="text-gray-900 font-medium flex items-center space-x-1">
+              <feature.icon className="w-4 h-4" />
+              <span>{feature.title}</span>
+            </span>
           </div>
 
           {/* Component */}
