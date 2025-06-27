@@ -30,9 +30,128 @@ import { Dashboard } from "../pages/home/pages/Dashboard";
 // Enhanced Private Route Components
 import ProtectedRoute from "../components/auth/ProtectedRoute";
 import { BusinessProvider } from "../contexts/BusinessContext";
+import { ManagerBusinessProvider } from "../contexts/ManagerBusinessContext";
 import NavbarLayout from "../components/Navbar";
 import ManagerNavbarLayout from "../pages/manager/ManagerNavbarLayout";
 import ManagerDashboard from "../pages/manager/ManagerDashboard";
+
+// Manager-specific components - Import your actual manager components
+import ManagerEmployeeDirectory from "../pages/manager/components/managerEmployee/ManagerEmployeeDirectory";
+import ManagerAddingEmployees from "../pages/manager/components/managerEmployee/ManagerAddingEmployees";
+import ManagerMarkAttendance from "../pages/manager/components/managerEmployee/ManagerMarkAttendance";
+import { ManagerWorkAssigned } from "../pages/manager/components/managerEmployee/ManagerWorkedAssigned";
+import { ManagerAssigedWorkList } from "../pages/manager/components/managerEmployee/ManagerAssignedWrokList";
+import ManagerLeaveRequest from "../pages/manager/components/managerEmployee/ManagerLeaveRequest";
+import ManagerAdddingExpenses from "../pages/manager/components/Managerlogisitics/ManagerAddingExpenses";
+import ManagerLogisticsExpensesList from "../pages/manager/components/Managerlogisitics/ManagerLogisticsExpensesList";
+import ManagerSchedule from "../pages/manager/components/Managerlogisitics/ManagerLogisticsSchedule";
+import ManagerAddingPaddy from "../pages/manager/components/Inventory/ManagerAddingPaddy";
+import { ManagerAddingSubItems } from "../pages/manager/components/Inventory/ManagerAddingSubStock";
+import { SubStock } from "../pages/manager/components/Inventory/SubStock";
+import { SubStockItemMoves } from "../pages/manager/components/Inventory/SubStockItemMoves";
+import { SubStockHistory } from "../pages/manager/components/Inventory/SubStockHistory";
+
+// Manager components - using existing components with manager context for basic pages
+const ManagerCustomers = () => <Customers />; // Customer management
+const ManagerReports = () => <Reports />; // Reports
+
+// Fallback components for missing manager pages
+const ManagerProductionScheduling = () => (
+  <div className="p-8">
+    <h1 className="text-2xl font-bold text-gray-900 mb-4">
+      Production Scheduling
+    </h1>
+    <p className="text-gray-600">
+      Production scheduling functionality coming soon...
+    </p>
+  </div>
+);
+
+const ManagerQualityControl = () => (
+  <div className="p-8">
+    <h1 className="text-2xl font-bold text-gray-900 mb-4">Quality Control</h1>
+    <p className="text-gray-600">Quality control management coming soon...</p>
+  </div>
+);
+
+const ManagerYieldAnalysis = () => (
+  <div className="p-8">
+    <h1 className="text-2xl font-bold text-gray-900 mb-4">Yield Analysis</h1>
+    <p className="text-gray-600">Yield analysis reports coming soon...</p>
+  </div>
+);
+
+const ManagerSuppliers = () => (
+  <div className="p-8">
+    <h1 className="text-2xl font-bold text-gray-900 mb-4">
+      Supplier Management
+    </h1>
+    <p className="text-gray-600">
+      Supplier management functionality coming soon...
+    </p>
+  </div>
+);
+
+const ManagerOrders = () => (
+  <div className="p-8">
+    <h1 className="text-2xl font-bold text-gray-900 mb-4">Order Management</h1>
+    <p className="text-gray-600">
+      Order management functionality coming soon...
+    </p>
+  </div>
+);
+
+const ManagerFinancialDashboard = () => (
+  <div className="p-8">
+    <h1 className="text-2xl font-bold text-gray-900 mb-4">
+      Financial Dashboard
+    </h1>
+    <p className="text-gray-600">Financial dashboard coming soon...</p>
+  </div>
+);
+
+const ManagerCashFlow = () => (
+  <div className="p-8">
+    <h1 className="text-2xl font-bold text-gray-900 mb-4">Cash Flow</h1>
+    <p className="text-gray-600">Cash flow tracking coming soon...</p>
+  </div>
+);
+
+const ManagerExpenses = () => (
+  <div className="p-8">
+    <h1 className="text-2xl font-bold text-gray-900 mb-4">
+      Expense Management
+    </h1>
+    <p className="text-gray-600">
+      Expense management functionality coming soon...
+    </p>
+  </div>
+);
+
+const ManagerBusinessAnalytics = () => (
+  <div className="p-8">
+    <h1 className="text-2xl font-bold text-gray-900 mb-4">
+      Business Analytics
+    </h1>
+    <p className="text-gray-600">Business analytics coming soon...</p>
+  </div>
+);
+
+const ManagerPerformanceReports = () => (
+  <div className="p-8">
+    <h1 className="text-2xl font-bold text-gray-900 mb-4">
+      Performance Reports
+    </h1>
+    <p className="text-gray-600">Performance reports coming soon...</p>
+  </div>
+);
+
+const ManagerCustomReports = () => (
+  <div className="p-8">
+    <h1 className="text-2xl font-bold text-gray-900 mb-4">Custom Reports</h1>
+    <p className="text-gray-600">Custom report builder coming soon...</p>
+  </div>
+);
 
 // Fallback components for admin/manager dashboards (if they don't exist)
 const AdminDashboard = React.lazy(() =>
@@ -121,7 +240,7 @@ export const routes = [
     ),
   },
 
-  // Manager routes - FIXED TO USE ManagerNavbarLayout
+  // Manager routes - ALL MANAGER ROUTES WITH CORRECT PATHS
   {
     path: "/manager/dashboard",
     element: (
@@ -132,13 +251,197 @@ export const routes = [
       </ProtectedRoute>
     ),
   },
+
+  // Employee Management Routes
   {
-    path: "/manager/inventory",
+    path: "/manager/employees/directory",
+    element: (
+      <ProtectedRoute managerOnly requirePermissions={["manage_employees"]}>
+        <ManagerBusinessProvider>
+          <ManagerNavbarLayout>
+            <ManagerEmployeeDirectory />
+          </ManagerNavbarLayout>
+        </ManagerBusinessProvider>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/manager/employees/add",
+    element: (
+      <ProtectedRoute managerOnly requirePermissions={["manage_employees"]}>
+        <ManagerBusinessProvider>
+          <ManagerNavbarLayout>
+            <ManagerAddingEmployees />
+          </ManagerNavbarLayout>
+        </ManagerBusinessProvider>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/manager/employees/attendance",
+    element: (
+      <ProtectedRoute managerOnly requirePermissions={["manage_employees"]}>
+        <ManagerBusinessProvider>
+          <ManagerNavbarLayout>
+            <ManagerMarkAttendance />
+          </ManagerNavbarLayout>
+        </ManagerBusinessProvider>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/manager/employees/work-assignment",
+    element: (
+      <ProtectedRoute managerOnly requirePermissions={["manage_employees"]}>
+        <ManagerBusinessProvider>
+          <ManagerNavbarLayout>
+            <ManagerWorkAssigned />
+          </ManagerNavbarLayout>
+        </ManagerBusinessProvider>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/manager/employees/work-list",
+    element: (
+      <ProtectedRoute managerOnly requirePermissions={["manage_employees"]}>
+        <ManagerBusinessProvider>
+          <ManagerNavbarLayout>
+            <ManagerAssigedWorkList />
+          </ManagerNavbarLayout>
+        </ManagerBusinessProvider>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/manager/employees/leave-requests",
+    element: (
+      <ProtectedRoute managerOnly requirePermissions={["manage_employees"]}>
+        <ManagerBusinessProvider>
+          <ManagerNavbarLayout>
+            <ManagerLeaveRequest />
+          </ManagerNavbarLayout>
+        </ManagerBusinessProvider>
+      </ProtectedRoute>
+    ),
+  },
+
+  // Inventory Management Routes
+  {
+    path: "/manager/inventory/main",
     element: (
       <ProtectedRoute managerOnly requirePermissions={["view_inventory"]}>
+        <ManagerBusinessProvider>
+          <ManagerNavbarLayout>
+            <ManagerAddingPaddy />
+          </ManagerNavbarLayout>
+        </ManagerBusinessProvider>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/manager/inventory/add-paddy",
+    element: (
+      <ProtectedRoute managerOnly requirePermissions={["view_inventory"]}>
+        <ManagerBusinessProvider>
+          <ManagerNavbarLayout>
+            <ManagerAddingPaddy />
+          </ManagerNavbarLayout>
+        </ManagerBusinessProvider>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/manager/inventory/sub-stock",
+    element: (
+      <ProtectedRoute managerOnly requirePermissions={["view_inventory"]}>
+        <ManagerBusinessProvider>
+          <ManagerNavbarLayout>
+            <SubStock />
+          </ManagerNavbarLayout>
+        </ManagerBusinessProvider>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/manager/inventory/add-sub-items",
+    element: (
+      <ProtectedRoute managerOnly requirePermissions={["view_inventory"]}>
+        <ManagerBusinessProvider>
+          <ManagerNavbarLayout>
+            <ManagerAddingSubItems />
+          </ManagerNavbarLayout>
+        </ManagerBusinessProvider>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/manager/inventory/sub-stock-moves",
+    element: (
+      <ProtectedRoute managerOnly requirePermissions={["view_inventory"]}>
+        <ManagerBusinessProvider>
+          <ManagerNavbarLayout>
+            <SubStockItemMoves />
+          </ManagerNavbarLayout>
+        </ManagerBusinessProvider>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/manager/inventory/sub-stock-history",
+    element: (
+      <ProtectedRoute managerOnly requirePermissions={["view_inventory"]}>
+        <ManagerBusinessProvider>
+          <ManagerNavbarLayout>
+            <SubStockHistory />
+          </ManagerNavbarLayout>
+        </ManagerBusinessProvider>
+      </ProtectedRoute>
+    ),
+  },
+
+  // Production Management Routes
+  {
+    path: "/manager/production/scheduling",
+    element: (
+      <ProtectedRoute managerOnly>
         <ManagerNavbarLayout>
-          <Stock />
+          <ManagerProductionScheduling />
         </ManagerNavbarLayout>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/manager/production/quality-control",
+    element: (
+      <ProtectedRoute managerOnly>
+        <ManagerNavbarLayout>
+          <ManagerQualityControl />
+        </ManagerNavbarLayout>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/manager/production/yield-analysis",
+    element: (
+      <ProtectedRoute managerOnly>
+        <ManagerNavbarLayout>
+          <ManagerYieldAnalysis />
+        </ManagerNavbarLayout>
+      </ProtectedRoute>
+    ),
+  },
+
+  // Customer & Supplier Management Routes
+  {
+    path: "/manager/suppliers",
+    element: (
+      <ProtectedRoute managerOnly>
+        <ManagerBusinessProvider>
+          <ManagerNavbarLayout>
+            <ManagerSuppliers />
+          </ManagerNavbarLayout>
+        </ManagerBusinessProvider>
       </ProtectedRoute>
     ),
   },
@@ -146,32 +449,172 @@ export const routes = [
     path: "/manager/customers",
     element: (
       <ProtectedRoute managerOnly requirePermissions={["view_customers"]}>
-        <ManagerNavbarLayout>
-          <Customers />
-        </ManagerNavbarLayout>
+        <ManagerBusinessProvider>
+          <ManagerNavbarLayout>
+            <ManagerCustomers />
+          </ManagerNavbarLayout>
+        </ManagerBusinessProvider>
       </ProtectedRoute>
     ),
   },
   {
-    path: "/manager/employees",
+    path: "/manager/orders",
     element: (
-      <ProtectedRoute managerOnly requirePermissions={["manage_employees"]}>
+      <ProtectedRoute managerOnly>
+        <ManagerBusinessProvider>
+          <ManagerNavbarLayout>
+            <ManagerOrders />
+          </ManagerNavbarLayout>
+        </ManagerBusinessProvider>
+      </ProtectedRoute>
+    ),
+  },
+
+  // Logistics & Equipment Routes
+  {
+    path: "/manager/logistics/vehicles",
+    element: (
+      <ProtectedRoute managerOnly>
+        <ManagerBusinessProvider>
+          <ManagerNavbarLayout>
+            <ManagerLogisticsExpensesList />
+          </ManagerNavbarLayout>
+        </ManagerBusinessProvider>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/manager/logistics/add-expenses",
+    element: (
+      <ProtectedRoute managerOnly>
+        <ManagerBusinessProvider>
+          <ManagerNavbarLayout>
+            <ManagerAdddingExpenses />
+          </ManagerNavbarLayout>
+        </ManagerBusinessProvider>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/manager/logistics/expenses-list",
+    element: (
+      <ProtectedRoute managerOnly>
+        <ManagerBusinessProvider>
+          <ManagerNavbarLayout>
+            <ManagerLogisticsExpensesList />
+          </ManagerNavbarLayout>
+        </ManagerBusinessProvider>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/manager/logistics/maintenance",
+    element: (
+      <ProtectedRoute managerOnly>
+        <ManagerBusinessProvider>
+          <ManagerNavbarLayout>
+            <ManagerSchedule />
+          </ManagerNavbarLayout>
+        </ManagerBusinessProvider>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/manager/logistics/scheduling",
+    element: (
+      <ProtectedRoute managerOnly>
+        <ManagerBusinessProvider>
+          <ManagerNavbarLayout>
+            <ManagerSchedule />
+          </ManagerNavbarLayout>
+        </ManagerBusinessProvider>
+      </ProtectedRoute>
+    ),
+  },
+
+  // Financial Management Routes
+  {
+    path: "/manager/financial/dashboard",
+    element: (
+      <ProtectedRoute managerOnly>
         <ManagerNavbarLayout>
-          <Employees />
+          <ManagerFinancialDashboard />
         </ManagerNavbarLayout>
       </ProtectedRoute>
     ),
   },
   {
-    path: "/manager/reports",
+    path: "/manager/financial/cash-flow",
+    element: (
+      <ProtectedRoute managerOnly>
+        <ManagerNavbarLayout>
+          <ManagerCashFlow />
+        </ManagerNavbarLayout>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/manager/financial/expenses",
+    element: (
+      <ProtectedRoute managerOnly>
+        <ManagerNavbarLayout>
+          <ManagerExpenses />
+        </ManagerNavbarLayout>
+      </ProtectedRoute>
+    ),
+  },
+
+  // Analytics & Reports Routes
+  {
+    path: "/manager/reports/business-analytics",
     element: (
       <ProtectedRoute managerOnly requirePermissions={["view_reports"]}>
         <ManagerNavbarLayout>
-          <Reports />
+          <ManagerBusinessAnalytics />
         </ManagerNavbarLayout>
       </ProtectedRoute>
     ),
   },
+  {
+    path: "/manager/reports/performance",
+    element: (
+      <ProtectedRoute managerOnly requirePermissions={["view_reports"]}>
+        <ManagerNavbarLayout>
+          <ManagerPerformanceReports />
+        </ManagerNavbarLayout>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/manager/reports/custom",
+    element: (
+      <ProtectedRoute managerOnly requirePermissions={["view_reports"]}>
+        <ManagerNavbarLayout>
+          <ManagerCustomReports />
+        </ManagerNavbarLayout>
+      </ProtectedRoute>
+    ),
+  },
+
+  // Legacy manager routes (for backward compatibility)
+  {
+    path: "/manager/inventory",
+    element: <Navigate to="/manager/inventory/main" replace />,
+  },
+  {
+    path: "/manager/employees",
+    element: <Navigate to="/manager/employees/directory" replace />,
+  },
+  {
+    path: "/manager/logistics",
+    element: <Navigate to="/manager/logistics/vehicles" replace />,
+  },
+  {
+    path: "/manager/reports",
+    element: <Navigate to="/manager/reports/business-analytics" replace />,
+  },
+
+  // Help route
   {
     path: "/manager/help",
     element: (
@@ -182,6 +625,8 @@ export const routes = [
       </ProtectedRoute>
     ),
   },
+
+  // Manager fallback
   {
     path: "/manager/*",
     element: (
@@ -328,7 +773,7 @@ export const routes = [
 // Export individual route arrays for advanced usage (optional)
 export const publicRoutes = routes.slice(0, 4);
 export const adminRoutes = routes.slice(4, 7);
-export const managerRoutes = routes.slice(7, 13); // Updated slice to include new manager routes
-export const ownerRoutes = routes.slice(14, 16); // Updated slice indices
+export const managerRoutes = routes.slice(7, 32); // Updated to include all manager routes
+export const ownerRoutes = routes.slice(33, 35); // Updated slice indices
 
 export default routes;

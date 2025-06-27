@@ -28,6 +28,14 @@ import {
   ClipboardList,
   TrendingUp,
   PieChart,
+  UserPlus,
+  Clock,
+  CheckSquare,
+  Plus,
+  List,
+  Move,
+  History,
+  Receipt,
 } from "lucide-react";
 
 // Navigation Item Component
@@ -132,7 +140,7 @@ const ManagerNavbarLayout = ({ children }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState(null);
 
-  // Enhanced manager navigation structure with dropdowns
+  // Enhanced manager navigation structure with your actual components
   const navigationStructure = {
     dashboard: {
       to: "/manager/dashboard",
@@ -152,9 +160,14 @@ const ManagerNavbarLayout = ({ children }) => {
           icon: <Users className="h-4 w-4" />,
         },
         {
+          to: "/manager/employees/add",
+          label: "Add Employee",
+          icon: <UserPlus className="h-4 w-4" />,
+        },
+        {
           to: "/manager/employees/attendance",
-          label: "Attendance",
-          icon: <Calendar className="h-4 w-4" />,
+          label: "Mark Attendance",
+          icon: <Clock className="h-4 w-4" />,
         },
         {
           to: "/manager/employees/work-assignment",
@@ -162,9 +175,14 @@ const ManagerNavbarLayout = ({ children }) => {
           icon: <ClipboardList className="h-4 w-4" />,
         },
         {
-          to: "/manager/employees/payroll",
-          label: "Payroll Management",
-          icon: <DollarSign className="h-4 w-4" />,
+          to: "/manager/employees/work-list",
+          label: "Assigned Work List",
+          icon: <CheckSquare className="h-4 w-4" />,
+        },
+        {
+          to: "/manager/employees/leave-requests",
+          label: "Leave Requests",
+          icon: <Calendar className="h-4 w-4" />,
         },
       ],
     },
@@ -176,77 +194,34 @@ const ManagerNavbarLayout = ({ children }) => {
       hasDropdown: true,
       items: [
         {
-          to: "/manager/inventory/stock",
-          label: "Stock Management",
+          to: "/manager/inventory/main",
+          label: "Main Inventory",
           icon: <Package className="h-4 w-4" />,
         },
         {
-          to: "/manager/inventory/raw-materials",
-          label: "Raw Materials",
-          icon: <Package className="h-4 w-4" />,
+          to: "/manager/inventory/add-paddy",
+          label: "Add Paddy Stock",
+          icon: <Plus className="h-4 w-4" />,
         },
         {
-          to: "/manager/inventory/processed-goods",
-          label: "Processed Goods",
-          icon: <Package className="h-4 w-4" />,
+          to: "/manager/inventory/sub-stock",
+          label: "Material Stock",
+          icon: <List className="h-4 w-4" />,
         },
         {
-          to: "/manager/inventory/alerts",
-          label: "Stock Alerts",
-          icon: <Package className="h-4 w-4" />,
-        },
-      ],
-    },
-
-    // Production Management with dropdown
-    production: {
-      label: "Production",
-      icon: <Factory className="h-4 w-4" />,
-      hasDropdown: true,
-      items: [
-        {
-          to: "/manager/production/tracking",
-          label: "Production Tracking",
-          icon: <Factory className="h-4 w-4" />,
+          to: "/manager/inventory/add-sub-items",
+          label: "Add Material Items",
+          icon: <Plus className="h-4 w-4" />,
         },
         {
-          to: "/manager/production/scheduling",
-          label: "Production Schedule",
-          icon: <Calendar className="h-4 w-4" />,
+          to: "/manager/inventory/sub-stock-moves",
+          label: "Stock Movements",
+          icon: <Move className="h-4 w-4" />,
         },
         {
-          to: "/manager/production/quality-control",
-          label: "Quality Control",
-          icon: <Shield className="h-4 w-4" />,
-        },
-        {
-          to: "/manager/production/yield-analysis",
-          label: "Yield Analysis",
-          icon: <BarChart3 className="h-4 w-4" />,
-        },
-      ],
-    },
-
-    // Customer & Supplier Management
-    relationships: {
-      label: "Relations",
-      icon: <Briefcase className="h-4 w-4" />,
-      hasDropdown: true,
-      items: [
-        {
-          to: "/manager/suppliers",
-          label: "Supplier Management",
-          icon: <Briefcase className="h-4 w-4" />,
-        },
-        {
-          to: "/manager/customers",
-          label: "Customer Management",
-          icon: <ShoppingCart className="h-4 w-4" />,
-        },
-        {
-          to: "/manager/orders",
-          label: "Order Management",
-          icon: <FileText className="h-4 w-4" />,
+          to: "/manager/inventory/sub-stock-history",
+          label: "Stock History",
+          icon: <History className="h-4 w-4" />,
         },
       ],
     },
@@ -263,6 +238,16 @@ const ManagerNavbarLayout = ({ children }) => {
           icon: <Truck className="h-4 w-4" />,
         },
         {
+          to: "/manager/logistics/add-expenses",
+          label: "Add Vehicle Expenses",
+          icon: <Plus className="h-4 w-4" />,
+        },
+        {
+          to: "/manager/logistics/expenses-list",
+          label: "Expenses List",
+          icon: <Receipt className="h-4 w-4" />,
+        },
+        {
           to: "/manager/logistics/maintenance",
           label: "Equipment Maintenance",
           icon: <Wrench className="h-4 w-4" />,
@@ -271,54 +256,6 @@ const ManagerNavbarLayout = ({ children }) => {
           to: "/manager/logistics/scheduling",
           label: "Delivery Scheduling",
           icon: <Calendar className="h-4 w-4" />,
-        },
-      ],
-    },
-
-    // Financial Management
-    financial: {
-      label: "Financial",
-      icon: <DollarSign className="h-4 w-4" />,
-      hasDropdown: true,
-      items: [
-        {
-          to: "/manager/financial/dashboard",
-          label: "Financial Dashboard",
-          icon: <DollarSign className="h-4 w-4" />,
-        },
-        {
-          to: "/manager/financial/cash-flow",
-          label: "Cash Flow",
-          icon: <TrendingUp className="h-4 w-4" />,
-        },
-        {
-          to: "/manager/financial/expenses",
-          label: "Expense Management",
-          icon: <FileText className="h-4 w-4" />,
-        },
-      ],
-    },
-
-    // Analytics & Reports
-    reports: {
-      label: "Reports",
-      icon: <BarChart3 className="h-4 w-4" />,
-      hasDropdown: true,
-      items: [
-        {
-          to: "/manager/reports/business-analytics",
-          label: "Business Analytics",
-          icon: <PieChart className="h-4 w-4" />,
-        },
-        {
-          to: "/manager/reports/performance",
-          label: "Performance Reports",
-          icon: <BarChart3 className="h-4 w-4" />,
-        },
-        {
-          to: "/manager/reports/custom",
-          label: "Custom Reports",
-          icon: <FileText className="h-4 w-4" />,
         },
       ],
     },
@@ -343,39 +280,37 @@ const ManagerNavbarLayout = ({ children }) => {
     setActiveDropdown(activeDropdown === key ? null : key);
   };
 
-  // Check if current path matches any dropdown item
+  // Check if any item in dropdown is active
   const isDropdownActive = (items) => {
-    return items?.some((item) => path.startsWith(item.to));
+    return items?.some((item) => path.startsWith(item.to.split("?")[0]));
   };
 
-  // Close mobile menu when route changes
-  useEffect(() => {
-    setIsMobileMenuOpen(false);
-    setActiveDropdown(null);
-  }, [location.pathname]);
-
-  // Close dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = () => {
       setActiveDropdown(null);
     };
 
-    if (activeDropdown) {
-      document.addEventListener("click", handleClickOutside);
-      return () => document.removeEventListener("click", handleClickOutside);
-    }
-  }, [activeDropdown]);
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, []);
+
+  // Close mobile menu when route changes
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+    setActiveDropdown(null);
+  }, [path]);
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Horizontal Navbar */}
+      {/* Top Navigation */}
       <nav className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-40">
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-14">
             {/* Logo Section */}
             <div className="flex items-center space-x-3 flex-shrink-0">
               <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-blue-600 rounded-lg flex items-center justify-center shadow-sm">
+                <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm border border-gray-200 p-1">
                   <img
                     src={logo}
                     alt="LumoraBiz Logo"
@@ -383,16 +318,15 @@ const ManagerNavbarLayout = ({ children }) => {
                   />
                 </div>
                 <div className="hidden sm:block">
-                  <h1 className="text-base font-bold tracking-tight">
-                    <span className="text-gray-800">Rice Mill</span>
-                    <span className="text-green-600"> Manager</span>
+                  <h1 className="text-base font-bold tracking-tight text-gray-800">
+                    LumoraBiz Manager
                   </h1>
                 </div>
               </div>
             </div>
 
             {/* Desktop Navigation */}
-            <div className="hidden lg:flex items-center space-x-1 flex-1 justify-center max-w-5xl mx-4">
+            <div className="hidden lg:flex items-center space-x-0.5 flex-1 justify-center max-w-4xl mx-4">
               {/* Dashboard */}
               <NavItem
                 to={navigationStructure.dashboard.to}
@@ -445,54 +379,6 @@ const ManagerNavbarLayout = ({ children }) => {
                 ))}
               </NavItem>
 
-              {/* Production Dropdown */}
-              <NavItem
-                label={navigationStructure.production.label}
-                icon={navigationStructure.production.icon}
-                hasDropdown={true}
-                isDropdownOpen={activeDropdown === "production"}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDropdownToggle("production");
-                }}
-                isActive={isDropdownActive(
-                  navigationStructure.production.items
-                )}
-              >
-                {navigationStructure.production.items.map((item) => (
-                  <DropdownItem
-                    key={item.to}
-                    to={item.to}
-                    icon={item.icon}
-                    label={item.label}
-                  />
-                ))}
-              </NavItem>
-
-              {/* Relations Dropdown */}
-              <NavItem
-                label={navigationStructure.relationships.label}
-                icon={navigationStructure.relationships.icon}
-                hasDropdown={true}
-                isDropdownOpen={activeDropdown === "relationships"}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDropdownToggle("relationships");
-                }}
-                isActive={isDropdownActive(
-                  navigationStructure.relationships.items
-                )}
-              >
-                {navigationStructure.relationships.items.map((item) => (
-                  <DropdownItem
-                    key={item.to}
-                    to={item.to}
-                    icon={item.icon}
-                    label={item.label}
-                  />
-                ))}
-              </NavItem>
-
               {/* Logistics Dropdown */}
               <NavItem
                 label={navigationStructure.logistics.label}
@@ -506,50 +392,6 @@ const ManagerNavbarLayout = ({ children }) => {
                 isActive={isDropdownActive(navigationStructure.logistics.items)}
               >
                 {navigationStructure.logistics.items.map((item) => (
-                  <DropdownItem
-                    key={item.to}
-                    to={item.to}
-                    icon={item.icon}
-                    label={item.label}
-                  />
-                ))}
-              </NavItem>
-
-              {/* Financial Dropdown */}
-              <NavItem
-                label={navigationStructure.financial.label}
-                icon={navigationStructure.financial.icon}
-                hasDropdown={true}
-                isDropdownOpen={activeDropdown === "financial"}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDropdownToggle("financial");
-                }}
-                isActive={isDropdownActive(navigationStructure.financial.items)}
-              >
-                {navigationStructure.financial.items.map((item) => (
-                  <DropdownItem
-                    key={item.to}
-                    to={item.to}
-                    icon={item.icon}
-                    label={item.label}
-                  />
-                ))}
-              </NavItem>
-
-              {/* Reports Dropdown */}
-              <NavItem
-                label={navigationStructure.reports.label}
-                icon={navigationStructure.reports.icon}
-                hasDropdown={true}
-                isDropdownOpen={activeDropdown === "reports"}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDropdownToggle("reports");
-                }}
-                isActive={isDropdownActive(navigationStructure.reports.items)}
-              >
-                {navigationStructure.reports.items.map((item) => (
                   <DropdownItem
                     key={item.to}
                     to={item.to}
