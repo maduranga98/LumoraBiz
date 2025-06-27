@@ -1,4 +1,3 @@
-// src/components/ManagerNavbarLayout.jsx
 import React, { useState, useRef, useEffect } from "react";
 import { Link, useLocation, useNavigate, Outlet } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
@@ -18,6 +17,17 @@ import {
   ChevronDown,
   UserCheck,
   Shield,
+  Factory,
+  Truck,
+  DollarSign,
+  ShoppingCart,
+  Briefcase,
+  FileText,
+  Wrench,
+  Calendar,
+  ClipboardList,
+  TrendingUp,
+  PieChart,
 } from "lucide-react";
 
 // Navigation Item Component
@@ -30,6 +40,7 @@ const NavItem = ({
   mobile = false,
   hasDropdown = false,
   isDropdownOpen = false,
+  children,
 }) => {
   const baseClasses = mobile
     ? `flex items-center w-full px-4 py-3 text-left transition-all duration-200 ${
@@ -59,16 +70,56 @@ const NavItem = ({
 
   if (to) {
     return (
-      <Link to={to} className={baseClasses}>
-        {content}
-      </Link>
+      <div className={mobile ? "block" : "relative"}>
+        <Link to={to} className={baseClasses}>
+          {content}
+        </Link>
+        {hasDropdown && isDropdownOpen && children && (
+          <div
+            className={
+              mobile
+                ? "pl-8 py-2"
+                : "absolute top-full left-0 mt-1 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50"
+            }
+          >
+            {children}
+          </div>
+        )}
+      </div>
     );
   }
 
   return (
-    <button onClick={onClick} className={baseClasses}>
-      {content}
-    </button>
+    <div className={mobile ? "block" : "relative"}>
+      <button onClick={onClick} className={baseClasses}>
+        {content}
+      </button>
+      {hasDropdown && isDropdownOpen && children && (
+        <div
+          className={
+            mobile
+              ? "pl-8 py-2"
+              : "absolute top-full left-0 mt-1 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50"
+          }
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Dropdown menu item component
+const DropdownItem = ({ to, icon, label, mobile = false }) => {
+  const classes = mobile
+    ? "flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+    : "flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md mx-2";
+
+  return (
+    <Link to={to} className={classes}>
+      {icon && <span className="mr-3 flex-shrink-0">{icon}</span>}
+      <span>{label}</span>
+    </Link>
   );
 };
 
@@ -79,34 +130,199 @@ const ManagerNavbarLayout = ({ children }) => {
   const path = location.pathname;
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [activeDropdown, setActiveDropdown] = useState(null);
 
-  // Manager navigation structure
+  // Enhanced manager navigation structure with dropdowns
   const navigationStructure = {
     dashboard: {
       to: "/manager/dashboard",
       label: "Dashboard",
       icon: <LayoutDashboard className="h-4 w-4" />,
     },
+
+    // Employee Management with dropdown
+    employees: {
+      label: "Employees",
+      icon: <Users className="h-4 w-4" />,
+      hasDropdown: true,
+      items: [
+        {
+          to: "/manager/employees/directory",
+          label: "Employee Directory",
+          icon: <Users className="h-4 w-4" />,
+        },
+        {
+          to: "/manager/employees/attendance",
+          label: "Attendance",
+          icon: <Calendar className="h-4 w-4" />,
+        },
+        {
+          to: "/manager/employees/work-assignment",
+          label: "Work Assignment",
+          icon: <ClipboardList className="h-4 w-4" />,
+        },
+        {
+          to: "/manager/employees/payroll",
+          label: "Payroll Management",
+          icon: <DollarSign className="h-4 w-4" />,
+        },
+      ],
+    },
+
+    // Inventory Management with dropdown
     inventory: {
-      to: "/manager/inventory",
       label: "Inventory",
       icon: <Package className="h-4 w-4" />,
+      hasDropdown: true,
+      items: [
+        {
+          to: "/manager/inventory/stock",
+          label: "Stock Management",
+          icon: <Package className="h-4 w-4" />,
+        },
+        {
+          to: "/manager/inventory/raw-materials",
+          label: "Raw Materials",
+          icon: <Package className="h-4 w-4" />,
+        },
+        {
+          to: "/manager/inventory/processed-goods",
+          label: "Processed Goods",
+          icon: <Package className="h-4 w-4" />,
+        },
+        {
+          to: "/manager/inventory/alerts",
+          label: "Stock Alerts",
+          icon: <Package className="h-4 w-4" />,
+        },
+      ],
     },
-    customers: {
-      to: "/manager/customers",
-      label: "Customers",
-      icon: <Users className="h-4 w-4" />,
+
+    // Production Management with dropdown
+    production: {
+      label: "Production",
+      icon: <Factory className="h-4 w-4" />,
+      hasDropdown: true,
+      items: [
+        {
+          to: "/manager/production/tracking",
+          label: "Production Tracking",
+          icon: <Factory className="h-4 w-4" />,
+        },
+        {
+          to: "/manager/production/scheduling",
+          label: "Production Schedule",
+          icon: <Calendar className="h-4 w-4" />,
+        },
+        {
+          to: "/manager/production/quality-control",
+          label: "Quality Control",
+          icon: <Shield className="h-4 w-4" />,
+        },
+        {
+          to: "/manager/production/yield-analysis",
+          label: "Yield Analysis",
+          icon: <BarChart3 className="h-4 w-4" />,
+        },
+      ],
     },
-    employees: {
-      to: "/manager/employees",
-      label: "Employees",
-      icon: <UserCheck className="h-4 w-4" />,
+
+    // Customer & Supplier Management
+    relationships: {
+      label: "Relations",
+      icon: <Briefcase className="h-4 w-4" />,
+      hasDropdown: true,
+      items: [
+        {
+          to: "/manager/suppliers",
+          label: "Supplier Management",
+          icon: <Briefcase className="h-4 w-4" />,
+        },
+        {
+          to: "/manager/customers",
+          label: "Customer Management",
+          icon: <ShoppingCart className="h-4 w-4" />,
+        },
+        {
+          to: "/manager/orders",
+          label: "Order Management",
+          icon: <FileText className="h-4 w-4" />,
+        },
+      ],
     },
+
+    // Logistics & Equipment
+    logistics: {
+      label: "Logistics",
+      icon: <Truck className="h-4 w-4" />,
+      hasDropdown: true,
+      items: [
+        {
+          to: "/manager/logistics/vehicles",
+          label: "Vehicle Management",
+          icon: <Truck className="h-4 w-4" />,
+        },
+        {
+          to: "/manager/logistics/maintenance",
+          label: "Equipment Maintenance",
+          icon: <Wrench className="h-4 w-4" />,
+        },
+        {
+          to: "/manager/logistics/scheduling",
+          label: "Delivery Scheduling",
+          icon: <Calendar className="h-4 w-4" />,
+        },
+      ],
+    },
+
+    // Financial Management
+    financial: {
+      label: "Financial",
+      icon: <DollarSign className="h-4 w-4" />,
+      hasDropdown: true,
+      items: [
+        {
+          to: "/manager/financial/dashboard",
+          label: "Financial Dashboard",
+          icon: <DollarSign className="h-4 w-4" />,
+        },
+        {
+          to: "/manager/financial/cash-flow",
+          label: "Cash Flow",
+          icon: <TrendingUp className="h-4 w-4" />,
+        },
+        {
+          to: "/manager/financial/expenses",
+          label: "Expense Management",
+          icon: <FileText className="h-4 w-4" />,
+        },
+      ],
+    },
+
+    // Analytics & Reports
     reports: {
-      to: "/manager/reports",
       label: "Reports",
       icon: <BarChart3 className="h-4 w-4" />,
+      hasDropdown: true,
+      items: [
+        {
+          to: "/manager/reports/business-analytics",
+          label: "Business Analytics",
+          icon: <PieChart className="h-4 w-4" />,
+        },
+        {
+          to: "/manager/reports/performance",
+          label: "Performance Reports",
+          icon: <BarChart3 className="h-4 w-4" />,
+        },
+        {
+          to: "/manager/reports/custom",
+          label: "Custom Reports",
+          icon: <FileText className="h-4 w-4" />,
+        },
+      ],
     },
+
     help: {
       to: "/manager/help",
       label: "Help",
@@ -123,10 +339,32 @@ const ManagerNavbarLayout = ({ children }) => {
     }
   };
 
+  const handleDropdownToggle = (key) => {
+    setActiveDropdown(activeDropdown === key ? null : key);
+  };
+
+  // Check if current path matches any dropdown item
+  const isDropdownActive = (items) => {
+    return items?.some((item) => path.startsWith(item.to));
+  };
+
   // Close mobile menu when route changes
   useEffect(() => {
     setIsMobileMenuOpen(false);
+    setActiveDropdown(null);
   }, [location.pathname]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setActiveDropdown(null);
+    };
+
+    if (activeDropdown) {
+      document.addEventListener("click", handleClickOutside);
+      return () => document.removeEventListener("click", handleClickOutside);
+    }
+  }, [activeDropdown]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -146,15 +384,15 @@ const ManagerNavbarLayout = ({ children }) => {
                 </div>
                 <div className="hidden sm:block">
                   <h1 className="text-base font-bold tracking-tight">
-                    <span className="text-gray-800">Manager</span>
-                    <span className="text-green-600"> Portal</span>
+                    <span className="text-gray-800">Rice Mill</span>
+                    <span className="text-green-600"> Manager</span>
                   </h1>
                 </div>
               </div>
             </div>
 
             {/* Desktop Navigation */}
-            <div className="hidden lg:flex items-center space-x-0.5 flex-1 justify-center max-w-4xl mx-4">
+            <div className="hidden lg:flex items-center space-x-1 flex-1 justify-center max-w-5xl mx-4">
               {/* Dashboard */}
               <NavItem
                 to={navigationStructure.dashboard.to}
@@ -163,37 +401,163 @@ const ManagerNavbarLayout = ({ children }) => {
                 isActive={path === "/manager/dashboard"}
               />
 
-              {/* Inventory */}
+              {/* Employees Dropdown */}
               <NavItem
-                to={navigationStructure.inventory.to}
-                label={navigationStructure.inventory.label}
-                icon={navigationStructure.inventory.icon}
-                isActive={path.startsWith("/manager/inventory")}
-              />
-
-              {/* Customers */}
-              <NavItem
-                to={navigationStructure.customers.to}
-                label={navigationStructure.customers.label}
-                icon={navigationStructure.customers.icon}
-                isActive={path.startsWith("/manager/customers")}
-              />
-
-              {/* Employees */}
-              <NavItem
-                to={navigationStructure.employees.to}
                 label={navigationStructure.employees.label}
                 icon={navigationStructure.employees.icon}
-                isActive={path.startsWith("/manager/employees")}
-              />
+                hasDropdown={true}
+                isDropdownOpen={activeDropdown === "employees"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDropdownToggle("employees");
+                }}
+                isActive={isDropdownActive(navigationStructure.employees.items)}
+              >
+                {navigationStructure.employees.items.map((item) => (
+                  <DropdownItem
+                    key={item.to}
+                    to={item.to}
+                    icon={item.icon}
+                    label={item.label}
+                  />
+                ))}
+              </NavItem>
 
-              {/* Reports */}
+              {/* Inventory Dropdown */}
               <NavItem
-                to={navigationStructure.reports.to}
+                label={navigationStructure.inventory.label}
+                icon={navigationStructure.inventory.icon}
+                hasDropdown={true}
+                isDropdownOpen={activeDropdown === "inventory"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDropdownToggle("inventory");
+                }}
+                isActive={isDropdownActive(navigationStructure.inventory.items)}
+              >
+                {navigationStructure.inventory.items.map((item) => (
+                  <DropdownItem
+                    key={item.to}
+                    to={item.to}
+                    icon={item.icon}
+                    label={item.label}
+                  />
+                ))}
+              </NavItem>
+
+              {/* Production Dropdown */}
+              <NavItem
+                label={navigationStructure.production.label}
+                icon={navigationStructure.production.icon}
+                hasDropdown={true}
+                isDropdownOpen={activeDropdown === "production"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDropdownToggle("production");
+                }}
+                isActive={isDropdownActive(
+                  navigationStructure.production.items
+                )}
+              >
+                {navigationStructure.production.items.map((item) => (
+                  <DropdownItem
+                    key={item.to}
+                    to={item.to}
+                    icon={item.icon}
+                    label={item.label}
+                  />
+                ))}
+              </NavItem>
+
+              {/* Relations Dropdown */}
+              <NavItem
+                label={navigationStructure.relationships.label}
+                icon={navigationStructure.relationships.icon}
+                hasDropdown={true}
+                isDropdownOpen={activeDropdown === "relationships"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDropdownToggle("relationships");
+                }}
+                isActive={isDropdownActive(
+                  navigationStructure.relationships.items
+                )}
+              >
+                {navigationStructure.relationships.items.map((item) => (
+                  <DropdownItem
+                    key={item.to}
+                    to={item.to}
+                    icon={item.icon}
+                    label={item.label}
+                  />
+                ))}
+              </NavItem>
+
+              {/* Logistics Dropdown */}
+              <NavItem
+                label={navigationStructure.logistics.label}
+                icon={navigationStructure.logistics.icon}
+                hasDropdown={true}
+                isDropdownOpen={activeDropdown === "logistics"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDropdownToggle("logistics");
+                }}
+                isActive={isDropdownActive(navigationStructure.logistics.items)}
+              >
+                {navigationStructure.logistics.items.map((item) => (
+                  <DropdownItem
+                    key={item.to}
+                    to={item.to}
+                    icon={item.icon}
+                    label={item.label}
+                  />
+                ))}
+              </NavItem>
+
+              {/* Financial Dropdown */}
+              <NavItem
+                label={navigationStructure.financial.label}
+                icon={navigationStructure.financial.icon}
+                hasDropdown={true}
+                isDropdownOpen={activeDropdown === "financial"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDropdownToggle("financial");
+                }}
+                isActive={isDropdownActive(navigationStructure.financial.items)}
+              >
+                {navigationStructure.financial.items.map((item) => (
+                  <DropdownItem
+                    key={item.to}
+                    to={item.to}
+                    icon={item.icon}
+                    label={item.label}
+                  />
+                ))}
+              </NavItem>
+
+              {/* Reports Dropdown */}
+              <NavItem
                 label={navigationStructure.reports.label}
                 icon={navigationStructure.reports.icon}
-                isActive={path.startsWith("/manager/reports")}
-              />
+                hasDropdown={true}
+                isDropdownOpen={activeDropdown === "reports"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDropdownToggle("reports");
+                }}
+                isActive={isDropdownActive(navigationStructure.reports.items)}
+              >
+                {navigationStructure.reports.items.map((item) => (
+                  <DropdownItem
+                    key={item.to}
+                    to={item.to}
+                    icon={item.icon}
+                    label={item.label}
+                  />
+                ))}
+              </NavItem>
 
               {/* Help */}
               <NavItem
@@ -307,41 +671,32 @@ const ManagerNavbarLayout = ({ children }) => {
               isActive={path === "/manager/dashboard"}
             />
 
-            {/* Inventory */}
-            <NavItem
-              to={navigationStructure.inventory.to}
-              label={navigationStructure.inventory.label}
-              icon={navigationStructure.inventory.icon}
-              mobile={true}
-              isActive={path.startsWith("/manager/inventory")}
-            />
+            {/* Mobile menu items with expandable sections */}
+            {Object.entries(navigationStructure).map(([key, section]) => {
+              if (key === "dashboard" || key === "help") return null;
 
-            {/* Customers */}
-            <NavItem
-              to={navigationStructure.customers.to}
-              label={navigationStructure.customers.label}
-              icon={navigationStructure.customers.icon}
-              mobile={true}
-              isActive={path.startsWith("/manager/customers")}
-            />
-
-            {/* Employees */}
-            <NavItem
-              to={navigationStructure.employees.to}
-              label={navigationStructure.employees.label}
-              icon={navigationStructure.employees.icon}
-              mobile={true}
-              isActive={path.startsWith("/manager/employees")}
-            />
-
-            {/* Reports */}
-            <NavItem
-              to={navigationStructure.reports.to}
-              label={navigationStructure.reports.label}
-              icon={navigationStructure.reports.icon}
-              mobile={true}
-              isActive={path.startsWith("/manager/reports")}
-            />
+              return (
+                <div
+                  key={key}
+                  className="border-b border-gray-100 last:border-b-0"
+                >
+                  <div className="px-4 py-2">
+                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      {section.label}
+                    </h4>
+                  </div>
+                  {section.items?.map((item) => (
+                    <DropdownItem
+                      key={item.to}
+                      to={item.to}
+                      icon={item.icon}
+                      label={item.label}
+                      mobile={true}
+                    />
+                  ))}
+                </div>
+              );
+            })}
 
             {/* Help */}
             <NavItem
