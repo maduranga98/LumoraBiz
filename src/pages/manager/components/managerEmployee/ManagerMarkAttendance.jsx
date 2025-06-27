@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { useAuth } from "../../contexts/AuthContext";
-import { useBusiness } from "../../../contexts/ManagerBusinessContext";
+import { useAuth } from "../../../../contexts/AuthContext";
+import { useBusiness } from "../../../../contexts/ManagerBusinessContext";
 import {
   collection,
   query,
@@ -14,7 +14,7 @@ import {
   limit,
   startAfter,
 } from "firebase/firestore";
-import { db } from "../../services/firebase";
+import { db } from "../../../../services/firebase";
 import { toast } from "react-hot-toast";
 import {
   Calendar,
@@ -104,8 +104,12 @@ const MarkAttendance = () => {
       });
 
       // Use subcollection structure: owners/{userId}/businesses/{businessId}/employees
-      const ownerDocRef = doc(db, "owners", currentUser.uid);
-      const businessDocRef = doc(ownerDocRef, "businesses", currentBusiness.id);
+      const ownerDocRef = doc(db, "owners", currentUser.ownerId);
+      const businessDocRef = doc(
+        ownerDocRef,
+        "businesses",
+        currentUser.businessId
+      );
       const employeesCollectionRef = collection(businessDocRef, "employees");
 
       // First, try to get all employees to see if any exist
