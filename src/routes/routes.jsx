@@ -689,6 +689,7 @@ export const routes = [
         path: "mobile-stock",
         element: <DayRoutine />,
       },
+
       {
         path: "mobile-stock/routes-planning",
         element: <RoutesPlanning />,
