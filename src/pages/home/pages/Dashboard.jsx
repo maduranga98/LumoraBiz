@@ -1,6 +1,6 @@
-// src/pages/home/pages/Dashboard.jsx
 import React from "react";
 import { useAuth } from "../../../contexts/AuthContext";
+import UpcomingMaintenance from "../../dashboard/UpcomingMaintenance";
 
 // Optimized stat card component
 const StatCard = ({ title, value, icon, change, changeType }) => (
@@ -54,24 +54,6 @@ const StatCard = ({ title, value, icon, change, changeType }) => (
   </div>
 );
 
-// Enhanced activity item component
-const ActivityItem = ({ icon, title, time, description, iconColor }) => (
-  <div className="flex items-start space-x-4 py-4 hover:bg-gray-50 rounded-lg px-2 transition-colors duration-200">
-    <div
-      className={`p-2 rounded-full ${iconColor} bg-opacity-10 flex-shrink-0`}
-    >
-      {icon}
-    </div>
-    <div className="flex-1 min-w-0">
-      <div className="flex items-center justify-between">
-        <p className="font-medium text-gray-900 truncate">{title}</p>
-        <span className="text-xs text-gray-500 ml-2 flex-shrink-0">{time}</span>
-      </div>
-      <p className="text-sm text-gray-600 mt-1 line-clamp-2">{description}</p>
-    </div>
-  </div>
-);
-
 // Quick action button component
 const QuickActionButton = ({ icon, label, onClick }) => (
   <button
@@ -86,25 +68,6 @@ const QuickActionButton = ({ icon, label, onClick }) => (
     </span>
   </button>
 );
-
-// Maintenance item component
-const MaintenanceItem = ({ vehicle, type, dueDate, priority = "medium" }) => {
-  const priorityColors = {
-    high: "border-red-400 bg-red-50",
-    medium: "border-yellow-400 bg-yellow-50",
-    low: "border-green-400 bg-green-50",
-  };
-
-  return (
-    <div
-      className={`border-l-4 ${priorityColors[priority]} pl-4 py-3 rounded-r-lg`}
-    >
-      <p className="font-medium text-gray-900">{vehicle}</p>
-      <p className="text-sm text-gray-600">{type}</p>
-      <p className="text-xs text-gray-500 mt-1">Due: {dueDate}</p>
-    </div>
-  );
-};
 
 export const Dashboard = () => {
   const { currentUser } = useAuth();
@@ -194,117 +157,6 @@ export const Dashboard = () => {
       ),
       change: "3%",
       changeType: "decrease",
-    },
-  ];
-
-  const recentActivities = [
-    {
-      icon: (
-        <svg
-          className="h-5 w-5 text-green-600"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
-      ),
-      iconColor: "bg-green-500",
-      title: "New Order Received",
-      time: "2 hours ago",
-      description: "Received 1,200 kg of paddy from Green Fields Farms.",
-    },
-    {
-      icon: (
-        <svg
-          className="h-5 w-5 text-blue-600"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M13 10V3L4 14h7v7l9-11h-7z"
-          />
-        </svg>
-      ),
-      iconColor: "bg-blue-500",
-      title: "Production Completed",
-      time: "5 hours ago",
-      description:
-        "Batch #RF-2023-05-12 processed successfully. Yield: 875 kg.",
-    },
-    {
-      icon: (
-        <svg
-          className="h-5 w-5 text-yellow-600"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-          />
-        </svg>
-      ),
-      iconColor: "bg-yellow-500",
-      title: "Low Inventory Alert",
-      time: "1 day ago",
-      description:
-        "Raw paddy stock approaching minimum threshold. Consider placing orders.",
-    },
-    {
-      icon: (
-        <svg
-          className="h-5 w-5 text-purple-600"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-          />
-        </svg>
-      ),
-      iconColor: "bg-purple-500",
-      title: "Invoice Generated",
-      time: "2 days ago",
-      description:
-        "Invoice #INV-2023-156 for Rs.56,200 generated for Sunshine Foods Ltd.",
-    },
-  ];
-
-  const upcomingMaintenance = [
-    {
-      vehicle: "Truck - KA 01 AA 1234",
-      type: "Oil Change",
-      dueDate: "May 10, 2023",
-      priority: "high",
-    },
-    {
-      vehicle: "Mill Machine #2",
-      type: "Regular Service",
-      dueDate: "May 15, 2023",
-      priority: "medium",
-    },
-    {
-      vehicle: "Delivery Van - KA 02 BB 5678",
-      type: "Brake Inspection",
-      dueDate: "May 18, 2023",
-      priority: "low",
     },
   ];
 
@@ -412,27 +264,13 @@ export const Dashboard = () => {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between">
             <div>
               <h1 className="text-2xl md:text-3xl font-bold">
-                Welcome back, {currentUser?.displayName || "User"}! 👋
+                Welcome back, {currentUser?.displayName || "User"}!
               </h1>
-              <p className="text-blue-100 mt-2 text-lg">
-                Here's what's happening with LumoraBiz today.
-              </p>
+
               <div className="flex items-center gap-4 mt-4 text-blue-100">
                 <span className="text-sm">{formatDate()}</span>
                 <span className="text-sm">•</span>
                 <span className="text-sm">{formatTime()}</span>
-              </div>
-            </div>
-            <div className="mt-6 md:mt-0">
-              <div className="bg-white bg-opacity-20 rounded-lg p-4 backdrop-blur-sm">
-                <p className="text-sm text-blue-100 mb-1">Today's Goal</p>
-                <p className="text-lg font-semibold">Complete 15 orders</p>
-                <div className="w-full bg-blue-200 rounded-full h-2 mt-2">
-                  <div
-                    className="bg-white h-2 rounded-full"
-                    style={{ width: "60%" }}
-                  ></div>
-                </div>
               </div>
             </div>
           </div>
@@ -445,132 +283,62 @@ export const Dashboard = () => {
           ))}
         </div>
 
-        {/* Two Column Section - Recent Activity and Maintenance */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          {/* Recent Activity */}
-          <div className="xl:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+        {/* Main Content Section - Upcoming Maintenance */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Main Content Area */}
+          <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-gray-900">
-                Recent Activity
+                Production Overview
               </h2>
               <button className="text-sm text-blue-600 hover:text-blue-700 font-medium">
-                View all
+                View Details
               </button>
             </div>
-            <div className="space-y-1">
-              {recentActivities.map((activity, index) => (
-                <ActivityItem key={index} {...activity} />
-              ))}
+
+            {/* Production metrics */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+              <div className="text-center p-4 bg-green-50 rounded-lg">
+                <div className="text-2xl font-bold text-green-600">875 kg</div>
+                <div className="text-sm text-gray-600">Today's Output</div>
+              </div>
+              <div className="text-center p-4 bg-blue-50 rounded-lg">
+                <div className="text-2xl font-bold text-blue-600">92%</div>
+                <div className="text-sm text-gray-600">Efficiency Rate</div>
+              </div>
+              <div className="text-center p-4 bg-orange-50 rounded-lg">
+                <div className="text-2xl font-bold text-orange-600">3</div>
+                <div className="text-sm text-gray-600">Active Batches</div>
+              </div>
+            </div>
+
+            {/* Production chart placeholder */}
+            <div className="bg-gray-50 rounded-lg p-8 text-center">
+              <div className="text-gray-400 mb-2">
+                <svg
+                  className="mx-auto h-12 w-12"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1}
+                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                  />
+                </svg>
+              </div>
+              <p className="text-gray-500">Production Analytics Chart</p>
+              <p className="text-sm text-gray-400">
+                Weekly production trends and forecasts
+              </p>
             </div>
           </div>
 
-          {/* Upcoming Maintenance */}
+          {/* Upcoming Maintenance Sidebar */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-6">
-              Upcoming Maintenance
-            </h2>
-            <div className="space-y-4">
-              {upcomingMaintenance.map((item, index) => (
-                <MaintenanceItem key={index} {...item} />
-              ))}
-            </div>
-            <button className="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-lg font-medium transition-colors duration-200">
-              View All Maintenance
-            </button>
-          </div>
-        </div>
-
-        {/* Enhanced Quick Actions */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">
-            Quick Actions
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {quickActions.map((action, index) => (
-              <QuickActionButton key={index} {...action} />
-            ))}
-          </div>
-        </div>
-
-        {/* Additional Insights Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Performance Overview */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Performance Overview
-            </h3>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Order Completion Rate</span>
-                <span className="font-semibold text-green-600">92%</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className="bg-green-500 h-2 rounded-full"
-                  style={{ width: "92%" }}
-                ></div>
-              </div>
-
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Production Efficiency</span>
-                <span className="font-semibold text-blue-600">87%</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className="bg-blue-500 h-2 rounded-full"
-                  style={{ width: "87%" }}
-                ></div>
-              </div>
-
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Customer Satisfaction</span>
-                <span className="font-semibold text-purple-600">95%</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className="bg-purple-500 h-2 rounded-full"
-                  style={{ width: "95%" }}
-                ></div>
-              </div>
-            </div>
-          </div>
-
-          {/* Weather & Schedule */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Today's Schedule
-            </h3>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                <div>
-                  <p className="font-medium text-gray-900">Team Meeting</p>
-                  <p className="text-sm text-gray-600">Production Review</p>
-                </div>
-                <span className="text-sm font-medium text-blue-600">
-                  10:00 AM
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                <div>
-                  <p className="font-medium text-gray-900">Quality Check</p>
-                  <p className="text-sm text-gray-600">Batch #RF-2023-05-15</p>
-                </div>
-                <span className="text-sm font-medium text-green-600">
-                  2:00 PM
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
-                <div>
-                  <p className="font-medium text-gray-900">Client Call</p>
-                  <p className="text-sm text-gray-600">Sunshine Foods Ltd.</p>
-                </div>
-                <span className="text-sm font-medium text-yellow-600">
-                  4:30 PM
-                </span>
-              </div>
-            </div>
+            <UpcomingMaintenance />
           </div>
         </div>
       </div>

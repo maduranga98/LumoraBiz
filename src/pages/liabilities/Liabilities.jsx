@@ -1,93 +1,136 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import {
+  collection,
+  query,
+  getDocs,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  orderBy,
+  where,
+} from "firebase/firestore";
+import { db } from "../../services/firebase";
+import { useBusiness } from "../../contexts/BusinessContext";
+import { useAuth } from "../../contexts/AuthContext";
+import { toast } from "react-hot-toast";
+import {
+  Plus,
+  Edit2,
+  Trash2,
+  X,
+  Calendar,
+  DollarSign,
+  TrendingUp,
+  AlertTriangle,
+} from "lucide-react";
 
 const Liabilities = () => {
-  // Mock data - replace with your actual data source (Firebase, props, etc.)
-  const [liabilities] = useState([
-    {
-      id: 1,
-      name: "Home Mortgage",
-      type: "Mortgage",
-      totalAmount: 250000,
-      remainingBalance: 180000,
-      monthlyPayment: 1850,
-      interestRate: 3.5,
-      dueDate: "2025-07-01",
-      status: "active",
-    },
-    {
-      id: 2,
-      name: "Car Loan",
-      type: "Auto Loan",
-      totalAmount: 35000,
-      remainingBalance: 22000,
-      monthlyPayment: 650,
-      interestRate: 4.2,
-      dueDate: "2025-06-15",
-      status: "active",
-    },
-    {
-      id: 3,
-      name: "Credit Card - Visa",
-      type: "Credit Card",
-      totalAmount: 15000,
-      remainingBalance: 8500,
-      monthlyPayment: 250,
-      interestRate: 18.9,
-      dueDate: "2025-06-20",
-      status: "active",
-    },
-    {
-      id: 4,
-      name: "Student Loan",
-      type: "Education",
-      totalAmount: 45000,
-      remainingBalance: 12000,
-      monthlyPayment: 340,
-      interestRate: 6.8,
-      dueDate: "2025-06-25",
-      status: "active",
-    },
-    {
-      id: 5,
-      name: "Personal Loan",
-      type: "Personal",
-      totalAmount: 10000,
-      remainingBalance: 0,
-      monthlyPayment: 0,
-      interestRate: 8.5,
-      dueDate: "2025-05-15",
-      status: "paid",
-    },
-  ]);
+  const { currentBusiness } = useBusiness();
+  const { currentUser } = useAuth();
 
+  // State management
+  const [liabilities, setLiabilities] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
   const [selectedType, setSelectedType] = useState("all");
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingLiability, setEditingLiability] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  // Calculate totals and metrics
+  // Form state for new/edit liability
+  const [formData, setFormData] = useState({
+    name: "",
+    type: "Equipment Loan",
+    description: "",
+    totalAmount: "",
+    remainingBalance: "",
+    monthlyPayment: "",
+    interestRate: "",
+    dueDate: "",
+    creditor: "",
+    status: "active",
+  });
+
+  // Liability types specific to rice mill business
+  const liabilityTypes = [
+    "Equipment Loan",
+    "Land Mortgage",
+    "Vehicle Loan",
+    "Working Capital Loan",
+    "Supplier Credit",
+    "Equipment Lease",
+    "Business Credit Card",
+    "Personal Guarantee",
+    "Government Loan",
+    "Other",
+  ];
+
+  // Fetch liabilities from Firebase
+  const fetchLiabilities = async () => {
+    if (!currentUser || !currentBusiness?.id) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const liabilitiesCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/liabilities`;
+      const liabilitiesQuery = query(
+        collection(db, liabilitiesCollectionPath),
+        orderBy("createdAt", "desc")
+      );
+
+      const snapshot = await getDocs(liabilitiesQuery);
+      const liabilitiesData = [];
+
+      snapshot.forEach((doc) => {
+        liabilitiesData.push({
+          id: doc.id,
+          ...doc.data(),
+        });
+      });
+
+      setLiabilities(liabilitiesData);
+    } catch (error) {
+      console.error("Error fetching liabilities:", error);
+      toast.error("Failed to load liabilities");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLiabilities();
+  }, [currentUser, currentBusiness]);
+
+  // Calculate metrics
   const metrics = useMemo(() => {
     const activeLiabilities = liabilities.filter((l) => l.status === "active");
     const totalDebt = activeLiabilities.reduce(
-      (sum, l) => sum + l.remainingBalance,
+      (sum, l) => sum + (parseFloat(l.remainingBalance) || 0),
       0
     );
     const totalMonthlyPayments = activeLiabilities.reduce(
-      (sum, l) => sum + l.monthlyPayment,
+      (sum, l) => sum + (parseFloat(l.monthlyPayment) || 0),
       0
     );
     const totalOriginalDebt = liabilities.reduce(
-      (sum, l) => sum + l.totalAmount,
+      (sum, l) => sum + (parseFloat(l.totalAmount) || 0),
       0
     );
     const paidOffDebt = totalOriginalDebt - totalDebt;
     const averageInterestRate =
       activeLiabilities.length > 0
-        ? activeLiabilities.reduce((sum, l) => sum + l.interestRate, 0) /
-          activeLiabilities.length
+        ? activeLiabilities.reduce(
+            (sum, l) => sum + (parseFloat(l.interestRate) || 0),
+            0
+          ) / activeLiabilities.length
         : 0;
 
     // Group by type
     const byType = activeLiabilities.reduce((acc, l) => {
-      acc[l.type] = (acc[l.type] || 0) + l.remainingBalance;
+      acc[l.type] = (acc[l.type] || 0) + (parseFloat(l.remainingBalance) || 0);
       return acc;
     }, {});
 
@@ -102,17 +145,118 @@ const Liabilities = () => {
     };
   }, [liabilities]);
 
+  // Handle form submission (add/edit)
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!currentUser || !currentBusiness?.id) return;
+
+    setSubmitting(true);
+    try {
+      const liabilitiesCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/liabilities`;
+
+      const liabilityData = {
+        ...formData,
+        totalAmount: parseFloat(formData.totalAmount) || 0,
+        remainingBalance: parseFloat(formData.remainingBalance) || 0,
+        monthlyPayment: parseFloat(formData.monthlyPayment) || 0,
+        interestRate: parseFloat(formData.interestRate) || 0,
+        businessId: currentBusiness.id,
+        ownerId: currentUser.uid,
+        updatedAt: new Date(),
+      };
+
+      if (editingLiability) {
+        // Update existing liability
+        const liabilityRef = doc(
+          db,
+          liabilitiesCollectionPath,
+          editingLiability.id
+        );
+        await updateDoc(liabilityRef, liabilityData);
+        toast.success("Liability updated successfully");
+      } else {
+        // Add new liability
+        liabilityData.createdAt = new Date();
+        await addDoc(collection(db, liabilitiesCollectionPath), liabilityData);
+        toast.success("Liability added successfully");
+      }
+
+      // Reset form and close modal
+      resetForm();
+      await fetchLiabilities();
+    } catch (error) {
+      console.error("Error saving liability:", error);
+      toast.error("Failed to save liability");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Handle delete liability
+  const handleDelete = async (liability) => {
+    if (!window.confirm(`Are you sure you want to delete "${liability.name}"?`))
+      return;
+
+    try {
+      const liabilitiesCollectionPath = `owners/${currentUser.uid}/businesses/${currentBusiness.id}/liabilities`;
+      await deleteDoc(doc(db, liabilitiesCollectionPath, liability.id));
+      toast.success("Liability deleted successfully");
+      await fetchLiabilities();
+    } catch (error) {
+      console.error("Error deleting liability:", error);
+      toast.error("Failed to delete liability");
+    }
+  };
+
+  // Reset form
+  const resetForm = () => {
+    setFormData({
+      name: "",
+      type: "Equipment Loan",
+      description: "",
+      totalAmount: "",
+      remainingBalance: "",
+      monthlyPayment: "",
+      interestRate: "",
+      dueDate: "",
+      creditor: "",
+      status: "active",
+    });
+    setEditingLiability(null);
+    setShowAddModal(false);
+  };
+
+  // Handle edit
+  const handleEdit = (liability) => {
+    setFormData({
+      name: liability.name || "",
+      type: liability.type || "Equipment Loan",
+      description: liability.description || "",
+      totalAmount: liability.totalAmount?.toString() || "",
+      remainingBalance: liability.remainingBalance?.toString() || "",
+      monthlyPayment: liability.monthlyPayment?.toString() || "",
+      interestRate: liability.interestRate?.toString() || "",
+      dueDate: liability.dueDate || "",
+      creditor: liability.creditor || "",
+      status: liability.status || "active",
+    });
+    setEditingLiability(liability);
+    setShowAddModal(true);
+  };
+
+  // Utility functions
   const formatCurrency = (amount) => {
-    return new Intl.NumberFormat("en-US", {
+    return new Intl.NumberFormat("en-IN", {
       style: "currency",
-      currency: "USD",
+      currency: "LKR",
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
-    }).format(amount);
+    }).format(amount || 0);
   };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
+    if (!dateString) return "N/A";
+    return new Date(dateString).toLocaleDateString("en-IN", {
       month: "short",
       day: "numeric",
       year: "numeric",
@@ -120,20 +264,22 @@ const Liabilities = () => {
   };
 
   const getProgressPercentage = (remaining, total) => {
-    return ((total - remaining) / total) * 100;
-  };
-
-  const getStatusColor = (status) => {
-    return status === "paid" ? "text-green-600" : "text-orange-600";
+    if (!total || total === 0) return 0;
+    return Math.max(0, Math.min(100, ((total - remaining) / total) * 100));
   };
 
   const getTypeIcon = (type) => {
     const icons = {
-      Mortgage: "🏠",
-      "Auto Loan": "🚗",
-      "Credit Card": "💳",
-      Education: "🎓",
-      Personal: "💼",
+      "Equipment Loan": "🏭",
+      "Land Mortgage": "🏞️",
+      "Vehicle Loan": "🚚",
+      "Working Capital Loan": "💰",
+      "Supplier Credit": "📦",
+      "Equipment Lease": "⚙️",
+      "Business Credit Card": "💳",
+      "Personal Guarantee": "👤",
+      "Government Loan": "🏛️",
+      Other: "📄",
     };
     return icons[type] || "📄";
   };
@@ -146,6 +292,7 @@ const Liabilities = () => {
     return filtered;
   }, [liabilities, selectedType]);
 
+  // Liability Card Component
   const LiabilityCard = ({ liability }) => {
     const progress = getProgressPercentage(
       liability.remainingBalance,
@@ -160,18 +307,43 @@ const Liabilities = () => {
             <div>
               <h4 className="font-semibold text-gray-900">{liability.name}</h4>
               <p className="text-sm text-gray-500">{liability.type}</p>
+              {liability.creditor && (
+                <p className="text-xs text-gray-400">
+                  Creditor: {liability.creditor}
+                </p>
+              )}
             </div>
           </div>
-          <span
-            className={`px-2 py-1 rounded-full text-xs font-medium ${
-              liability.status === "paid"
-                ? "bg-green-100 text-green-700"
-                : "bg-orange-100 text-orange-700"
-            }`}
-          >
-            {liability.status === "paid" ? "Paid Off" : "Active"}
-          </span>
+          <div className="flex items-center gap-2">
+            <span
+              className={`px-2 py-1 rounded-full text-xs font-medium ${
+                liability.status === "paid"
+                  ? "bg-green-100 text-green-700"
+                  : "bg-orange-100 text-orange-700"
+              }`}
+            >
+              {liability.status === "paid" ? "Paid Off" : "Active"}
+            </span>
+            <div className="flex gap-1">
+              <button
+                onClick={() => handleEdit(liability)}
+                className="p-1 text-gray-400 hover:text-blue-600 rounded"
+              >
+                <Edit2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => handleDelete(liability)}
+                className="p-1 text-gray-400 hover:text-red-600 rounded"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
         </div>
+
+        {liability.description && (
+          <p className="text-sm text-gray-600 mb-3">{liability.description}</p>
+        )}
 
         <div className="space-y-3">
           {/* Progress Bar */}
@@ -205,7 +377,7 @@ const Liabilities = () => {
             <div>
               <p className="text-gray-600">Interest Rate</p>
               <p className="font-semibold text-gray-900">
-                {liability.interestRate}%
+                {liability.interestRate || 0}%
               </p>
             </div>
             <div>
@@ -220,15 +392,63 @@ const Liabilities = () => {
     );
   };
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="animate-pulse">
+            <div className="h-8 bg-gray-200 rounded w-64 mb-4"></div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="bg-white rounded-xl p-6">
+                  <div className="h-4 bg-gray-200 rounded w-24 mb-2"></div>
+                  <div className="h-8 bg-gray-200 rounded w-32"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Authentication check
+  if (!currentUser || !currentBusiness?.id) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
+            <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
+            <p className="text-gray-600">
+              Please ensure you're logged in and have a business selected.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Liabilities</h1>
-          <p className="text-gray-600">
-            Track and manage your debts and financial obligations
-          </p>
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              Liabilities
+            </h1>
+            <p className="text-gray-600">
+              Track and manage your business debts and financial obligations
+            </p>
+          </div>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add Liability
+          </button>
         </div>
 
         {/* Summary Cards */}
@@ -242,19 +462,7 @@ const Liabilities = () => {
                 </p>
               </div>
               <div className="p-3 bg-red-100 rounded-full">
-                <svg
-                  className="w-6 h-6 text-red-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"
-                  />
-                </svg>
+                <DollarSign className="w-6 h-6 text-red-600" />
               </div>
             </div>
             <p className="text-sm text-gray-500 mt-2">
@@ -273,19 +481,7 @@ const Liabilities = () => {
                 </p>
               </div>
               <div className="p-3 bg-orange-100 rounded-full">
-                <svg
-                  className="w-6 h-6 text-orange-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                  />
-                </svg>
+                <Calendar className="w-6 h-6 text-orange-600" />
               </div>
             </div>
             <p className="text-sm text-gray-500 mt-2">Monthly obligation</p>
@@ -300,26 +496,16 @@ const Liabilities = () => {
                 </p>
               </div>
               <div className="p-3 bg-green-100 rounded-full">
-                <svg
-                  className="w-6 h-6 text-green-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
+                <TrendingUp className="w-6 h-6 text-green-600" />
               </div>
             </div>
             <p className="text-sm text-gray-500 mt-2">
-              {(
-                (metrics.paidOffDebt / metrics.totalOriginalDebt) *
-                100
-              ).toFixed(1)}
+              {metrics.totalOriginalDebt > 0
+                ? (
+                    (metrics.paidOffDebt / metrics.totalOriginalDebt) *
+                    100
+                  ).toFixed(1)
+                : 0}
               % of total
             </p>
           </div>
@@ -335,19 +521,7 @@ const Liabilities = () => {
                 </p>
               </div>
               <div className="p-3 bg-blue-100 rounded-full">
-                <svg
-                  className="w-6 h-6 text-blue-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                  />
-                </svg>
+                <TrendingUp className="w-6 h-6 text-blue-600" />
               </div>
             </div>
             <p className="text-sm text-gray-500 mt-2">Weighted average</p>
@@ -390,11 +564,11 @@ const Liabilities = () => {
                   className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="all">All Types</option>
-                  <option value="Mortgage">Mortgage</option>
-                  <option value="Auto Loan">Auto Loan</option>
-                  <option value="Credit Card">Credit Card</option>
-                  <option value="Education">Education</option>
-                  <option value="Personal">Personal</option>
+                  {liabilityTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
                 </select>
               </div>
             )}
@@ -405,38 +579,62 @@ const Liabilities = () => {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           {activeTab === "overview" && (
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-6">
-                Debt Breakdown by Type
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-                {Object.entries(metrics.byType).map(([type, amount]) => (
-                  <div key={type} className="bg-gray-50 rounded-lg p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-lg">{getTypeIcon(type)}</span>
-                      <span className="font-medium text-gray-900">{type}</span>
-                    </div>
-                    <p className="text-xl font-bold text-gray-900">
-                      {formatCurrency(amount)}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      {((amount / metrics.totalDebt) * 100).toFixed(1)}% of
-                      total
-                    </p>
+              {Object.keys(metrics.byType).length > 0 ? (
+                <>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-6">
+                    Debt Breakdown by Type
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+                    {Object.entries(metrics.byType).map(([type, amount]) => (
+                      <div key={type} className="bg-gray-50 rounded-lg p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-lg">{getTypeIcon(type)}</span>
+                          <span className="font-medium text-gray-900">
+                            {type}
+                          </span>
+                        </div>
+                        <p className="text-xl font-bold text-gray-900">
+                          {formatCurrency(amount)}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {((amount / metrics.totalDebt) * 100).toFixed(1)}% of
+                          total
+                        </p>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </>
+              ) : null}
 
               <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                Recent Liabilities
+                {liabilities.length === 0
+                  ? "No Liabilities"
+                  : "Recent Liabilities"}
               </h3>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {liabilities
-                  .filter((l) => l.status === "active")
-                  .slice(0, 4)
-                  .map((liability) => (
-                    <LiabilityCard key={liability.id} liability={liability} />
-                  ))}
-              </div>
+
+              {liabilities.length === 0 ? (
+                <div className="text-center py-12">
+                  <DollarSign className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500 mb-4">
+                    No liabilities recorded yet
+                  </p>
+                  <button
+                    onClick={() => setShowAddModal(true)}
+                    className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Add Your First Liability
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {liabilities
+                    .filter((l) => l.status === "active")
+                    .slice(0, 4)
+                    .map((liability) => (
+                      <LiabilityCard key={liability.id} liability={liability} />
+                    ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -447,19 +645,256 @@ const Liabilities = () => {
                   ? "All Liabilities"
                   : `${selectedType} Liabilities`}
               </h3>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {filteredLiabilities.map((liability) => (
-                  <LiabilityCard key={liability.id} liability={liability} />
-                ))}
-              </div>
-              {filteredLiabilities.length === 0 && (
+
+              {filteredLiabilities.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <p>No liabilities found for the selected filter</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {filteredLiabilities.map((liability) => (
+                    <LiabilityCard key={liability.id} liability={liability} />
+                  ))}
                 </div>
               )}
             </div>
           )}
         </div>
+
+        {/* Add/Edit Modal */}
+        {showAddModal && (
+          <div className="fixed inset-0 z-50 overflow-y-auto">
+            <div className="flex items-center justify-center min-h-screen px-4">
+              <div
+                className="fixed inset-0 bg-black opacity-50"
+                onClick={resetForm}
+              ></div>
+              <div className="relative bg-white rounded-xl w-full max-w-2xl mx-auto p-6 shadow-xl">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-semibold text-gray-900">
+                    {editingLiability ? "Edit Liability" : "Add New Liability"}
+                  </h3>
+                  <button
+                    onClick={resetForm}
+                    className="text-gray-400 hover:text-gray-500 p-1 rounded-full hover:bg-gray-100"
+                  >
+                    <X className="h-6 w-6" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Liability Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.name}
+                        onChange={(e) =>
+                          setFormData({ ...formData, name: e.target.value })
+                        }
+                        className="w-full border border-gray-300 rounded-lg py-2.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="e.g., Rice Processing Equipment Loan"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Type <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        required
+                        value={formData.type}
+                        onChange={(e) =>
+                          setFormData({ ...formData, type: e.target.value })
+                        }
+                        className="w-full border border-gray-300 rounded-lg py-2.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        {liabilityTypes.map((type) => (
+                          <option key={type} value={type}>
+                            {type}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Total Amount (Rs.){" "}
+                        <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        min="0"
+                        step="0.01"
+                        value={formData.totalAmount}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            totalAmount: e.target.value,
+                          })
+                        }
+                        className="w-full border border-gray-300 rounded-lg py-2.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="500000"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Remaining Balance (Rs.){" "}
+                        <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        min="0"
+                        step="0.01"
+                        value={formData.remainingBalance}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            remainingBalance: e.target.value,
+                          })
+                        }
+                        className="w-full border border-gray-300 rounded-lg py-2.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="350000"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Monthly Payment (Rs.)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={formData.monthlyPayment}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            monthlyPayment: e.target.value,
+                          })
+                        }
+                        className="w-full border border-gray-300 rounded-lg py-2.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="15000"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Interest Rate (%)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        value={formData.interestRate}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            interestRate: e.target.value,
+                          })
+                        }
+                        className="w-full border border-gray-300 rounded-lg py-2.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="8.5"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Next Due Date
+                      </label>
+                      <input
+                        type="date"
+                        value={formData.dueDate}
+                        onChange={(e) =>
+                          setFormData({ ...formData, dueDate: e.target.value })
+                        }
+                        className="w-full border border-gray-300 rounded-lg py-2.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Creditor/Lender
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.creditor}
+                        onChange={(e) =>
+                          setFormData({ ...formData, creditor: e.target.value })
+                        }
+                        className="w-full border border-gray-300 rounded-lg py-2.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="e.g., State Bank of India"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Status
+                      </label>
+                      <select
+                        value={formData.status}
+                        onChange={(e) =>
+                          setFormData({ ...formData, status: e.target.value })
+                        }
+                        className="w-full border border-gray-300 rounded-lg py-2.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="active">Active</option>
+                        <option value="paid">Paid Off</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Description
+                    </label>
+                    <textarea
+                      value={formData.description}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          description: e.target.value,
+                        })
+                      }
+                      rows="3"
+                      className="w-full border border-gray-300 rounded-lg py-2.5 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Additional details about this liability..."
+                    ></textarea>
+                  </div>
+
+                  <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                    <button
+                      type="button"
+                      onClick={resetForm}
+                      className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-medium"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-70 font-medium"
+                    >
+                      {submitting
+                        ? editingLiability
+                          ? "Updating..."
+                          : "Adding..."
+                        : editingLiability
+                        ? "Update Liability"
+                        : "Add Liability"}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
