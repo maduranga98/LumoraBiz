@@ -5,9 +5,40 @@ import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { useBusiness } from "../../contexts/BusinessContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { toast } from "react-hot-toast";
-import Input from "../../components/Input";
 
-const Select = ({
+// Responsive Input Component
+const ResponsiveInput = ({
+  label,
+  type = "text",
+  value,
+  onChange,
+  placeholder,
+  required = false,
+  error,
+  ...props
+}) => (
+  <div className="space-y-1 sm:space-y-2">
+    {label && (
+      <label className="block text-sm font-medium text-gray-700">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
+    )}
+    <input
+      type={type}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      className={`w-full px-3 py-2 sm:py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm sm:text-base transition-all duration-200 ${
+        error ? "border-red-500" : ""
+      }`}
+      {...props}
+    />
+    {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+  </div>
+);
+
+// Responsive Select Component
+const ResponsiveSelect = ({
   label,
   value,
   onChange,
@@ -15,16 +46,16 @@ const Select = ({
   required = false,
   error,
 }) => (
-  <div className="flex flex-col">
+  <div className="space-y-1 sm:space-y-2">
     {label && (
-      <label className="text-gray-700 font-medium mb-1">
+      <label className="block text-sm font-medium text-gray-700">
         {label} {required && <span className="text-red-500">*</span>}
       </label>
     )}
     <select
       value={value}
       onChange={onChange}
-      className={`border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 p-2.5 rounded-lg outline-none ${
+      className={`w-full px-3 py-2 sm:py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm sm:text-base transition-all duration-200 ${
         error ? "border-red-500" : ""
       }`}
     >
@@ -50,6 +81,18 @@ export const BuyerPayment = ({
 }) => {
   const { currentBusiness } = useBusiness();
   const { currentUser } = useAuth();
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Check screen size
+  useEffect(() => {
+    const checkScreenSize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    checkScreenSize();
+    window.addEventListener("resize", checkScreenSize);
+    return () => window.removeEventListener("resize", checkScreenSize);
+  }, []);
 
   const [payments, setPayments] = useState([
     { id: 1, type: "", amount: "", chequeDetails: {} },
@@ -278,68 +321,68 @@ export const BuyerPayment = ({
   // Check if user is authenticated and has business selected
   if (!currentUser || !currentBusiness?.id) {
     return (
-      <div className="max-w-4xl mx-auto p-6 bg-white">
-        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
-          <div className="flex">
-            <div className="ml-3">
-              <p className="text-sm text-yellow-700">
-                Please ensure you are logged in and have selected a business.
-              </p>
-            </div>
-          </div>
+      <div className="p-4 sm:p-6">
+        <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
+          <p className="text-yellow-800 text-sm">
+            Please ensure you are logged in and have selected a business.
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6 bg-white">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Buyer Payment</h1>
-        <div className="h-1 w-20 bg-blue-500 rounded"></div>
-        <p className="text-sm text-gray-600 mt-2">
-          Business: {currentBusiness.name || currentBusiness.id}
-        </p>
+    <div className="space-y-4 sm:space-y-6">
+      {/* Header - Mobile Optimized */}
+      <div className="space-y-2 sm:space-y-3">
+        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">
+          Record Payment
+        </h1>
+        <div className="h-1 w-16 sm:w-20 bg-blue-500 rounded"></div>
+        {currentBusiness?.name && (
+          <p className="text-xs sm:text-sm text-gray-600">
+            Business: {currentBusiness.name}
+          </p>
+        )}
       </div>
 
-      {/* Buyer Information */}
-      <div className="bg-gray-50 rounded-xl p-6 mb-8">
-        <h2 className="text-xl font-semibold text-gray-800 mb-4">
+      {/* Buyer Information - Mobile Responsive */}
+      <div className="bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg sm:rounded-xl p-4 sm:p-6">
+        <h2 className="text-lg sm:text-xl font-semibold text-gray-800 mb-3 sm:mb-4">
           Buyer Details
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
+          <div className="space-y-1">
+            <label className="block text-xs sm:text-sm font-medium text-gray-600">
               Buyer ID
             </label>
-            <div className="bg-white px-4 py-2 rounded-lg border">
+            <div className="bg-white px-3 py-2 sm:px-4 sm:py-2 rounded-lg border text-sm sm:text-base">
               {buyerData.id}
             </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">
+          <div className="space-y-1">
+            <label className="block text-xs sm:text-sm font-medium text-gray-600">
               Buyer Name
             </label>
-            <div className="bg-white px-4 py-2 rounded-lg border">
+            <div className="bg-white px-3 py-2 sm:px-4 sm:py-2 rounded-lg border text-sm sm:text-base">
               {buyerData.name}
             </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">
+          <div className="space-y-1 sm:col-span-2 lg:col-span-1">
+            <label className="block text-xs sm:text-sm font-medium text-gray-600">
               Total Amount Due
             </label>
-            <div className="bg-white px-4 py-2 rounded-lg border font-semibold text-blue-600">
+            <div className="bg-white px-3 py-2 sm:px-4 sm:py-2 rounded-lg border font-semibold text-blue-600 text-sm sm:text-base">
               Rs. {buyerData.totalAmount.toLocaleString("en-IN")}
             </div>
           </div>
         </div>
         {category && (
-          <div className="mt-4">
-            <label className="block text-sm font-medium text-gray-600 mb-1">
+          <div className="mt-3 sm:mt-4 space-y-1">
+            <label className="block text-xs sm:text-sm font-medium text-gray-600">
               Payment Category
             </label>
-            <div className="bg-white px-4 py-2 rounded-lg border">
+            <div className="bg-white px-3 py-2 sm:px-4 sm:py-2 rounded-lg border text-sm sm:text-base">
               {category
                 .replace("_", " ")
                 .replace(/\b\w/g, (l) => l.toUpperCase())}
@@ -348,37 +391,37 @@ export const BuyerPayment = ({
         )}
       </div>
 
-      {/* Payment Methods */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-gray-800">
+      {/* Payment Methods - Mobile Optimized */}
+      <div className="space-y-4 sm:space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-800">
             Payment Methods
           </h2>
           <button
             onClick={addPaymentMethod}
             disabled={submitting}
-            className="flex items-center space-x-2 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
+            className="w-full sm:w-auto flex items-center justify-center space-x-2 bg-blue-500 text-white px-4 py-2 sm:py-2.5 rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 text-sm sm:text-base"
           >
             <Plus className="h-4 w-4" />
             <span>Add Payment</span>
           </button>
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {payments.map((payment, index) => {
             const PaymentIcon = getPaymentIcon(payment.type);
 
             return (
               <div
                 key={payment.id}
-                className="bg-white border border-gray-200 rounded-xl p-6"
+                className="bg-white border border-gray-200 rounded-lg sm:rounded-xl p-4 sm:p-6"
               >
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center space-x-3">
                     <div className="p-2 bg-blue-100 rounded-lg">
-                      <PaymentIcon className="h-5 w-5 text-blue-600" />
+                      <PaymentIcon className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
                     </div>
-                    <h3 className="text-lg font-medium text-gray-800">
+                    <h3 className="text-base sm:text-lg font-medium text-gray-800">
                       Payment {index + 1}
                     </h3>
                   </div>
@@ -393,122 +436,90 @@ export const BuyerPayment = ({
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  <div className="flex flex-col">
-                    <Select
-                      label="Payment Type"
-                      value={payment.type}
-                      onChange={(e) =>
-                        updatePayment(payment.id, "type", e.target.value)
-                      }
-                      options={paymentTypes}
-                      required
-                      error={errors[`payment_${payment.id}_type`]}
-                    />
-                  </div>
-                  <div className="flex flex-col">
-                    <Input
-                      label="Amount (Rs.)"
-                      type="number"
-                      value={payment.amount}
-                      onChange={(e) =>
-                        updatePayment(payment.id, "amount", e.target.value)
-                      }
-                      placeholder="Enter amount"
-                      step="0.01"
-                      min="0"
-                    />
-                    {errors[`payment_${payment.id}_amount`] && (
-                      <p className="text-red-500 text-xs mt-1">
-                        {errors[`payment_${payment.id}_amount`]}
-                      </p>
-                    )}
-                  </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                  <ResponsiveSelect
+                    label="Payment Type"
+                    value={payment.type}
+                    onChange={(e) =>
+                      updatePayment(payment.id, "type", e.target.value)
+                    }
+                    options={paymentTypes}
+                    required
+                    error={errors[`payment_${payment.id}_type`]}
+                  />
+                  <ResponsiveInput
+                    label="Amount (Rs.)"
+                    type="number"
+                    value={payment.amount}
+                    onChange={(e) =>
+                      updatePayment(payment.id, "amount", e.target.value)
+                    }
+                    placeholder="Enter amount"
+                    step="0.01"
+                    min="0"
+                    error={errors[`payment_${payment.id}_amount`]}
+                  />
                 </div>
 
-                {/* Cheque Details */}
+                {/* Cheque Details - Mobile Responsive */}
                 {payment.type === "cheque" && (
-                  <div className="bg-gray-50 rounded-lg p-4 mt-4">
-                    <h4 className="text-md font-medium text-gray-700 mb-3">
+                  <div className="bg-gray-50 rounded-lg p-3 sm:p-4 mt-4">
+                    <h4 className="text-sm sm:text-base font-medium text-gray-700 mb-3">
                       Cheque Details
                     </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                      <div className="flex flex-col">
-                        <Input
-                          label="Cheque Number"
-                          value={payment.chequeDetails.number || ""}
-                          onChange={(e) =>
-                            updatePayment(
-                              payment.id,
-                              "cheque.number",
-                              e.target.value
-                            )
-                          }
-                          placeholder="Enter cheque number"
-                        />
-                        {errors[`payment_${payment.id}_cheque_number`] && (
-                          <p className="text-red-500 text-xs mt-1">
-                            {errors[`payment_${payment.id}_cheque_number`]}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex flex-col">
-                        <Input
-                          label="Bank Name"
-                          value={payment.chequeDetails.bank || ""}
-                          onChange={(e) =>
-                            updatePayment(
-                              payment.id,
-                              "cheque.bank",
-                              e.target.value
-                            )
-                          }
-                          placeholder="Enter bank name"
-                        />
-                        {errors[`payment_${payment.id}_bank`] && (
-                          <p className="text-red-500 text-xs mt-1">
-                            {errors[`payment_${payment.id}_bank`]}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex flex-col">
-                        <Input
-                          label="Branch"
-                          value={payment.chequeDetails.branch || ""}
-                          onChange={(e) =>
-                            updatePayment(
-                              payment.id,
-                              "cheque.branch",
-                              e.target.value
-                            )
-                          }
-                          placeholder="Enter branch"
-                        />
-                        {errors[`payment_${payment.id}_branch`] && (
-                          <p className="text-red-500 text-xs mt-1">
-                            {errors[`payment_${payment.id}_branch`]}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex flex-col">
-                        <Input
-                          label="Cheque Date"
-                          type="date"
-                          value={payment.chequeDetails.date || ""}
-                          onChange={(e) =>
-                            updatePayment(
-                              payment.id,
-                              "cheque.date",
-                              e.target.value
-                            )
-                          }
-                        />
-                        {errors[`payment_${payment.id}_date`] && (
-                          <p className="text-red-500 text-xs mt-1">
-                            {errors[`payment_${payment.id}_date`]}
-                          </p>
-                        )}
-                      </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                      <ResponsiveInput
+                        label="Cheque Number"
+                        value={payment.chequeDetails.number || ""}
+                        onChange={(e) =>
+                          updatePayment(
+                            payment.id,
+                            "cheque.number",
+                            e.target.value
+                          )
+                        }
+                        placeholder="Enter cheque number"
+                        error={errors[`payment_${payment.id}_cheque_number`]}
+                      />
+                      <ResponsiveInput
+                        label="Bank Name"
+                        value={payment.chequeDetails.bank || ""}
+                        onChange={(e) =>
+                          updatePayment(
+                            payment.id,
+                            "cheque.bank",
+                            e.target.value
+                          )
+                        }
+                        placeholder="Enter bank name"
+                        error={errors[`payment_${payment.id}_bank`]}
+                      />
+                      <ResponsiveInput
+                        label="Branch"
+                        value={payment.chequeDetails.branch || ""}
+                        onChange={(e) =>
+                          updatePayment(
+                            payment.id,
+                            "cheque.branch",
+                            e.target.value
+                          )
+                        }
+                        placeholder="Enter branch"
+                        error={errors[`payment_${payment.id}_branch`]}
+                      />
+                      <ResponsiveInput
+                        label="Cheque Date"
+                        type="date"
+                        value={payment.chequeDetails.date || ""}
+                        onChange={(e) =>
+                          updatePayment(
+                            payment.id,
+                            "cheque.date",
+                            e.target.value
+                          )
+                        }
+                        error={errors[`payment_${payment.id}_date`]}
+                      />
                     </div>
                   </div>
                 )}
@@ -518,35 +529,35 @@ export const BuyerPayment = ({
         </div>
       </div>
 
-      {/* Payment Summary */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 mb-8">
-        <h2 className="text-xl font-semibold text-gray-800 mb-4">
+      {/* Payment Summary - Mobile Responsive */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg sm:rounded-xl p-4 sm:p-6">
+        <h2 className="text-lg sm:text-xl font-semibold text-gray-800 mb-4">
           Payment Summary
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white rounded-lg p-4 text-center">
-            <div className="text-2xl font-bold text-blue-600">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
+          <div className="bg-white rounded-lg p-3 sm:p-4 text-center">
+            <div className="text-lg sm:text-xl lg:text-2xl font-bold text-blue-600">
               Rs. {totalPaid.toLocaleString("en-IN")}
             </div>
-            <div className="text-sm text-gray-600">Total Paid</div>
+            <div className="text-xs sm:text-sm text-gray-600">Total Paid</div>
           </div>
-          <div className="bg-white rounded-lg p-4 text-center">
+          <div className="bg-white rounded-lg p-3 sm:p-4 text-center">
             <div
-              className={`text-2xl font-bold ${
+              className={`text-lg sm:text-xl lg:text-2xl font-bold ${
                 remainingAmount < 0 ? "text-red-600" : "text-green-600"
               }`}
             >
               Rs. {Math.abs(remainingAmount).toLocaleString("en-IN")}
             </div>
-            <div className="text-sm text-gray-600">
+            <div className="text-xs sm:text-sm text-gray-600">
               {remainingAmount < 0 ? "Overpaid" : "Remaining"}
             </div>
           </div>
-          <div className="bg-white rounded-lg p-4 text-center">
-            <div className="text-2xl font-bold text-gray-800">
+          <div className="bg-white rounded-lg p-3 sm:p-4 text-center sm:col-span-3 lg:col-span-1">
+            <div className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-800">
               Rs. {buyerData.totalAmount.toLocaleString("en-IN")}
             </div>
-            <div className="text-sm text-gray-600">Total Due</div>
+            <div className="text-xs sm:text-sm text-gray-600">Total Due</div>
           </div>
         </div>
         {errors.totalAmount && (
@@ -556,29 +567,34 @@ export const BuyerPayment = ({
         )}
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex space-x-4">
-        <button
-          onClick={handleSubmit}
-          disabled={submitting}
-          className="flex-1 bg-blue-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-        >
-          {submitting ? (
-            <>
-              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
-              Recording Payment...
-            </>
-          ) : (
-            "Record Payment"
-          )}
-        </button>
-        <button
-          onClick={handleCancel}
-          disabled={submitting}
-          className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
-        >
-          Cancel
-        </button>
+      {/* Action Buttons - Proper Footer */}
+      <div className="border-t border-gray-200 pt-6 mt-8">
+        <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4">
+          <button
+            onClick={handleSubmit}
+            disabled={submitting}
+            className="w-full sm:flex-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white py-4 px-8 rounded-lg font-semibold hover:from-blue-600 hover:to-blue-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-base shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+          >
+            {submitting ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white mr-3"></div>
+                <span>Recording Payment...</span>
+              </>
+            ) : (
+              <>
+                <CreditCard className="h-5 w-5 mr-3" />
+                <span>Record Payment</span>
+              </>
+            )}
+          </button>
+          <button
+            onClick={handleCancel}
+            disabled={submitting}
+            className="w-full sm:w-auto px-8 py-4 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 disabled:opacity-50 text-base"
+          >
+            Cancel
+          </button>
+        </div>
       </div>
     </div>
   );
