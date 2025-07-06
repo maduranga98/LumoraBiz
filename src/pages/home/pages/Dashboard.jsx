@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../../../contexts/AuthContext";
 import UpcomingMaintenance from "../../dashboard/UpcomingMaintenance";
+import { useNavigate } from "react-router-dom";
 
 // Optimized stat card component - Enhanced for responsive design
 const StatCard = ({ title, value, icon, change, changeType }) => (
@@ -84,6 +85,7 @@ const ProductionMetric = ({ value, label, bgColor, textColor }) => (
 
 export const Dashboard = () => {
   const { currentUser } = useAuth();
+  const navigate = useNavigate();
   const [isMobile, setIsMobile] = useState(false);
 
   // Check screen size
@@ -96,7 +98,15 @@ export const Dashboard = () => {
     window.addEventListener("resize", checkScreenSize);
     return () => window.removeEventListener("resize", checkScreenSize);
   }, []);
+  const handleNewOrder = () => {
+    // Navigate to orders page or show new order modal
+    navigate("/home/orders"); // or wherever your orders are managed
+  };
 
+  const handleWalkInSale = () => {
+    // Navigate to walk-in sale page
+    navigate("/home/walk-in-sale");
+  };
   // Enhanced stats data
   const stats = [
     {
@@ -285,17 +295,64 @@ export const Dashboard = () => {
       <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6 lg:space-y-8">
         {/* Enhanced Welcome Banner */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl sm:rounded-2xl p-4 sm:p-6 lg:p-8 text-white">
-          <div className="flex flex-col space-y-3 sm:space-y-4">
-            <div>
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">
-                Welcome back, {currentUser?.displayName || "User"}!
-              </h1>
+          <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start space-y-4 lg:space-y-0">
+            <div className="flex flex-col space-y-3 sm:space-y-4">
+              <div>
+                <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">
+                  Welcome back, {currentUser?.displayName || "User"}!
+                </h1>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-blue-100">
+                <span className="text-sm">{formatDate()}</span>
+                <span className="hidden sm:inline text-sm">•</span>
+                <span className="text-sm">{formatTime()}</span>
+              </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-blue-100">
-              <span className="text-sm">{formatDate()}</span>
-              <span className="hidden sm:inline text-sm">•</span>
-              <span className="text-sm">{formatTime()}</span>
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row gap-3 lg:ml-4">
+              {/* New Order Button */}
+              <button
+                onClick={handleNewOrder}
+                className="bg-blue-800 hover:bg-blue-900 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg sm:rounded-xl font-semibold text-sm sm:text-base transition-all duration-200 hover:scale-105 shadow-lg flex items-center justify-center space-x-2"
+              >
+                <svg
+                  className="w-4 h-4 sm:w-5 sm:h-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
+                  />
+                </svg>
+                <span>New Order</span>
+              </button>
+
+              {/* Walk-in Sale Button */}
+              <button
+                onClick={handleWalkInSale}
+                className="bg-white hover:bg-gray-50 text-blue-600 px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg sm:rounded-xl font-semibold text-sm sm:text-base transition-all duration-200 hover:scale-105 shadow-lg flex items-center justify-center space-x-2"
+              >
+                <svg
+                  className="w-4 h-4 sm:w-5 sm:h-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                  />
+                </svg>
+                <span className="hidden sm:inline">Walk-in Sale</span>
+                <span className="sm:hidden">Walk-in</span>
+              </button>
             </div>
           </div>
         </div>
