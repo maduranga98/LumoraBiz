@@ -50,6 +50,8 @@ import { ManagerAddingSubItems } from "../pages/manager/components/Inventory/Man
 import { SubStock } from "../pages/manager/components/Inventory/SubStock";
 import { SubStockItemMoves } from "../pages/manager/components/Inventory/SubStockItemMoves";
 import { SubStockHistory } from "../pages/manager/components/Inventory/SubStockHistory";
+import WalkInSale from "../pages/dashboard/WalkInSale";
+import Orders from "../pages/dashboard/Orders";
 
 // Manager components - using existing components with manager context for basic pages
 const ManagerCustomers = () => <Customers />; // Customer management
@@ -668,6 +670,14 @@ export const routes = [
       {
         path: "inventory",
         element: <Stock />,
+      },
+      {
+        path: "walk-in-sale",
+        element: <WalkInSale />,
+      },
+      {
+        path: "orders",
+        element: <Orders />,
       },
       {
         path: "substock",
