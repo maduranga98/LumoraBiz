@@ -14,6 +14,7 @@ import {
   serverTimestamp,
   writeBatch,
   limit,
+  setDoc,
 } from "firebase/firestore";
 import { toast } from "react-hot-toast";
 import { useAuth } from "../../contexts/AuthContext";
@@ -42,6 +43,132 @@ const Loading = () => {
   const [error, setError] = useState(null);
   const [isProcessingLoading, setIsProcessingLoading] = useState(false);
   const [todayPaddyPrices, setTodayPaddyPrices] = useState({});
+
+  // Initialize stock totals document if it doesn't exist
+  const initializeStockTotals = async () => {
+    if (!currentUser || !currentBusiness) return;
+
+    try {
+      const stockTotalsRef = doc(
+        db,
+        `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/stockTotals`
+      );
+
+      const stockTotalsDoc = await getDoc(stockTotalsRef);
+
+      if (!stockTotalsDoc.exists()) {
+        console.log("Creating stock totals document...");
+        const initialStockTotals = {
+          // Raw materials
+          paddy_total: 0,
+          paddy_bagged_total: 0,
+          paddy_bags_count: 0,
+          paddy_loaded_total: 0,
+          paddy_loaded_bags_count: 0,
+
+          // Rice types - covering all common varieties
+          rice_samba_total: 0,
+          rice_samba_bagged_total: 0,
+          rice_samba_bags_count: 0,
+          rice_samba_loaded_total: 0,
+          rice_samba_loaded_bags_count: 0,
+
+          rice_nadu_total: 0,
+          rice_nadu_bagged_total: 0,
+          rice_nadu_bags_count: 0,
+          rice_nadu_loaded_total: 0,
+          rice_nadu_loaded_bags_count: 0,
+
+          rice_keeri_samba_total: 0,
+          rice_keeri_samba_bagged_total: 0,
+          rice_keeri_samba_bags_count: 0,
+          rice_keeri_samba_loaded_total: 0,
+          rice_keeri_samba_loaded_bags_count: 0,
+
+          rice_red_rice_total: 0,
+          rice_red_rice_bagged_total: 0,
+          rice_red_rice_bags_count: 0,
+          rice_red_rice_loaded_total: 0,
+          rice_red_rice_loaded_bags_count: 0,
+
+          rice_basmati_total: 0,
+          rice_basmati_bagged_total: 0,
+          rice_basmati_bags_count: 0,
+          rice_basmati_loaded_total: 0,
+          rice_basmati_loaded_bags_count: 0,
+
+          rice_white_rice_total: 0,
+          rice_white_rice_bagged_total: 0,
+          rice_white_rice_bags_count: 0,
+          rice_white_rice_loaded_total: 0,
+          rice_white_rice_loaded_bags_count: 0,
+
+          rice_sudu_kakulu_total: 0,
+          rice_sudu_kakulu_bagged_total: 0,
+          rice_sudu_kakulu_bags_count: 0,
+          rice_sudu_kakulu_loaded_total: 0,
+          rice_sudu_kakulu_loaded_bags_count: 0,
+
+          rice_kalu_heenati_total: 0,
+          rice_kalu_heenati_bagged_total: 0,
+          rice_kalu_heenati_bags_count: 0,
+          rice_kalu_heenati_loaded_total: 0,
+          rice_kalu_heenati_loaded_bags_count: 0,
+
+          // General rice type
+          rice_total: 0,
+          rice_bagged_total: 0,
+          rice_bags_count: 0,
+          rice_loaded_total: 0,
+          rice_loaded_bags_count: 0,
+
+          // By-products
+          hunuSahal_total: 0,
+          hunuSahal_bagged_total: 0,
+          hunuSahal_bags_count: 0,
+          hunuSahal_loaded_total: 0,
+          hunuSahal_loaded_bags_count: 0,
+
+          kadunuSahal_total: 0,
+          kadunuSahal_bagged_total: 0,
+          kadunuSahal_bags_count: 0,
+          kadunuSahal_loaded_total: 0,
+          kadunuSahal_loaded_bags_count: 0,
+
+          ricePolish_total: 0,
+          ricePolish_bagged_total: 0,
+          ricePolish_bags_count: 0,
+          ricePolish_loaded_total: 0,
+          ricePolish_loaded_bags_count: 0,
+
+          dahaiyya_total: 0,
+          dahaiyya_bagged_total: 0,
+          dahaiyya_bags_count: 0,
+          dahaiyya_loaded_total: 0,
+          dahaiyya_loaded_bags_count: 0,
+
+          flour_total: 0,
+          flour_bagged_total: 0,
+          flour_bags_count: 0,
+          flour_loaded_total: 0,
+          flour_loaded_bags_count: 0,
+
+          // Metadata
+          createdAt: serverTimestamp(),
+          lastUpdated: serverTimestamp(),
+          businessId: String(currentBusiness.id || ""),
+          ownerId: String(currentUser.uid || ""),
+        };
+
+        await setDoc(stockTotalsRef, initialStockTotals);
+        console.log("Stock totals document initialized successfully");
+      } else {
+        console.log("Stock totals document already exists");
+      }
+    } catch (error) {
+      console.error("Error initializing stock totals:", error);
+    }
+  };
 
   // Helper functions
   const cleanObjectForFirestore = (obj) => {
@@ -356,7 +483,7 @@ const Loading = () => {
     setGroupedProducts(grouped);
   };
 
-  // Create loading function with quantity reduction logic
+  // FIXED: Create loading function with proper product code handling
   const createLoading = async () => {
     const validSelections = Object.entries(selectedProducts).filter(
       ([uniqueKey, selection]) => {
@@ -382,6 +509,9 @@ const Loading = () => {
     setIsProcessingLoading(true);
 
     try {
+      // FIXED: Initialize stock totals document first
+      await initializeStockTotals();
+
       const batch = writeBatch(db);
       const loadingItems = [];
       let totalValue = 0;
@@ -423,6 +553,8 @@ const Loading = () => {
             bagSize: bagSize,
             pricePerKg: price,
             quantityTaken: bagsToTakeFromThisBag,
+            // ADDED: Include product code from the bag
+            productCode: bag.productCode || null,
           });
 
           // Reduce quantity instead of changing status
@@ -466,10 +598,14 @@ const Loading = () => {
           getFormattedItemName(productData, uniqueKey) ||
           `${productType} ${bagSize}kg`;
 
+        // Get product code from the first bag (they should all have the same product code for the same product)
+        const productCode =
+          usedBags.length > 0 ? usedBags[0].productCode : null;
+
         loadingItems.push({
           itemName: String(formattedItemName),
           productType: String(productType || "unknown"),
-          productCode: String(originalProductType || productType || "unknown"),
+          productCode: String(productCode || ""), // Product code from bagged stock
           riceType: riceType ? String(riceType) : null,
           displayName: String(productData.displayName || formattedItemName),
           bagQuantity: Number(bagQuantity) || 0,
@@ -486,6 +622,10 @@ const Loading = () => {
             : null,
           sourceBatchId: productData.sourceBatchId
             ? String(productData.sourceBatchId)
+            : null,
+          // ADDED: Additional product identification fields
+          originalPaddyType: productData.originalPaddyType
+            ? String(productData.originalPaddyType)
             : null,
         });
 
@@ -530,7 +670,7 @@ const Loading = () => {
       const cleanLoadingData = cleanObjectForFirestore(loadingData);
       batch.set(loadingRef, cleanLoadingData);
 
-      // Update stock totals
+      // FIXED: Update stock totals with proper document handling
       const stockTotalsRef = doc(
         db,
         `owners/${currentUser.uid}/businesses/${currentBusiness.id}/stock/stockTotals`
@@ -550,7 +690,9 @@ const Loading = () => {
       });
 
       stockUpdates.lastUpdated = serverTimestamp();
-      batch.update(stockTotalsRef, stockUpdates);
+
+      // FIXED: Use set with merge instead of update to handle non-existent documents
+      batch.set(stockTotalsRef, stockUpdates, { merge: true });
 
       await batch.commit();
 
@@ -570,7 +712,7 @@ const Loading = () => {
       );
     } catch (error) {
       console.error("Error creating loading:", error);
-      toast.error("Failed to create loading");
+      toast.error(`Failed to create loading: ${error.message}`);
     } finally {
       setIsProcessingLoading(false);
     }
@@ -812,6 +954,13 @@ const Loading = () => {
       processGroupedProducts();
     }
   }, [baggedStocks]);
+
+  // Initialize stock totals on component mount
+  useEffect(() => {
+    if (currentUser && currentBusiness) {
+      initializeStockTotals();
+    }
+  }, [currentUser, currentBusiness]);
 
   // Loading state
   if (loading) {

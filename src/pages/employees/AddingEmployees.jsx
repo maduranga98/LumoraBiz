@@ -916,7 +916,7 @@ const AddingEmployees = () => {
                 {formData.salaryType === "daily"
                   ? "Daily Wage"
                   : formData.salaryType === "monthly"
-                  ? "Daily Wage"
+                  ? "Daily Rate"
                   : "Pay Rate"}{" "}
                 <span className="text-red-500">*</span>
               </label>

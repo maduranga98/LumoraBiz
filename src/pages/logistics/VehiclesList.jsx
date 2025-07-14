@@ -467,292 +467,313 @@ const VehiclesList = () => {
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-      {/* Header with title and action buttons */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between p-6 border-b border-gray-200">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Vehicles List</h2>
-          <p className="text-sm text-gray-600 mt-1">
-            Business: {currentBusiness.name || currentBusiness.id}
-          </p>
+    <>
+      {/* Main Vehicles List Component */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+        {/* Header with title and action buttons */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between p-6 border-b border-gray-200">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Vehicles List</h2>
+            <p className="text-sm text-gray-600 mt-1">
+              Business: {currentBusiness.name || currentBusiness.id}
+            </p>
+          </div>
+          <div className="mt-3 md:mt-0">
+            <button
+              className="bg-blue-600 text-white px-6 py-2.5 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              onClick={() => (window.location.href = "/add-vehicle")}
+            >
+              Add New Vehicle
+            </button>
+          </div>
         </div>
-        <div className="mt-3 md:mt-0">
-          <button
-            className="bg-blue-600 text-white px-6 py-2.5 rounded-lg hover:bg-blue-700 transition-colors font-medium"
-            onClick={() => (window.location.href = "/add-vehicle")}
-          >
-            Add New Vehicle
-          </button>
-        </div>
-      </div>
 
-      {/* Search and filter controls */}
-      <div className="p-6 border-b border-gray-200 bg-gray-50">
-        <div className="flex flex-col md:flex-row md:items-center space-y-3 md:space-y-0 md:space-x-4">
-          <div className="flex-1">
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg
-                  className="h-5 w-5 text-gray-400"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"
-                    clipRule="evenodd"
-                  />
-                </svg>
+        {/* Search and filter controls */}
+        <div className="p-6 border-b border-gray-200 bg-gray-50">
+          <div className="flex flex-col md:flex-row md:items-center space-y-3 md:space-y-0 md:space-x-4">
+            <div className="flex-1">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg
+                    className="h-5 w-5 text-gray-400"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  placeholder="Search vehicles by number, name, manufacturer..."
+                  value={searchTerm}
+                  onChange={handleSearchChange}
+                />
               </div>
-              <input
-                type="text"
-                className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                placeholder="Search vehicles by number, name, manufacturer..."
-                value={searchTerm}
-                onChange={handleSearchChange}
-              />
+            </div>
+
+            <div>
+              <select
+                className="block w-full pl-3 pr-10 py-2.5 text-base border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-lg"
+                value={filterStatus}
+                onChange={handleStatusChange}
+              >
+                <option value="all">All Statuses</option>
+                <option value="active">Active</option>
+                <option value="maintenance">In Maintenance</option>
+                <option value="repair">Under Repair</option>
+                <option value="inactive">Inactive</option>
+              </select>
             </div>
           </div>
-
-          <div>
-            <select
-              className="block w-full pl-3 pr-10 py-2.5 text-base border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-lg"
-              value={filterStatus}
-              onChange={handleStatusChange}
-            >
-              <option value="all">All Statuses</option>
-              <option value="active">Active</option>
-              <option value="maintenance">In Maintenance</option>
-              <option value="repair">Under Repair</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </div>
         </div>
-      </div>
 
-      {/* Vehicles table */}
-      <div className="overflow-x-auto">
-        {filteredVehicles.length === 0 ? (
-          <div className="p-12 text-center text-gray-500">
-            <svg
-              className="mx-auto h-12 w-12 text-gray-400 mb-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"
-              />
-            </svg>
-            <p className="text-lg font-medium text-gray-900 mb-2">
-              {searchTerm ? "No vehicles found" : "No vehicles added yet"}
-            </p>
-            <p className="text-gray-500">
-              {searchTerm
-                ? `No vehicles match "${searchTerm}".`
-                : "Add your first vehicle to get started."}
-            </p>
-            {!searchTerm && (
-              <button
-                className="mt-4 bg-blue-600 text-white px-6 py-2.5 rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                onClick={() => (window.location.href = "/add-vehicle")}
+        {/* Vehicles table */}
+        <div className="overflow-x-auto">
+          {filteredVehicles.length === 0 ? (
+            <div className="p-12 text-center text-gray-500">
+              <svg
+                className="mx-auto h-12 w-12 text-gray-400 mb-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
               >
-                Add Your First Vehicle
-              </button>
-            )}
-          </div>
-        ) : (
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort("vehicleNumber")}
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"
+                />
+              </svg>
+              <p className="text-lg font-medium text-gray-900 mb-2">
+                {searchTerm ? "No vehicles found" : "No vehicles added yet"}
+              </p>
+              <p className="text-gray-500">
+                {searchTerm
+                  ? `No vehicles match "${searchTerm}".`
+                  : "Add your first vehicle to get started."}
+              </p>
+              {!searchTerm && (
+                <button
+                  className="mt-4 bg-blue-600 text-white px-6 py-2.5 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                  onClick={() => (window.location.href = "/add-vehicle")}
                 >
-                  <div className="flex items-center">
-                    Vehicle Details
-                    {sortField === "vehicleNumber" && (
-                      <svg
-                        className={`ml-1 w-4 h-4 ${
-                          sortDirection === "desc" ? "transform rotate-180" : ""
-                        }`}
-                        fill="currentColor"
-                        viewBox="0 0 20 20"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    )}
-                  </div>
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  Vehicle Info
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort("status")}
-                >
-                  <div className="flex items-center">
-                    Status
-                    {sortField === "status" && (
-                      <svg
-                        className={`ml-1 w-4 h-4 ${
-                          sortDirection === "desc" ? "transform rotate-180" : ""
-                        }`}
-                        fill="currentColor"
-                        viewBox="0 0 20 20"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    )}
-                  </div>
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  Important Dates
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredVehicles.map((vehicle) => (
-                <tr
-                  key={vehicle.id}
-                  className="hover:bg-gray-50 transition-colors"
-                >
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-semibold text-gray-900">
-                      {vehicle.vehicleNumber || "No Number"}
+                  Add Your First Vehicle
+                </button>
+              )}
+            </div>
+          ) : (
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort("vehicleNumber")}
+                  >
+                    <div className="flex items-center">
+                      Vehicle Details
+                      {sortField === "vehicleNumber" && (
+                        <svg
+                          className={`ml-1 w-4 h-4 ${
+                            sortDirection === "desc"
+                              ? "transform rotate-180"
+                              : ""
+                          }`}
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      )}
                     </div>
-                    {vehicle.vehicleName && (
-                      <div className="text-sm text-gray-600">
-                        {vehicle.vehicleName}
-                      </div>
-                    )}
-                    {vehicle.vehicle_id && (
-                      <div className="text-xs text-gray-400">
-                        ID: {vehicle.vehicle_id}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">
-                      {vehicle.manufacturer || "Unknown"} {vehicle.model || ""}{" "}
-                      {vehicle.year && `(${vehicle.year})`}
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Vehicle Info
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort("status")}
+                  >
+                    <div className="flex items-center">
+                      Status
+                      {sortField === "status" && (
+                        <svg
+                          className={`ml-1 w-4 h-4 ${
+                            sortDirection === "desc"
+                              ? "transform rotate-180"
+                              : ""
+                          }`}
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      )}
                     </div>
-                    <div className="text-xs text-gray-500">
-                      Type:{" "}
-                      {vehicle.vehicleType
-                        ? vehicle.vehicleType.charAt(0).toUpperCase() +
-                          vehicle.vehicleType.slice(1)
-                        : "N/A"}{" "}
-                      | Fuel:{" "}
-                      {vehicle.fuelType
-                        ? vehicle.fuelType.charAt(0).toUpperCase() +
-                          vehicle.fuelType.slice(1)
-                        : "N/A"}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span
-                      className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadgeClass(
-                        vehicle.status
-                      )}`}
-                    >
-                      {vehicle.status
-                        ? vehicle.status.charAt(0).toUpperCase() +
-                          vehicle.status.slice(1)
-                        : "Unknown"}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <div>Purchased: {formatDate(vehicle.purchaseDate)}</div>
-                    <div>
-                      Insurance: {formatDate(vehicle.insuranceExpiryDate)}
-                    </div>
-                    <div>
-                      Registration: {formatDate(vehicle.registrationExpiryDate)}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex justify-end space-x-2">
-                      <button
-                        onClick={() => handleViewDetails(vehicle)}
-                        className="text-blue-600 hover:text-blue-900 px-2 py-1 rounded hover:bg-blue-50"
-                      >
-                        View
-                      </button>
-                      <button
-                        onClick={() => handleEditVehicle(vehicle)}
-                        className="text-indigo-600 hover:text-indigo-900 px-2 py-1 rounded hover:bg-indigo-50"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteVehicle(vehicle.id)}
-                        className="text-red-600 hover:text-red-900 px-2 py-1 rounded hover:bg-red-50"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Important Dates
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Actions
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredVehicles.map((vehicle) => (
+                  <tr
+                    key={vehicle.id}
+                    className="hover:bg-gray-50 transition-colors"
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-semibold text-gray-900">
+                        {vehicle.vehicleNumber || "No Number"}
+                      </div>
+                      {vehicle.vehicleName && (
+                        <div className="text-sm text-gray-600">
+                          {vehicle.vehicleName}
+                        </div>
+                      )}
+                      {vehicle.vehicle_id && (
+                        <div className="text-xs text-gray-400">
+                          ID: {vehicle.vehicle_id}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {vehicle.manufacturer || "Unknown"}{" "}
+                        {vehicle.model || ""}{" "}
+                        {vehicle.year && `(${vehicle.year})`}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        Type:{" "}
+                        {vehicle.vehicleType
+                          ? vehicle.vehicleType.charAt(0).toUpperCase() +
+                            vehicle.vehicleType.slice(1)
+                          : "N/A"}{" "}
+                        | Fuel:{" "}
+                        {vehicle.fuelType
+                          ? vehicle.fuelType.charAt(0).toUpperCase() +
+                            vehicle.fuelType.slice(1)
+                          : "N/A"}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span
+                        className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadgeClass(
+                          vehicle.status
+                        )}`}
+                      >
+                        {vehicle.status
+                          ? vehicle.status.charAt(0).toUpperCase() +
+                            vehicle.status.slice(1)
+                          : "Unknown"}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <div>Purchased: {formatDate(vehicle.purchaseDate)}</div>
+                      <div>
+                        Insurance: {formatDate(vehicle.insuranceExpiryDate)}
+                      </div>
+                      <div>
+                        Registration:{" "}
+                        {formatDate(vehicle.registrationExpiryDate)}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex justify-end space-x-2">
+                        <button
+                          onClick={() => handleViewDetails(vehicle)}
+                          className="text-blue-600 hover:text-blue-900 px-2 py-1 rounded hover:bg-blue-50"
+                        >
+                          View
+                        </button>
+                        <button
+                          onClick={() => handleEditVehicle(vehicle)}
+                          className="text-indigo-600 hover:text-indigo-900 px-2 py-1 rounded hover:bg-indigo-50"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteVehicle(vehicle.id)}
+                          className="text-red-600 hover:text-red-900 px-2 py-1 rounded hover:bg-red-50"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Results summary */}
+        {filteredVehicles.length > 0 && (
+          <div className="px-6 py-3 border-t border-gray-200 bg-gray-50 text-right">
+            <p className="text-sm text-gray-700">
+              Showing{" "}
+              <span className="font-medium">{filteredVehicles.length}</span>{" "}
+              {filteredVehicles.length === 1 ? "vehicle" : "vehicles"}
+              {searchTerm && ` matching "${searchTerm}"`}
+              {filterStatus !== "all" && ` with status "${filterStatus}"`}
+            </p>
+          </div>
         )}
       </div>
 
-      {/* Results summary */}
-      {filteredVehicles.length > 0 && (
-        <div className="px-6 py-3 border-t border-gray-200 bg-gray-50 text-right">
-          <p className="text-sm text-gray-700">
-            Showing{" "}
-            <span className="font-medium">{filteredVehicles.length}</span>{" "}
-            {filteredVehicles.length === 1 ? "vehicle" : "vehicles"}
-            {searchTerm && ` matching "${searchTerm}"`}
-            {filterStatus !== "all" && ` with status "${filterStatus}"`}
-          </p>
-        </div>
-      )}
-
-      {/* Vehicle details/edit modal */}
+      {/* FIXED MODAL - Full viewport modal with proper scrolling */}
       {selectedVehicle && (
-        <div className="fixed inset-0 overflow-y-auto z-50 flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-500 bg-opacity-75"
+          aria-labelledby="modal-title"
+          role="dialog"
+          aria-modal="true"
+        >
+          {/* Background backdrop */}
           <div
-            className="fixed inset-0 bg-black opacity-50"
+            className="fixed inset-0 bg-gray-500 bg-opacity-75"
             onClick={closeDetailsModal}
           ></div>
-          <div className="relative bg-white rounded-xl max-w-4xl w-full mx-auto shadow-xl max-h-screen overflow-y-auto">
-            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-              <h3 className="text-xl font-semibold text-gray-800">
+
+          {/* Modal panel - Centered and fully scrollable */}
+          <div className="relative bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            {/* Header - Fixed */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white rounded-t-lg flex-shrink-0">
+              <h3
+                className="text-xl font-semibold text-gray-900"
+                id="modal-title"
+              >
                 {isEditMode ? "Edit Vehicle" : "Vehicle Details"}
               </h3>
               <button
                 onClick={closeDetailsModal}
-                className="text-gray-400 hover:text-gray-500 p-1 rounded-full hover:bg-gray-100"
+                className="text-gray-400 hover:text-gray-500 p-2 rounded-full hover:bg-gray-100"
               >
                 <svg
                   className="h-6 w-6"
@@ -770,7 +791,8 @@ const VehiclesList = () => {
               </button>
             </div>
 
-            <div className="px-6 py-4">
+            {/* Scrollable Content - Flexible height */}
+            <div className="flex-1 overflow-y-auto px-6 py-6">
               {isEditMode ? (
                 // Edit Form
                 <form onSubmit={(e) => e.preventDefault()}>
@@ -1160,34 +1182,28 @@ const VehiclesList = () => {
               )}
             </div>
 
-            <div className="px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row justify-between space-y-3 sm:space-y-0">
+            {/* Footer - Fixed */}
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-lg flex-shrink-0">
               {isEditMode ? (
                 // Edit Mode Actions
-                <div className="flex flex-col sm:flex-row gap-3 w-full">
+                <div className="flex justify-end space-x-3">
                   <button
                     onClick={handleCancelEdit}
-                    className="flex-1 py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleSaveVehicle}
                     disabled={saveLoading}
-                    className="flex-1 py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
                   >
-                    {saveLoading ? (
-                      <div className="flex items-center justify-center">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        Saving...
-                      </div>
-                    ) : (
-                      "Save Changes"
-                    )}
+                    {saveLoading ? "Saving..." : "Save Changes"}
                   </button>
                 </div>
               ) : (
                 // View Mode Actions
-                <>
+                <div className="flex flex-wrap justify-between gap-4">
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={() => {
@@ -1197,14 +1213,14 @@ const VehiclesList = () => {
                           status: "active",
                         });
                       }}
-                      className={`px-3 py-1.5 text-xs rounded-md font-medium transition-colors ${
+                      className={`px-3 py-1 text-xs rounded-md ${
                         selectedVehicle.status === "active"
-                          ? "bg-green-100 text-green-800 cursor-default"
+                          ? "bg-green-100 text-green-800"
                           : "border border-green-300 text-green-700 hover:bg-green-50"
                       }`}
                       disabled={selectedVehicle.status === "active"}
                     >
-                      Set Active
+                      Active
                     </button>
                     <button
                       onClick={() => {
@@ -1214,14 +1230,14 @@ const VehiclesList = () => {
                           status: "maintenance",
                         });
                       }}
-                      className={`px-3 py-1.5 text-xs rounded-md font-medium transition-colors ${
+                      className={`px-3 py-1 text-xs rounded-md ${
                         selectedVehicle.status === "maintenance"
-                          ? "bg-yellow-100 text-yellow-800 cursor-default"
+                          ? "bg-yellow-100 text-yellow-800"
                           : "border border-yellow-300 text-yellow-700 hover:bg-yellow-50"
                       }`}
                       disabled={selectedVehicle.status === "maintenance"}
                     >
-                      Set Maintenance
+                      Maintenance
                     </button>
                     <button
                       onClick={() => {
@@ -1231,14 +1247,14 @@ const VehiclesList = () => {
                           status: "repair",
                         });
                       }}
-                      className={`px-3 py-1.5 text-xs rounded-md font-medium transition-colors ${
+                      className={`px-3 py-1 text-xs rounded-md ${
                         selectedVehicle.status === "repair"
-                          ? "bg-orange-100 text-orange-800 cursor-default"
+                          ? "bg-orange-100 text-orange-800"
                           : "border border-orange-300 text-orange-700 hover:bg-orange-50"
                       }`}
                       disabled={selectedVehicle.status === "repair"}
                     >
-                      Set Repair
+                      Repair
                     </button>
                     <button
                       onClick={() => {
@@ -1248,37 +1264,37 @@ const VehiclesList = () => {
                           status: "inactive",
                         });
                       }}
-                      className={`px-3 py-1.5 text-xs rounded-md font-medium transition-colors ${
+                      className={`px-3 py-1 text-xs rounded-md ${
                         selectedVehicle.status === "inactive"
-                          ? "bg-gray-100 text-gray-800 cursor-default"
+                          ? "bg-gray-100 text-gray-800"
                           : "border border-gray-300 text-gray-700 hover:bg-gray-50"
                       }`}
                       disabled={selectedVehicle.status === "inactive"}
                     >
-                      Set Inactive
+                      Inactive
                     </button>
                   </div>
                   <div className="flex gap-3">
                     <button
                       onClick={() => handleEditVehicle(selectedVehicle)}
-                      className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
                     >
-                      Edit Vehicle
+                      Edit
                     </button>
                     <button
                       onClick={() => handleDeleteVehicle(selectedVehicle.id)}
-                      className="inline-flex justify-center py-2 px-4 border border-red-300 shadow-sm text-sm font-medium rounded-md text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+                      className="px-4 py-2 border border-red-300 text-red-700 rounded-md hover:bg-red-50"
                     >
                       Delete
                     </button>
                   </div>
-                </>
+                </div>
               )}
             </div>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
 

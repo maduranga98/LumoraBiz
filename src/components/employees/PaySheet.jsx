@@ -699,10 +699,13 @@ const PaySheet = () => {
       return;
     }
 
-    setLoading(true);
+    if (!currentUser) {
+      toast.error("Authentication required. Please log in again.");
+      return;
+    }
 
+    setLoading(true);
     try {
-      const currentUser = auth.currentUser;
       const paysheetId = `${selectedEmployee.id}_${payrollData.payPeriodStart}_${payrollData.payPeriodEnd}`;
 
       const paysheetData = {
@@ -745,8 +748,8 @@ const PaySheet = () => {
         createdAt: new Date(),
         status: "generated",
       };
-
-      await addDoc(collection(db, "paysheets"), paysheetData);
+      const dbPath = `owners/${ownerId}/businesses/${businessId}/paysheets`;
+      await addDoc(collection(db, dbPath), paysheetData);
       toast.success("Paysheet generated successfully!");
 
       // Reset form
