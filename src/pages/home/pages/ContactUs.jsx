@@ -7,6 +7,10 @@ import {
   Send,
   CheckCircle,
   PhoneCall,
+  Globe,
+  Facebook,
+  Linkedin,
+  ExternalLink,
 } from "lucide-react";
 
 const ContactUs = () => {
@@ -35,7 +39,13 @@ const ContactUs = () => {
         .replace(/[^\d+]/g, "")}`;
     } else if (action === "email") {
       window.location.href = `mailto:${detail}`;
+    } else if (action === "website") {
+      window.open(detail, "_blank", "noopener,noreferrer");
     }
+  };
+
+  const handleSocialClick = (url) => {
+    window.open(url, "_blank", "noopener,noreferrer");
   };
 
   const handleSubmit = async (e) => {
@@ -45,13 +55,16 @@ const ContactUs = () => {
     try {
       // Create email body
       const emailBody = `
-        Name: ${formData.name}
-        Email: ${formData.email}
-        Phone: ${formData.phone}
-        Subject: ${formData.subject}
-        
-        Message:
-        ${formData.message}
+Name: ${formData.name}
+Email: ${formData.email}
+Phone: ${formData.phone}
+Subject: ${formData.subject}
+
+Message:
+${formData.message}
+
+---
+Sent from Rice Mill Management System - Technical Support Form
       `;
 
       // Create mailto link
@@ -90,22 +103,25 @@ const ContactUs = () => {
       icon: <MapPin className="w-6 h-6" />,
       title: "Head Office",
       details: [
-        "Rice Mill Management Systems",
-        "Technology Park, Ratnapura",
-        "Sabaragamuwa Province, Sri Lanka",
+        "UK Office",
+        "Office 4157, 58 Peregrine Road Hainault,",
+        "Ilford, Essex United Kingdom, IG6 3SZ",
+        "",
+        "Sri Lanka Office",
+        "Ihala Muruthenge, Nakkawaththa, 24/2403",
       ],
     },
     {
       icon: <Phone className="w-6 h-6" />,
       title: "Technical Support",
-      details: ["+94 45 222 8888", "+94 77 888 9999 (24/7 Hotline)"],
+      details: ["+94 71 9999 8500", "+94 76 620 6555 (24/7 Hotline)"],
       clickable: true,
       action: "call",
     },
     {
       icon: <Mail className="w-6 h-6" />,
       title: "Technical Team",
-      details: ["lumoraventures@gmail.com", "support@ricemillsystem.lk"],
+      details: ["lumoraventures@gmail.com", "info@lumoraventures.com"],
       clickable: true,
       action: "email",
     },
@@ -120,22 +136,47 @@ const ContactUs = () => {
     },
   ];
 
+  const socialLinks = [
+    {
+      name: "Website",
+      icon: <Globe className="w-5 h-5" />,
+      url: "https://www.lumoraventures.com",
+      color: "bg-blue-600 hover:bg-blue-700",
+      description: "Visit our official website",
+    },
+    {
+      name: "LinkedIn",
+      icon: <Linkedin className="w-5 h-5" />,
+      url: "https://www.linkedin.com/company/lumora-ventures-pvt-ltd/",
+      color: "bg-blue-700 hover:bg-blue-800",
+      description: "Follow us on LinkedIn",
+    },
+    {
+      name: "Facebook",
+      icon: <Facebook className="w-5 h-5" />,
+      url: "https://web.facebook.com/people/Lumora-Ventures/61575034203203/?sk=about",
+      color: "bg-blue-800 hover:bg-blue-900",
+      description: "Follow us on Facebook",
+    },
+  ];
+
   if (isSubmitted) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-lg p-8 max-w-md w-full text-center">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <CheckCircle className="w-8 h-8 text-green-600" />
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
+          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <CheckCircle className="w-10 h-10 text-green-600" />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            Message Sent!
+          <h2 className="text-2xl font-bold text-gray-900 mb-3">
+            Message Sent Successfully!
           </h2>
-          <p className="text-gray-600 mb-6">
-            Thank you for contacting us. We'll get back to you within 24 hours.
+          <p className="text-gray-600 mb-8 leading-relaxed">
+            Thank you for contacting our technical support team. We'll get back
+            to you within 24 hours.
           </p>
           <button
             onClick={() => setIsSubmitted(false)}
-            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 py-3 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 font-medium shadow-lg"
           >
             Send Another Message
           </button>
@@ -145,16 +186,19 @@ const ContactUs = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
       {/* Header */}
-      <div className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <h1 className="text-3xl font-bold text-gray-900">
-            Technical Support
-          </h1>
-          <p className="mt-2 text-gray-600">
-            Get expert technical assistance for your Rice Mill Management System
-          </p>
+      <div className="bg-white shadow-sm border-b border-gray-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="text-center">
+            <h1 className="text-4xl font-bold text-gray-900 mb-4">
+              Technical Support
+            </h1>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+              Get expert technical assistance for your Rice Mill Management
+              System
+            </p>
+          </div>
         </div>
       </div>
 
@@ -162,65 +206,96 @@ const ContactUs = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
           {/* Contact Information */}
           <div className="space-y-8">
-            <div>
+            <div className="bg-white rounded-2xl p-8 shadow-lg border border-gray-100">
               <h2 className="text-2xl font-bold text-gray-900 mb-6">
                 Technical Support Team
               </h2>
-              <p className="text-gray-600 mb-8">
-                Our technical team is available to assist with system setup,
-                troubleshooting, and optimization of your Rice Mill Management
-                System. Get expert support when you need it.
+              <p className="text-gray-600 mb-8 leading-relaxed">
+                Our dedicated technical team is available to assist with system
+                setup, troubleshooting, and optimization of your Rice Mill
+                Management System. Get expert support when you need it most.
               </p>
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {contactInfo.map((item, index) => (
-                <div
-                  key={index}
-                  className="bg-white rounded-xl p-6 shadow-sm border border-gray-100"
-                >
-                  <div className="flex items-center mb-4">
-                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 mr-4">
-                      {item.icon}
-                    </div>
-                    <h3 className="text-lg font-semibold text-gray-900">
-                      {item.title}
-                    </h3>
-                  </div>
-                  <div className="space-y-1">
-                    {item.details.map((detail, detailIndex) => (
-                      <div key={detailIndex}>
-                        {item.clickable &&
-                        (item.action === "call" || item.action === "email") ? (
-                          <button
-                            onClick={() =>
-                              handleContactClick(item.action, detail)
-                            }
-                            className="text-gray-600 text-sm hover:text-blue-600 transition-colors text-left flex items-center group"
-                          >
-                            {item.action === "call" && (
-                              <PhoneCall className="w-3 h-3 mr-1 opacity-0 group-hover:opacity-100 transition-opacity" />
-                            )}
-                            {detail}
-                          </button>
-                        ) : (
-                          <p className="text-gray-600 text-sm">{detail}</p>
-                        )}
+              {/* Contact Information Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
+                {contactInfo.map((item, index) => (
+                  <div
+                    key={index}
+                    className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100 hover:shadow-md transition-shadow duration-200"
+                  >
+                    <div className="flex items-center mb-4">
+                      <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center text-white mr-4 shadow-md">
+                        {item.icon}
                       </div>
-                    ))}
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        {item.title}
+                      </h3>
+                    </div>
+                    <div className="space-y-2">
+                      {item.details.map((detail, detailIndex) => (
+                        <div key={detailIndex}>
+                          {detail === "" ? (
+                            <div className="h-2" />
+                          ) : item.clickable &&
+                            (item.action === "call" ||
+                              item.action === "email") ? (
+                            <button
+                              onClick={() =>
+                                handleContactClick(item.action, detail)
+                              }
+                              className="text-gray-700 text-sm hover:text-blue-600 transition-colors text-left flex items-center group font-medium"
+                            >
+                              {item.action === "call" && (
+                                <PhoneCall className="w-3 h-3 mr-2 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              )}
+                              {detail}
+                            </button>
+                          ) : (
+                            <p className="text-gray-700 text-sm leading-relaxed">
+                              {detail}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
+                ))}
+              </div>
+
+              {/* Social Links Section */}
+              <div className="border-t border-gray-200 pt-8">
+                <h3 className="text-lg font-semibold text-gray-900 mb-6">
+                  Connect With Us
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {socialLinks.map((social, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleSocialClick(social.url)}
+                      className={`${social.color} text-white p-4 rounded-xl transition-all duration-200 hover:scale-105 hover:shadow-lg group`}
+                    >
+                      <div className="flex items-center justify-center mb-2">
+                        {social.icon}
+                        <ExternalLink className="w-3 h-3 ml-2 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                      <div className="text-sm font-medium">{social.name}</div>
+                      <div className="text-xs opacity-90 mt-1">
+                        {social.description}
+                      </div>
+                    </button>
+                  ))}
                 </div>
-              ))}
+              </div>
             </div>
           </div>
 
           {/* Contact Form */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-6">
               Technical Support Request
             </h2>
 
-            <div className="space-y-6" onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit} className="space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div>
                   <label
@@ -236,7 +311,7 @@ const ContactUs = () => {
                     value={formData.name}
                     onChange={handleInputChange}
                     required
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400"
                     placeholder="Your full name"
                   />
                 </div>
@@ -255,7 +330,7 @@ const ContactUs = () => {
                     value={formData.email}
                     onChange={handleInputChange}
                     required
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400"
                     placeholder="your.email@example.com"
                   />
                 </div>
@@ -275,7 +350,7 @@ const ContactUs = () => {
                     name="phone"
                     value={formData.phone}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400"
                     placeholder="+94 77 123 4567"
                   />
                 </div>
@@ -293,7 +368,7 @@ const ContactUs = () => {
                     value={formData.subject}
                     onChange={handleInputChange}
                     required
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400"
                   >
                     <option value="">Select a subject</option>
                     <option value="technical_issue">Technical Issue</option>
@@ -321,29 +396,43 @@ const ContactUs = () => {
                   onChange={handleInputChange}
                   required
                   rows={6}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors resize-none"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 resize-none hover:border-gray-400"
                   placeholder="Describe your technical issue, system requirement, or question in detail..."
                 />
               </div>
 
               <button
-                type="button"
-                onClick={handleSubmit}
+                type="submit"
                 disabled={isSubmitting}
-                className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 px-6 rounded-lg hover:from-blue-700 hover:to-indigo-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center font-medium shadow-lg hover:shadow-xl"
               >
                 {isSubmitting ? (
                   <div className="flex items-center">
                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                    Sending...
+                    Sending Message...
                   </div>
                 ) : (
                   <div className="flex items-center">
                     <Send className="w-5 h-5 mr-2" />
-                    Send Message
+                    Send Support Request
                   </div>
                 )}
               </button>
+            </form>
+
+            {/* Additional Help Text */}
+            <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-sm text-blue-800">
+                <strong>Need immediate assistance?</strong> Call our 24/7
+                hotline at{" "}
+                <button
+                  onClick={() => handleContactClick("call", "+94 76 620 6555")}
+                  className="font-semibold hover:underline"
+                >
+                  +94 76 620 6555
+                </button>{" "}
+                for urgent technical support.
+              </p>
             </div>
           </div>
         </div>

@@ -130,7 +130,7 @@ const EmployeeList = () => {
   // Filter employees
   const filteredEmployees = employees.filter((employee) => {
     const matchesSearch =
-      employee.employeeName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      employee.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       employee.nicNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       employee.mobile1?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesRole = !filterRole || employee.role === filterRole;
@@ -147,7 +147,7 @@ const EmployeeList = () => {
 
     if (type === "edit" && employee) {
       setEditFormData({
-        employeeName: employee.employeeName || "",
+        name: employee.name || "",
         address: employee.address || "",
         mobile1: employee.mobile1 || "",
         mobile2: employee.mobile2 || "",
@@ -340,7 +340,7 @@ const EmployeeList = () => {
 
     // Validation
     if (
-      !editFormData.employeeName ||
+      !editFormData.name ||
       !editFormData.address ||
       !editFormData.mobile1 ||
       !editFormData.nicNumber ||
@@ -633,20 +633,19 @@ const EmployeeList = () => {
                       {employee.images?.employeePhoto ? (
                         <img
                           src={employee.images.employeePhoto}
-                          alt={employee.employeeName}
+                          alt={employee.name}
                           className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm"
                         />
                       ) : (
                         <div className="w-12 h-12 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
                           <span className="text-white font-semibold text-lg">
-                            {employee.employeeName?.charAt(0)?.toUpperCase() ||
-                              "?"}
+                            {employee.name?.charAt(0)?.toUpperCase() || "?"}
                           </span>
                         </div>
                       )}
                       <div>
                         <h3 className="font-semibold text-gray-900 mb-1">
-                          {employee.employeeName}
+                          {employee.name}
                         </h3>
                         <RoleBadge role={employee.role} />
                       </div>
@@ -753,165 +752,274 @@ const EmployeeList = () => {
       <canvas ref={canvasRef} className="hidden" />
 
       {/* Modal */}
+      {/* Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40 p-4">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-              <h2 className="text-xl font-semibold">
-                {modalType === "view" && "Employee Details"}
-                {modalType === "edit" && "Edit Employee"}
-                {modalType === "status" && "Update Employee Status"}
-              </h2>
-              <button
-                onClick={closeModal}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-6 h-6" />
-              </button>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-40 p-2 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-lg w-full max-w-6xl my-4 sm:my-8 shadow-2xl">
+            {/* Modal Header - Fixed */}
+            <div className="sticky top-0 z-10 bg-white border-b border-gray-200 rounded-t-lg">
+              <div className="p-4 sm:p-6 flex justify-between items-center">
+                <h2 className="text-xl sm:text-2xl font-semibold text-gray-900">
+                  {modalType === "view" && "Employee Details"}
+                  {modalType === "edit" && "Edit Employee"}
+                  {modalType === "status" && "Update Employee Status"}
+                </h2>
+                <button
+                  onClick={closeModal}
+                  className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
             </div>
 
-            <div className="p-6">
+            {/* Modal Content - Scrollable */}
+            <div className="p-4 sm:p-6 max-h-[calc(100vh-200px)] overflow-y-auto">
               {/* View Modal */}
               {modalType === "view" && selectedEmployee && (
                 <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Employee Name
-                        </label>
-                        <p className="mt-1 text-sm text-gray-900">
-                          {selectedEmployee.employeeName}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          NIC Number
-                        </label>
-                        <p className="mt-1 text-sm text-gray-900">
-                          {selectedEmployee.nicNumber}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Role
-                        </label>
-                        <div className="mt-1">
-                          <RoleBadge role={selectedEmployee.role} />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Mobile 1
-                        </label>
-                        <p className="mt-1 text-sm text-gray-900">
-                          {selectedEmployee.mobile1}
-                        </p>
-                      </div>
-                      {selectedEmployee.mobile2 && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">
-                            Mobile 2
-                          </label>
-                          <p className="mt-1 text-sm text-gray-900">
-                            {selectedEmployee.mobile2}
-                          </p>
+                  {/* Employee Header Card */}
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-4 sm:space-y-0 sm:space-x-6">
+                      {selectedEmployee.images?.employeePhoto ? (
+                        <img
+                          src={selectedEmployee.images.employeePhoto}
+                          alt={selectedEmployee.name}
+                          className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover border-4 border-white shadow-lg"
+                        />
+                      ) : (
+                        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center border-4 border-white shadow-lg">
+                          <span className="text-white font-bold text-2xl sm:text-3xl">
+                            {selectedEmployee.name?.charAt(0)?.toUpperCase() ||
+                              "?"}
+                          </span>
                         </div>
                       )}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Address
-                        </label>
-                        <p className="mt-1 text-sm text-gray-900">
-                          {selectedEmployee.address}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Status
-                        </label>
-                        <div className="mt-1">
+                      <div className="flex-1">
+                        <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
+                          {selectedEmployee.name}
+                        </h3>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <RoleBadge role={selectedEmployee.role} />
                           <StatusBadge status={selectedEmployee.status} />
                         </div>
                       </div>
-                      {selectedEmployee.status === "inactive" &&
-                        selectedEmployee.leftDate && (
+                    </div>
+                  </div>
+
+                  {/* Main Content Grid */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    {/* Personal Information Section */}
+                    <div className="space-y-6">
+                      <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                        <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                          <IdCard className="w-5 h-5 mr-2 text-blue-600" />
+                          Personal Information
+                        </h4>
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-600 mb-1">
+                                Employee Name
+                              </label>
+                              <p className="text-gray-900 font-medium">
+                                {selectedEmployee.name}
+                              </p>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-600 mb-1">
+                                NIC Number
+                              </label>
+                              <p className="text-gray-900 font-medium">
+                                {selectedEmployee.nicNumber}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-600 mb-1">
+                                Primary Mobile
+                              </label>
+                              <p className="text-gray-900 font-medium flex items-center">
+                                <Phone className="w-4 h-4 mr-2 text-green-600" />
+                                {selectedEmployee.mobile1}
+                              </p>
+                            </div>
+                            {selectedEmployee.mobile2 && (
+                              <div>
+                                <label className="block text-sm font-medium text-gray-600 mb-1">
+                                  Secondary Mobile
+                                </label>
+                                <p className="text-gray-900 font-medium flex items-center">
+                                  <Phone className="w-4 h-4 mr-2 text-blue-600" />
+                                  {selectedEmployee.mobile2}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+
                           <div>
-                            <label className="block text-sm font-medium text-gray-700">
-                              Left Date
+                            <label className="block text-sm font-medium text-gray-600 mb-1">
+                              Address
                             </label>
-                            <p className="mt-1 text-sm text-gray-900">
-                              {new Date(
-                                selectedEmployee.leftDate
-                              ).toLocaleDateString()}
+                            <p className="text-gray-900 flex items-start">
+                              <MapPin className="w-4 h-4 mr-2 text-red-600 mt-1" />
+                              <span>{selectedEmployee.address}</span>
                             </p>
                           </div>
-                        )}
+
+                          {selectedEmployee.status === "inactive" &&
+                            selectedEmployee.leftDate && (
+                              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                                <label className="block text-sm font-medium text-red-700 mb-1">
+                                  Left Date
+                                </label>
+                                <p className="text-red-900 font-medium flex items-center">
+                                  <Calendar className="w-4 h-4 mr-2" />
+                                  {new Date(
+                                    selectedEmployee.leftDate
+                                  ).toLocaleDateString()}
+                                </p>
+                              </div>
+                            )}
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-medium">Documents</h3>
-                      <div className="grid grid-cols-2 gap-4">
-                        {selectedEmployee.images?.employeePhoto && (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Employee Photo
-                            </label>
-                            <img
-                              src={selectedEmployee.images.employeePhoto}
-                              alt="Employee"
-                              className="w-full h-32 object-cover rounded-lg border"
-                            />
+                    {/* Documents Section */}
+                    <div className="space-y-6">
+                      <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                        <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                          <Camera className="w-5 h-5 mr-2 text-purple-600" />
+                          Documents & Photos
+                        </h4>
+                        <div className="space-y-6">
+                          {/* Employee Photo */}
+                          {selectedEmployee.images?.employeePhoto && (
+                            <div>
+                              <label className="block text-sm font-medium text-gray-600 mb-2">
+                                Employee Photo
+                              </label>
+                              <div className="relative group">
+                                <img
+                                  src={selectedEmployee.images.employeePhoto}
+                                  alt="Employee"
+                                  className="w-full max-w-xs h-48 object-cover rounded-lg border shadow-sm group-hover:shadow-md transition-shadow"
+                                />
+                                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 rounded-lg transition-all flex items-center justify-center">
+                                  <Eye className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* NIC Documents */}
+                          <div className="space-y-4">
+                            <h5 className="font-medium text-gray-800">
+                              NIC Documents
+                            </h5>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              {selectedEmployee.images?.nicFront && (
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-600 mb-2">
+                                    NIC Front
+                                  </label>
+                                  <div className="relative group">
+                                    <img
+                                      src={selectedEmployee.images.nicFront}
+                                      alt="NIC Front"
+                                      className="w-full h-32 object-cover rounded-lg border shadow-sm group-hover:shadow-md transition-shadow"
+                                    />
+                                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 rounded-lg transition-all flex items-center justify-center">
+                                      <Eye className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                              {selectedEmployee.images?.nicBack && (
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-600 mb-2">
+                                    NIC Back
+                                  </label>
+                                  <div className="relative group">
+                                    <img
+                                      src={selectedEmployee.images.nicBack}
+                                      alt="NIC Back"
+                                      className="w-full h-32 object-cover rounded-lg border shadow-sm group-hover:shadow-md transition-shadow"
+                                    />
+                                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 rounded-lg transition-all flex items-center justify-center">
+                                      <Eye className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        )}
-                        {selectedEmployee.images?.nicFront && (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              NIC Front
-                            </label>
-                            <img
-                              src={selectedEmployee.images.nicFront}
-                              alt="NIC Front"
-                              className="w-full h-32 object-cover rounded-lg border"
-                            />
-                          </div>
-                        )}
-                        {selectedEmployee.images?.nicBack && (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              NIC Back
-                            </label>
-                            <img
-                              src={selectedEmployee.images.nicBack}
-                              alt="NIC Back"
-                              className="w-full h-32 object-cover rounded-lg border"
-                            />
-                          </div>
-                        )}
-                        {selectedEmployee.images?.licenseFront && (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              License Front
-                            </label>
-                            <img
-                              src={selectedEmployee.images.licenseFront}
-                              alt="License Front"
-                              className="w-full h-32 object-cover rounded-lg border"
-                            />
-                          </div>
-                        )}
-                        {selectedEmployee.images?.licenseBack && (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              License Back
-                            </label>
-                            <img
-                              src={selectedEmployee.images.licenseBack}
-                              alt="License Back"
-                              className="w-full h-32 object-cover rounded-lg border"
-                            />
-                          </div>
-                        )}
+
+                          {/* License Documents (if driver) */}
+                          {selectedEmployee.role === "driver" && (
+                            <div className="space-y-4">
+                              <h5 className="font-medium text-gray-800">
+                                Driving License
+                              </h5>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                {selectedEmployee.images?.licenseFront && (
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-600 mb-2">
+                                      License Front
+                                    </label>
+                                    <div className="relative group">
+                                      <img
+                                        src={
+                                          selectedEmployee.images.licenseFront
+                                        }
+                                        alt="License Front"
+                                        className="w-full h-32 object-cover rounded-lg border shadow-sm group-hover:shadow-md transition-shadow"
+                                      />
+                                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 rounded-lg transition-all flex items-center justify-center">
+                                        <Eye className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                                {selectedEmployee.images?.licenseBack && (
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-600 mb-2">
+                                      License Back
+                                    </label>
+                                    <div className="relative group">
+                                      <img
+                                        src={
+                                          selectedEmployee.images.licenseBack
+                                        }
+                                        alt="License Back"
+                                        className="w-full h-32 object-cover rounded-lg border shadow-sm group-hover:shadow-md transition-shadow"
+                                      />
+                                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 rounded-lg transition-all flex items-center justify-center">
+                                        <Eye className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* No documents message */}
+                          {!selectedEmployee.images?.employeePhoto &&
+                            !selectedEmployee.images?.nicFront &&
+                            !selectedEmployee.images?.nicBack &&
+                            !selectedEmployee.images?.licenseFront &&
+                            !selectedEmployee.images?.licenseBack && (
+                              <div className="text-center py-8">
+                                <Camera className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                                <p className="text-gray-500">
+                                  No documents uploaded
+                                </p>
+                              </div>
+                            )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -920,123 +1028,137 @@ const EmployeeList = () => {
 
               {/* Edit Modal */}
               {modalType === "edit" && selectedEmployee && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Employee Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={editFormData.employeeName || ""}
-                        onChange={(e) =>
-                          setEditFormData((prev) => ({
-                            ...prev,
-                            employeeName: e.target.value,
-                          }))
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                      />
-                    </div>
+                <div className="space-y-8">
+                  {/* Employee Information Form */}
+                  <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                    <h4 className="text-lg font-semibold text-gray-900 mb-6 flex items-center">
+                      <Edit className="w-5 h-5 mr-2 text-green-600" />
+                      Edit Employee Information
+                    </h4>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        NIC Number <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={editFormData.nicNumber || ""}
-                        onChange={(e) =>
-                          setEditFormData((prev) => ({
-                            ...prev,
-                            nicNumber: e.target.value,
-                          }))
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                      />
-                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Employee Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={editFormData.name || ""}
+                          onChange={(e) =>
+                            setEditFormData((prev) => ({
+                              ...prev,
+                              name: e.target.value,
+                            }))
+                          }
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                          placeholder="Enter employee name"
+                        />
+                      </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Role <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={editFormData.role || ""}
-                        onChange={(e) =>
-                          setEditFormData((prev) => ({
-                            ...prev,
-                            role: e.target.value,
-                          }))
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                      >
-                        <option value="">Select a role</option>
-                        {roles.map((role) => (
-                          <option key={role.value} value={role.value}>
-                            {role.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          NIC Number <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={editFormData.nicNumber || ""}
+                          onChange={(e) =>
+                            setEditFormData((prev) => ({
+                              ...prev,
+                              nicNumber: e.target.value,
+                            }))
+                          }
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                          placeholder="Enter NIC number"
+                        />
+                      </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Mobile Number 1 <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="tel"
-                        value={editFormData.mobile1 || ""}
-                        onChange={(e) =>
-                          setEditFormData((prev) => ({
-                            ...prev,
-                            mobile1: e.target.value,
-                          }))
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                      />
-                    </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Role <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={editFormData.role || ""}
+                          onChange={(e) =>
+                            setEditFormData((prev) => ({
+                              ...prev,
+                              role: e.target.value,
+                            }))
+                          }
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                        >
+                          <option value="">Select a role</option>
+                          {roles.map((role) => (
+                            <option key={role.value} value={role.value}>
+                              {role.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Mobile Number 2
-                      </label>
-                      <input
-                        type="tel"
-                        value={editFormData.mobile2 || ""}
-                        onChange={(e) =>
-                          setEditFormData((prev) => ({
-                            ...prev,
-                            mobile2: e.target.value,
-                          }))
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                      />
-                    </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Primary Mobile <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="tel"
+                          value={editFormData.mobile1 || ""}
+                          onChange={(e) =>
+                            setEditFormData((prev) => ({
+                              ...prev,
+                              mobile1: e.target.value,
+                            }))
+                          }
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                          placeholder="Enter primary mobile number"
+                        />
+                      </div>
 
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Address <span className="text-red-500">*</span>
-                      </label>
-                      <textarea
-                        value={editFormData.address || ""}
-                        onChange={(e) =>
-                          setEditFormData((prev) => ({
-                            ...prev,
-                            address: e.target.value,
-                          }))
-                        }
-                        rows={3}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
-                      />
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Secondary Mobile
+                        </label>
+                        <input
+                          type="tel"
+                          value={editFormData.mobile2 || ""}
+                          onChange={(e) =>
+                            setEditFormData((prev) => ({
+                              ...prev,
+                              mobile2: e.target.value,
+                            }))
+                          }
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                          placeholder="Enter secondary mobile number"
+                        />
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Address <span className="text-red-500">*</span>
+                        </label>
+                        <textarea
+                          value={editFormData.address || ""}
+                          onChange={(e) =>
+                            setEditFormData((prev) => ({
+                              ...prev,
+                              address: e.target.value,
+                            }))
+                          }
+                          rows={3}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none transition-all"
+                          placeholder="Enter complete address"
+                        />
+                      </div>
                     </div>
                   </div>
 
                   {/* Image Edit Section */}
-                  <div className="border-t border-gray-200 pt-6">
-                    <h3 className="text-lg font-medium text-gray-800 mb-4">
-                      Update Documents
-                    </h3>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                    <h4 className="text-lg font-semibold text-gray-900 mb-6 flex items-center">
+                      <Camera className="w-5 h-5 mr-2 text-purple-600" />
+                      Update Documents & Photos
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                       <EditImageSection
                         imageType="employeePhoto"
                         label="Employee Photo"
@@ -1072,211 +1194,215 @@ const EmployeeList = () => {
                       )}
                     </div>
                   </div>
-
-                  {/* Edit Actions */}
-                  <div className="border-t border-gray-200 pt-6 flex justify-end space-x-3">
-                    <button
-                      onClick={closeModal}
-                      className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleSaveChanges}
-                      disabled={saveLoading}
-                      className={`px-6 py-2 bg-blue-600 text-white rounded-lg transition-colors ${
-                        saveLoading
-                          ? "opacity-70 cursor-not-allowed"
-                          : "hover:bg-blue-700"
-                      }`}
-                    >
-                      {saveLoading ? (
-                        <div className="flex items-center">
-                          <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                          Saving...
-                        </div>
-                      ) : (
-                        "Save Changes"
-                      )}
-                    </button>
-                  </div>
                 </div>
               )}
 
               {/* Status Update Modal */}
               {modalType === "status" && selectedEmployee && (
                 <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Employee Status
-                      </label>
-                      <select
-                        value={statusData.status}
-                        onChange={(e) =>
-                          setStatusData((prev) => ({
-                            ...prev,
-                            status: e.target.value,
-                          }))
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                      >
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                      </select>
-                    </div>
+                  <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                    <h4 className="text-lg font-semibold text-gray-900 mb-6 flex items-center">
+                      <UserCheck className="w-5 h-5 mr-2 text-yellow-600" />
+                      Update Employee Status
+                    </h4>
 
-                    {statusData.status === "inactive" && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Date Left <span className="text-red-500">*</span>
+                          Employee Status
                         </label>
-                        <input
-                          type="date"
-                          value={statusData.leftDate}
+                        <select
+                          value={statusData.status}
                           onChange={(e) =>
                             setStatusData((prev) => ({
                               ...prev,
-                              leftDate: e.target.value,
+                              status: e.target.value,
                             }))
                           }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                          max={new Date().toISOString().split("T")[0]}
-                        />
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                        >
+                          <option value="active">Active</option>
+                          <option value="inactive">Inactive</option>
+                        </select>
+                      </div>
+
+                      {statusData.status === "inactive" && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Date Left <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="date"
+                            value={statusData.leftDate}
+                            onChange={(e) =>
+                              setStatusData((prev) => ({
+                                ...prev,
+                                leftDate: e.target.value,
+                              }))
+                            }
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                            max={new Date().toISOString().split("T")[0]}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Current Employee Info */}
+                    <div className="mt-6 bg-gray-50 rounded-lg p-4">
+                      <h5 className="font-medium text-gray-800 mb-3">
+                        Current Employee Information
+                      </h5>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
+                            <span className="text-white font-semibold text-sm">
+                              {selectedEmployee.name?.charAt(0)?.toUpperCase()}
+                            </span>
+                          </div>
+                          <div>
+                            <div className="font-medium text-gray-900">
+                              {selectedEmployee.name}
+                            </div>
+                            <div className="text-gray-600">
+                              <RoleBadge role={selectedEmployee.role} />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <div>
+                            <span className="font-medium text-gray-700">
+                              Current Status:
+                            </span>
+                            <div className="mt-1">
+                              <StatusBadge status={selectedEmployee.status} />
+                            </div>
+                          </div>
+                          {selectedEmployee.status === "inactive" &&
+                            selectedEmployee.leftDate && (
+                              <div>
+                                <span className="font-medium text-gray-700">
+                                  Previous Left Date:
+                                </span>{" "}
+                                <span className="text-gray-900">
+                                  {new Date(
+                                    selectedEmployee.leftDate
+                                  ).toLocaleDateString()}
+                                </span>
+                              </div>
+                            )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Status Update Warning */}
+                    {statusData.status !== selectedEmployee.status && (
+                      <div
+                        className={`mt-6 rounded-lg p-4 ${
+                          statusData.status === "active"
+                            ? "bg-green-50 border border-green-200"
+                            : "bg-red-50 border border-red-200"
+                        }`}
+                      >
+                        <div className="flex items-start">
+                          <div
+                            className={`flex-shrink-0 ${
+                              statusData.status === "active"
+                                ? "text-green-600"
+                                : "text-red-600"
+                            }`}
+                          >
+                            {statusData.status === "active" ? (
+                              <UserCheck className="w-5 h-5" />
+                            ) : (
+                              <X className="w-5 h-5" />
+                            )}
+                          </div>
+                          <div className="ml-3">
+                            <h3
+                              className={`text-sm font-medium ${
+                                statusData.status === "active"
+                                  ? "text-green-800"
+                                  : "text-red-800"
+                              }`}
+                            >
+                              {statusData.status === "active"
+                                ? "Activating Employee"
+                                : "Deactivating Employee"}
+                            </h3>
+                            <p
+                              className={`mt-1 text-sm ${
+                                statusData.status === "active"
+                                  ? "text-green-700"
+                                  : "text-red-700"
+                              }`}
+                            >
+                              {statusData.status === "active"
+                                ? "This employee will be marked as active and able to work."
+                                : "This employee will be marked as inactive and will not appear in active employee lists."}
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
-
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <h4 className="font-medium text-gray-800 mb-3">
-                      Current Employee Information
-                    </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
-                          <span className="text-white font-semibold text-sm">
-                            {selectedEmployee.employeeName
-                              ?.charAt(0)
-                              ?.toUpperCase()}
-                          </span>
-                        </div>
-                        <div>
-                          <div className="font-medium text-gray-900">
-                            {selectedEmployee.employeeName}
-                          </div>
-                          <div className="text-gray-600">
-                            <RoleBadge role={selectedEmployee.role} />
-                          </div>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <div>
-                          <span className="font-medium text-gray-700">
-                            Current Status:
-                          </span>
-                          <div className="mt-1">
-                            <StatusBadge status={selectedEmployee.status} />
-                          </div>
-                        </div>
-                        {selectedEmployee.status === "inactive" &&
-                          selectedEmployee.leftDate && (
-                            <div>
-                              <span className="font-medium text-gray-700">
-                                Previous Left Date:
-                              </span>{" "}
-                              <span className="text-gray-900">
-                                {new Date(
-                                  selectedEmployee.leftDate
-                                ).toLocaleDateString()}
-                              </span>
-                            </div>
-                          )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Status Update Warning */}
-                  {statusData.status !== selectedEmployee.status && (
-                    <div
-                      className={`rounded-lg p-4 ${
-                        statusData.status === "active"
-                          ? "bg-green-50 border border-green-200"
-                          : "bg-red-50 border border-red-200"
-                      }`}
-                    >
-                      <div className="flex items-start">
-                        <div
-                          className={`flex-shrink-0 ${
-                            statusData.status === "active"
-                              ? "text-green-600"
-                              : "text-red-600"
-                          }`}
-                        >
-                          {statusData.status === "active" ? (
-                            <UserCheck className="w-5 h-5" />
-                          ) : (
-                            <X className="w-5 h-5" />
-                          )}
-                        </div>
-                        <div className="ml-3">
-                          <h3
-                            className={`text-sm font-medium ${
-                              statusData.status === "active"
-                                ? "text-green-800"
-                                : "text-red-800"
-                            }`}
-                          >
-                            {statusData.status === "active"
-                              ? "Activating Employee"
-                              : "Deactivating Employee"}
-                          </h3>
-                          <p
-                            className={`mt-1 text-sm ${
-                              statusData.status === "active"
-                                ? "text-green-700"
-                                : "text-red-700"
-                            }`}
-                          >
-                            {statusData.status === "active"
-                              ? "This employee will be marked as active and able to work."
-                              : "This employee will be marked as inactive and will not appear in active employee lists."}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Status Actions */}
-                  <div className="border-t border-gray-200 pt-6 flex justify-end space-x-3">
-                    <button
-                      onClick={closeModal}
-                      className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleStatusUpdate}
-                      disabled={saveLoading}
-                      className={`px-6 py-2 rounded-lg transition-colors ${
-                        statusData.status === "active"
-                          ? "bg-green-600 hover:bg-green-700 text-white"
-                          : "bg-red-600 hover:bg-red-700 text-white"
-                      } ${saveLoading ? "opacity-70 cursor-not-allowed" : ""}`}
-                    >
-                      {saveLoading ? (
-                        <div className="flex items-center">
-                          <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                          Updating...
-                        </div>
-                      ) : (
-                        `Mark as ${
-                          statusData.status === "active" ? "Active" : "Inactive"
-                        }`
-                      )}
-                    </button>
-                  </div>
                 </div>
               )}
+            </div>
+
+            {/* Modal Footer - Fixed at bottom */}
+            <div className="sticky bottom-0 bg-white border-t border-gray-200 rounded-b-lg p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row justify-end space-y-3 sm:space-y-0 sm:space-x-3">
+                <button
+                  onClick={closeModal}
+                  className="w-full sm:w-auto px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+                >
+                  {modalType === "view" ? "Close" : "Cancel"}
+                </button>
+
+                {modalType === "edit" && (
+                  <button
+                    onClick={handleSaveChanges}
+                    disabled={saveLoading}
+                    className={`w-full sm:w-auto px-8 py-3 bg-blue-600 text-white rounded-lg transition-colors font-medium ${
+                      saveLoading
+                        ? "opacity-70 cursor-not-allowed"
+                        : "hover:bg-blue-700"
+                    }`}
+                  >
+                    {saveLoading ? (
+                      <div className="flex items-center justify-center">
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        Saving...
+                      </div>
+                    ) : (
+                      "Save Changes"
+                    )}
+                  </button>
+                )}
+
+                {modalType === "status" && (
+                  <button
+                    onClick={handleStatusUpdate}
+                    disabled={saveLoading}
+                    className={`w-full sm:w-auto px-8 py-3 rounded-lg transition-colors font-medium ${
+                      statusData.status === "active"
+                        ? "bg-green-600 hover:bg-green-700 text-white"
+                        : "bg-red-600 hover:bg-red-700 text-white"
+                    } ${saveLoading ? "opacity-70 cursor-not-allowed" : ""}`}
+                  >
+                    {saveLoading ? (
+                      <div className="flex items-center justify-center">
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        Updating...
+                      </div>
+                    ) : (
+                      `Mark as ${
+                        statusData.status === "active" ? "Active" : "Inactive"
+                      }`
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

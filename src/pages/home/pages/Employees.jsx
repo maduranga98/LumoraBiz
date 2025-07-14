@@ -6,7 +6,6 @@ import AddingEmployees from "../../employees/AddingEmployees";
 import MarkAttendance from "../../employees/MarkAttendence";
 import { ManPower } from "../../../components/employees/ManPower";
 import { WorkAssignmentsList } from "../../../components/employees/WorkAssignedList";
-import PaySheet from "../../../components/employees/PaySheet";
 import Salary from "../../../components/employees/Salary";
 
 const Employees = () => {

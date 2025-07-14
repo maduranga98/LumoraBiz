@@ -14,12 +14,14 @@ import {
   AlertCircle,
   CheckCircle,
   Info,
+  RefreshCw,
 } from "lucide-react";
 
 export const AddNewBusiness = ({ onSuccess }) => {
   const { currentUser } = useAuth();
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
+  const [refreshing, setRefreshing] = useState(false);
 
   const {
     register,
@@ -27,6 +29,29 @@ export const AddNewBusiness = ({ onSuccess }) => {
     formState: { errors },
     reset,
   } = useForm();
+
+  const refreshApplication = () => {
+    setRefreshing(true);
+
+    // Option 1: Hard refresh (reloads the entire page)
+    window.location.reload();
+
+    // Option 2: Soft refresh (navigate to home and back)
+    // window.location.href = '/';
+
+    // Option 3: Clear cache and reload
+    // if ('caches' in window) {
+    //   caches.keys().then(names => {
+    //     names.forEach(name => {
+    //       caches.delete(name);
+    //     });
+    //   }).then(() => {
+    //     window.location.reload();
+    //   });
+    // } else {
+    //   window.location.reload();
+    // }
+  };
 
   const onSubmit = async (data) => {
     try {
@@ -68,8 +93,13 @@ export const AddNewBusiness = ({ onSuccess }) => {
       if (onSuccess) {
         setTimeout(() => {
           onSuccess();
-        }, 1500);
+        }, 1000);
       }
+
+      // Refresh the entire application after a short delay
+      setTimeout(() => {
+        refreshApplication();
+      }, 2000);
     } catch (error) {
       console.error("Error adding business:", error);
       setMessage({
@@ -99,6 +129,26 @@ export const AddNewBusiness = ({ onSuccess }) => {
               <AlertCircle className="w-5 h-5 mr-3 flex-shrink-0" />
             )}
             <span className="font-medium">{message.text}</span>
+            {message.type === "success" && (
+              <div className="ml-auto flex items-center text-sm">
+                <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+                Refreshing app...
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Refreshing Overlay */}
+      {refreshing && (
+        <div className="fixed inset-0 bg-white bg-opacity-90 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+            <div className="flex items-center space-x-3">
+              <RefreshCw className="w-6 h-6 text-blue-600 animate-spin" />
+              <span className="text-gray-700 font-medium">
+                Refreshing application...
+              </span>
+            </div>
           </div>
         </div>
       )}

@@ -206,16 +206,20 @@ export const AddingPaddyStock = () => {
     }
   };
 
+  const formatNumber = (number) => {
+    if (!number || isNaN(number)) return "0.00";
+
+    return parseFloat(number).toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  };
+
   // Handle input changes with validation
   const handleChange = (e) => {
     const { name, value } = e.target;
 
-    // Add validation for numerical fields
-    if (name === "quantity" || name === "price") {
-      if (value !== "" && !/^\d*\.?\d*$/.test(value)) return;
-    }
-
-    // If selecting a buyer, update both buyerId and buyerName
+    // Handle buyer selection
     if (name === "buyerId") {
       const selectedBuyer = buyers.find((buyer) => buyer.id === value);
       setFormData((prev) => ({
@@ -223,8 +227,11 @@ export const AddingPaddyStock = () => {
         buyerId: value,
         buyerName: selectedBuyer ? selectedBuyer.name : "",
       }));
-    } else if (name === "paddyTypeId") {
-      // If selecting a paddy type, update related fields
+      return;
+    }
+
+    // Handle paddy type selection
+    if (name === "paddyTypeId") {
       const selectedPaddyType = paddyTypes.find((type) => type.id === value);
       setFormData((prev) => ({
         ...prev,
@@ -232,14 +239,55 @@ export const AddingPaddyStock = () => {
         paddyTypeName: selectedPaddyType ? selectedPaddyType.name : "",
         paddyCode: selectedPaddyType ? selectedPaddyType.code : "",
       }));
-    } else {
-      setFormData((prev) => ({
-        ...prev,
-        [name]: value,
-      }));
+      return;
     }
+
+    // For ALL other fields (including quantity and price), just update without validation
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
+  const handleNumberBlur = (e) => {
+    const { name, value } = e.target;
+
+    if (name === "quantity" || name === "price") {
+      // Clean up the value when user finishes typing
+      let cleanValue = value;
+
+      // Remove any non-numeric characters except decimal point
+      cleanValue = cleanValue.replace(/[^0-9.]/g, "");
+
+      // Remove extra decimal points (keep only the first one)
+      const parts = cleanValue.split(".");
+      if (parts.length > 2) {
+        cleanValue = parts[0] + "." + parts.slice(1).join("");
+      }
+
+      // Remove leading zeros (except for 0.something)
+      if (
+        cleanValue.length > 1 &&
+        cleanValue[0] === "0" &&
+        cleanValue[1] !== "."
+      ) {
+        cleanValue = cleanValue.replace(/^0+/, "");
+      }
+
+      // If it starts with decimal, add 0
+      if (cleanValue.startsWith(".")) {
+        cleanValue = "0" + cleanValue;
+      }
+
+      // Update the form data with cleaned value
+      if (cleanValue !== value) {
+        setFormData((prev) => ({
+          ...prev,
+          [name]: cleanValue,
+        }));
+      }
+    }
+  };
   // Check if code exists in database
   const checkCodeExistsInDB = async (code) => {
     if (!code || !currentUser || !currentBusiness?.id) return false;
@@ -838,20 +886,53 @@ export const AddingPaddyStock = () => {
 
                 {/* Quantity and Price Grid - Responsive */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                  <InputField
-                    label="Quantity (kg)"
-                    name="quantity"
-                    placeholder="0.00"
-                    required
-                    icon={Package}
-                  />
-                  <InputField
-                    label="Price per kg (Rs.)"
-                    name="price"
-                    placeholder="0.00"
-                    required
-                    icon={DollarSign}
-                  />
+                  {/* Quantity Input */}
+                  <div className="space-y-1 sm:space-y-2">
+                    <label
+                      htmlFor="quantity"
+                      className="block text-sm font-medium text-gray-700"
+                    >
+                      Quantity (kg) <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <Package className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
+                      <input
+                        type="text"
+                        id="quantity"
+                        name="quantity"
+                        value={formData.quantity || ""}
+                        onChange={handleChange}
+                        onBlur={handleNumberBlur}
+                        className="block w-full pl-10 pr-3 py-2 sm:py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base transition-all duration-200"
+                        placeholder="0.00"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Price Input */}
+                  <div className="space-y-1 sm:space-y-2">
+                    <label
+                      htmlFor="price"
+                      className="block text-sm font-medium text-gray-700"
+                    >
+                      Price per kg (Rs.) <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
+                      <input
+                        type="text"
+                        id="price"
+                        name="price"
+                        value={formData.price || ""}
+                        onChange={handleChange}
+                        onBlur={handleNumberBlur}
+                        className="block w-full pl-10 pr-3 py-2 sm:py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm sm:text-base transition-all duration-200"
+                        placeholder="0.00"
+                        required
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {/* Total Amount - Responsive Display */}
@@ -864,12 +945,10 @@ export const AddingPaddyStock = () => {
                       <span className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">
                         Rs.{" "}
                         {formData.quantity && formData.price
-                          ? (
+                          ? formatNumber(
                               parseFloat(formData.quantity) *
-                              parseFloat(formData.price)
-                            ).toLocaleString("en-IN", {
-                              maximumFractionDigits: 2,
-                            })
+                                parseFloat(formData.price)
+                            )
                           : "0.00"}
                       </span>
                       {formData.quantity && formData.price && (
@@ -878,7 +957,8 @@ export const AddingPaddyStock = () => {
                     </div>
                     {formData.quantity && formData.price && (
                       <p className="text-xs sm:text-sm text-gray-600 mt-1">
-                        {formData.quantity} kg × Rs. {formData.price}/kg
+                        {formatNumber(formData.quantity)} kg × Rs.{" "}
+                        {formatNumber(formData.price)}/kg
                       </p>
                     )}
                   </div>
@@ -1086,9 +1166,7 @@ export const AddingPaddyStock = () => {
                   </p>
                   <p>
                     <span className="font-medium">Total Amount:</span> Rs.{" "}
-                    {savedStockData.totalAmount.toLocaleString("en-IN", {
-                      maximumFractionDigits: 2,
-                    })}
+                    {formatNumber(savedStockData.totalAmount)}
                   </p>
                 </div>
                 <div className="space-y-2">
